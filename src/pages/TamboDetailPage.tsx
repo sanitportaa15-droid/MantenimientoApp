@@ -12,7 +12,8 @@ import {
   Clock,
   Camera,
   XCircle,
-  Save
+  Save,
+  Edit2
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente } from "../types/supabase";
@@ -113,6 +114,13 @@ export default function TamboDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link 
+            to={`/tambos/editar/${tambo.id}`}
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
+          >
+            <Edit2 className="w-4 h-4" />
+            Editar Datos
+          </Link>
           <button 
             onClick={generatePDF}
             className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"

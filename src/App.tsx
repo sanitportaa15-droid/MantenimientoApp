@@ -23,8 +23,10 @@ export default function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/clientes" element={<ClientsPage />} />
           <Route path="/clientes/nuevo" element={<NewClientPage />} />
+          <Route path="/clientes/editar/:id" element={<NewClientPage />} />
           <Route path="/tambos" element={<TambosPage />} />
           <Route path="/tambos/nuevo" element={<NewTamboPage />} />
+          <Route path="/tambos/editar/:id" element={<NewTamboPage />} />
           <Route path="/tambos/:id" element={<TamboDetailPage />} />
           <Route path="/config" element={<ConfigPage />} />
         </Routes>

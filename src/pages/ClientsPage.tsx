@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
 import { Cliente } from "../types/supabase";
-import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2 } from "lucide-react";
+import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2, Edit2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function ClientsPage() {
@@ -117,6 +117,13 @@ export default function ClientsPage() {
             <div className="mt-6 pt-6 border-t border-white/5 flex justify-between items-center">
               <span className="text-xs text-zinc-500 font-medium">Registrado: {new Date(cliente.created_at).toLocaleDateString()}</span>
               <div className="flex items-center gap-2">
+                <Link 
+                  to={`/clientes/editar/${cliente.id}`}
+                  className="p-2 hover:bg-white/5 text-zinc-600 hover:text-emerald-400 rounded-lg transition-colors"
+                  title="Editar cliente"
+                >
+                  <Edit2 className="w-5 h-5" />
+                </Link>
                 <button 
                   onClick={() => handleDelete(cliente.id, cliente.nombre)}
                   disabled={deletingId === cliente.id}

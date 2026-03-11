@@ -1,11 +1,14 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../services/db";
 import { ArrowLeft, Save } from "lucide-react";
 
 export default function NewClientPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditing = !!id;
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEditing);
   const [formData, setFormData] = useState({
     nombre: "",
     telefono: "",
@@ -13,6 +16,31 @@ export default function NewClientPage() {
     ubicacion: "",
     observaciones: ""
   });
+
+  useEffect(() => {
+    if (isEditing) {
+      loadClient();
+    }
+  }, [id]);
+
+  async function loadClient() {
+    try {
+      const client = await db.clientes.getById(id!);
+      setFormData({
+        nombre: client.nombre,
+        telefono: client.telefono || "",
+        email: client.email || "",
+        ubicacion: client.ubicacion || "",
+        observaciones: client.observaciones || ""
+      });
+    } catch (error) {
+      console.error("Error loading client for edit:", error);
+      alert("Error al cargar los datos del cliente.");
+      navigate("/clientes");
+    } finally {
+      setInitialLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,20 +55,34 @@ export default function NewClientPage() {
         ubicacion: formData.ubicacion.trim() || null,
         observaciones: formData.observaciones.trim() || null,
       };
-      const nuevoCliente = await db.clientes.create(dataToSave);
-      // After creating client, suggest creating first tambo
-      if (confirm(`Cliente "${nuevoCliente.nombre}" creado. ¿Desea crear el primer tambo ahora?`)) {
-        navigate(`/tambos/nuevo?clienteId=${nuevoCliente.id}`);
-      } else {
+
+      if (isEditing) {
+        await db.clientes.update(id!, dataToSave);
+        alert("Cliente actualizado correctamente.");
         navigate("/clientes");
+      } else {
+        const nuevoCliente = await db.clientes.create(dataToSave);
+        if (confirm(`Cliente "${nuevoCliente.nombre}" creado. ¿Desea crear el primer tambo ahora?`)) {
+          navigate(`/tambos/nuevo?clienteId=${nuevoCliente.id}`);
+        } else {
+          navigate("/clientes");
+        }
       }
     } catch (error: any) {
-      console.error("Error creating client:", error);
+      console.error("Error saving client:", error);
       const message = error.message || "Error desconocido";
-      alert(`Error al crear el cliente: ${message}. Verifique la consola para más detalles.`);
+      alert(`Error al guardar el cliente: ${message}. Verifique la consola para más detalles.`);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -50,8 +92,12 @@ export default function NewClientPage() {
           <ArrowLeft className="w-6 h-6" />
         </button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Nuevo Cliente</h2>
-          <p className="text-zinc-500">Complete los datos básicos del cliente.</p>
+          <h2 className="text-3xl font-bold tracking-tight">
+            {isEditing ? "Editar Cliente" : "Nuevo Cliente"}
+          </h2>
+          <p className="text-zinc-500">
+            {isEditing ? "Actualice los datos del cliente." : "Complete los datos básicos del cliente."}
+          </p>
         </div>
       </div>
 

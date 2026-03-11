@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { db } from "../services/db";
 import { Cliente } from "../types/supabase";
 import { ArrowLeft, Save } from "lucide-react";
 
 export default function NewTamboPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchParams] = useSearchParams();
+  const isEditing = !!id;
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEditing);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [formData, setFormData] = useState({
     cliente_id: searchParams.get("clienteId") || "",
@@ -20,12 +23,33 @@ export default function NewTamboPage() {
   });
 
   useEffect(() => {
-    async function loadClientes() {
-      const data = await db.clientes.getAll();
-      setClientes(data);
+    async function loadData() {
+      try {
+        const clientsData = await db.clientes.getAll();
+        setClientes(clientsData);
+
+        if (isEditing) {
+          const tambo = await db.tambos.getById(id!);
+          setFormData({
+            cliente_id: tambo.cliente_id,
+            nombre: tambo.nombre,
+            vacas_en_ordene: tambo.vacas_en_ordene,
+            bajadas: tambo.bajadas,
+            ordenes_por_dia: tambo.ordenes_por_dia,
+            marca_pezonera: tambo.marca_pezonera || "",
+            fecha_ultimo_cambio: tambo.fecha_ultimo_cambio
+          });
+        }
+      } catch (error) {
+        console.error("Error loading data for tambo:", error);
+        alert("Error al cargar los datos.");
+        navigate("/tambos");
+      } finally {
+        setInitialLoading(false);
+      }
     }
-    loadClientes();
-  }, []);
+    loadData();
+  }, [id]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,14 +57,29 @@ export default function NewTamboPage() {
 
     setLoading(true);
     try {
-      await db.tambos.create(formData);
-      navigate("/tambos");
+      if (isEditing) {
+        await db.tambos.update(id!, formData);
+        alert("Tambo actualizado correctamente.");
+        navigate(`/tambos/${id}`);
+      } else {
+        await db.tambos.create(formData);
+        alert("Tambo creado correctamente.");
+        navigate("/tambos");
+      }
     } catch (error) {
-      console.error("Error creating tambo:", error);
-      alert("Error al crear el tambo.");
+      console.error("Error saving tambo:", error);
+      alert("Error al guardar el tambo.");
     } finally {
       setLoading(false);
     }
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -50,8 +89,12 @@ export default function NewTamboPage() {
           <ArrowLeft className="w-6 h-6" />
         </button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Nuevo Tambo</h2>
-          <p className="text-zinc-500">Configure los parámetros técnicos del tambo.</p>
+          <h2 className="text-3xl font-bold tracking-tight">
+            {isEditing ? "Editar Tambo" : "Nuevo Tambo"}
+          </h2>
+          <p className="text-zinc-500">
+            {isEditing ? "Actualice los parámetros técnicos del tambo." : "Configure los parámetros técnicos del tambo."}
+          </p>
         </div>
       </div>
 

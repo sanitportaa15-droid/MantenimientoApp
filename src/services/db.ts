@@ -37,6 +37,19 @@ export const db = {
         console.error("Error eliminando cliente:", error);
         throw error;
       }
+    },
+    async update(id: string, cliente: Partial<Database['public']['Tables']['clientes']['Update']>) {
+      const { data, error } = await (supabase.from("clientes") as any)
+        .update(cliente)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Error actualizando cliente:", error);
+        throw error;
+      }
+      return data as Cliente;
     }
   },
   tambos: {
@@ -68,6 +81,19 @@ export const db = {
       const { data, error } = await (supabase.from("tambos") as any).insert(tambo).select().single();
       if (error) {
         console.error("Error guardando tambo:", error);
+        throw error;
+      }
+      return data as Tambo;
+    },
+    async update(id: string, tambo: Partial<Database['public']['Tables']['tambos']['Update']>) {
+      const { data, error } = await (supabase.from("tambos") as any)
+        .update(tambo)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Error actualizando tambo:", error);
         throw error;
       }
       return data as Tambo;
