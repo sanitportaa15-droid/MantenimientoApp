@@ -30,6 +30,13 @@ export const db = {
         throw error;
       }
       return data as Cliente;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("clientes").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando cliente:", error);
+        throw error;
+      }
     }
   },
   tambos: {

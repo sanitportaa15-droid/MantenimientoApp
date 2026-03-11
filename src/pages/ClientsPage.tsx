@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
 import { Cliente } from "../types/supabase";
-import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight } from "lucide-react";
+import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -22,6 +23,23 @@ export default function ClientsPage() {
       console.error("Error loading clients:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar al cliente "${name}"? Esta acción también eliminará todos sus tambos y mantenimientos asociados.`)) {
+      return;
+    }
+
+    try {
+      setDeletingId(id);
+      await db.clientes.delete(id);
+      setClientes(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      alert("Error al eliminar el cliente.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -98,9 +116,19 @@ export default function ClientsPage() {
 
             <div className="mt-6 pt-6 border-t border-white/5 flex justify-between items-center">
               <span className="text-xs text-zinc-500 font-medium">Registrado: {new Date(cliente.created_at).toLocaleDateString()}</span>
-              <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                <ChevronRight className="w-5 h-5 text-zinc-600" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleDelete(cliente.id, cliente.nombre)}
+                  disabled={deletingId === cliente.id}
+                  className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors disabled:opacity-50"
+                  title="Eliminar cliente"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+                <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                  <ChevronRight className="w-5 h-5 text-zinc-600" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
