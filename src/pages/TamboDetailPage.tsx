@@ -117,7 +117,7 @@ export default function TamboDetailPage() {
       
       const statusData = statuses.map(s => [
         s.tipo,
-        s.status === "gris" ? "PENDIENTE" : s.status.toUpperCase(),
+        s.status === "gris" ? "NUNCA REALIZADO" : s.status.toUpperCase(),
         formatDate(s.ultimaFecha),
         formatDate(s.proximaFecha),
         s.diasRestantes !== null ? `${s.diasRestantes} días` : "N/A"
@@ -297,9 +297,9 @@ export default function TamboDetailPage() {
                       </button>
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
-                      <span>Último: {formatDate(s.ultimaFecha) || 'NUNCA'}</span>
+                      <span>Último: {s.ultimaFecha ? formatDate(s.ultimaFecha) : 'NUNCA'}</span>
                       <span>•</span>
-                      <span>Próximo: {formatDate(s.proximaFecha) || 'N/A'}</span>
+                      <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -440,7 +440,7 @@ function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "m
       size === "sm" ? "px-2 py-0.5 text-[8px]" : "px-3 py-1 text-[10px]"
     )}>
       <Icon className={size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : status === "rojo" ? "Vencido" : "Pendiente"}
+      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : status === "rojo" ? "Vencido" : "Nunca realizado"}
     </div>
   );
 }

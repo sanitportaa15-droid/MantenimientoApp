@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
-import { Tambo, Configuracion } from "../types/supabase";
+import { Tambo, Configuracion, MantenimientoTipo } from "../types/supabase";
 import { Droplets, Search, Plus, MapPin, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
@@ -20,12 +20,24 @@ export default function TambosPage() {
       setLoading(true);
       const [tambosData, configs] = await Promise.all([
         db.tambos.getAll(),
-        db.configuracion.getAll()
+        db.configuracion.getAllWithHidden()
       ]);
 
       const tambosWithStatus = await Promise.all(tambosData.map(async (t) => {
         const mantenimientos = await db.mantenimientos.getByTambo(t.id);
-        const statuses = calculateMaintenanceStatus(t, mantenimientos, configs);
+        
+        // Extract active types from configs
+        const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
+        let activeTypes = Object.values(MantenimientoTipo);
+        if (activeConfig) {
+          try {
+            activeTypes = JSON.parse(activeConfig.valor);
+          } catch (e) {
+            console.error("Error parsing active types for tambo", t.id);
+          }
+        }
+
+        const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypes);
         const generalStatus = getGeneralStatus(statuses);
         return {
           ...t,
@@ -89,7 +101,9 @@ export default function TambosPage() {
             {/* Status Bar */}
             <div className={cn(
               "absolute top-0 left-0 w-full h-1",
-              tambo.status === "verde" ? "bg-emerald-500" : tambo.status === "amarillo" ? "bg-amber-500" : "bg-red-500"
+              tambo.status === "verde" ? "bg-emerald-500" : 
+              tambo.status === "amarillo" ? "bg-amber-500" : 
+              tambo.status === "rojo" ? "bg-red-500" : "bg-zinc-500"
             )} />
 
             <div className="flex justify-between items-start mb-6">
@@ -115,7 +129,7 @@ export default function TambosPage() {
             <div className="pt-6 border-t border-white/5 flex justify-between items-center text-xs">
               <span className="text-zinc-500">Marca: {tambo.marca_pezonera || "N/A"}</span>
               <span className="bg-white/5 px-2 py-1 rounded-md text-zinc-300 font-mono">
-                {tambo.fecha_ultimo_cambio ? new Date(tambo.fecha_ultimo_cambio).toLocaleDateString() : "Sin fecha"}
+                {tambo.fecha_ultimo_cambio === '1900-01-01' ? "NUNCA" : (tambo.fecha_ultimo_cambio ? new Date(tambo.fecha_ultimo_cambio).toLocaleDateString() : "Sin fecha")}
               </span>
             </div>
           </Link>
@@ -136,7 +150,8 @@ function StatusBadge({ status }: { status: Status }) {
   const styles = {
     verde: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     amarillo: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    rojo: "bg-red-500/10 text-red-400 border-red-500/20"
+    rojo: "bg-red-500/10 text-red-400 border-red-500/20",
+    gris: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
   };
 
   return (
@@ -144,7 +159,7 @@ function StatusBadge({ status }: { status: Status }) {
       "px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
       styles[status]
     )}>
-      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : "Vencido"}
+      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : status === "rojo" ? "Vencido" : "Nunca realizado"}
     </div>
   );
 }

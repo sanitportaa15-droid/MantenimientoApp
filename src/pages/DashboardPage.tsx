@@ -6,7 +6,8 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   XCircle,
-  ArrowRight
+  ArrowRight,
+  HelpCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db } from "../services/db";
@@ -21,7 +22,8 @@ export default function Dashboard() {
     tambos: 0,
     alDia: 0,
     proximos: 0,
-    vencidos: 0
+    vencidos: 0,
+    nunca: 0
   });
   const [tambosList, setTambosList] = useState<(Tambo & { clienteNombre: string, status: Status })[]>([]);
 
@@ -62,7 +64,8 @@ export default function Dashboard() {
           tambos: tambos.length,
           alDia: tambosWithStatus.filter(t => t.status === "verde").length,
           proximos: tambosWithStatus.filter(t => t.status === "amarillo").length,
-          vencidos: tambosWithStatus.filter(t => t.status === "rojo").length
+          vencidos: tambosWithStatus.filter(t => t.status === "rojo").length,
+          nunca: tambosWithStatus.filter(t => t.status === "gris").length
         });
 
         setTambosList(tambosWithStatus);
@@ -104,12 +107,13 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <StatCard label="Clientes" value={stats.clientes} icon={Users} color="zinc" />
         <StatCard label="Tambos" value={stats.tambos} icon={Droplets} color="zinc" />
         <StatCard label="Al día" value={stats.alDia} icon={CheckCircle2} color="emerald" />
         <StatCard label="Próximos" value={stats.proximos} icon={AlertTriangle} color="amber" />
         <StatCard label="Vencidos" value={stats.vencidos} icon={XCircle} color="red" />
+        <StatCard label="Nunca" value={stats.nunca} icon={HelpCircle} color="zinc" />
       </div>
 
       {/* Tambos List */}
@@ -148,7 +152,7 @@ export default function Dashboard() {
               </div>
               
               <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-zinc-400">
-                <span>Último cambio: {tambo.fecha_ultimo_cambio || 'N/A'}</span>
+                <span>Último cambio: {tambo.fecha_ultimo_cambio === '1900-01-01' ? 'NUNCA' : (tambo.fecha_ultimo_cambio || 'N/A')}</span>
                 <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md font-bold">DETALLES</span>
               </div>
             </Link>

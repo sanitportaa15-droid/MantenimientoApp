@@ -29,13 +29,19 @@ export function calculateMaintenanceStatus(
       .filter(m => m.tipo === tipo)
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
 
-    const ultimaFecha = ultimo ? parseISO(ultimo.fecha) : null;
+    let ultimaFecha = ultimo ? parseISO(ultimo.fecha) : null;
+    
+    // Fallback for pezoneras using the tambo's specific field if no maintenance record exists
+    if (!ultimaFecha && tipo === MantenimientoTipo.PEZONERAS && tambo.fecha_ultimo_cambio) {
+      ultimaFecha = parseISO(tambo.fecha_ultimo_cambio);
+    }
+
     let proximaFecha: Date | null = null;
     let diasRestantes: number | null = null;
     let status: Status = "rojo";
 
     // Handle "Never performed" or special initial date
-    if (!ultimo || ultimo.fecha === '1900-01-01') {
+    if ((!ultimo && !ultimaFecha) || (ultimo?.fecha === '1900-01-01') || (tambo.fecha_ultimo_cambio === '1900-01-01' && !ultimo)) {
       return {
         tipo,
         ultimaFecha: null,

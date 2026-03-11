@@ -187,13 +187,25 @@ export default function NewTamboPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Fecha Último Cambio</label>
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Fecha Último Cambio</label>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({ ...formData, fecha_ultimo_cambio: '1900-01-01' })}
+                  className="text-[10px] font-bold text-zinc-500 hover:text-emerald-400 transition-colors uppercase tracking-widest"
+                >
+                  Marcar como nunca
+                </button>
+              </div>
               <input
                 type="date"
-                value={formData.fecha_ultimo_cambio}
+                value={formData.fecha_ultimo_cambio === '1900-01-01' ? "" : formData.fecha_ultimo_cambio}
                 onChange={(e) => setFormData({ ...formData, fecha_ultimo_cambio: e.target.value })}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
               />
+              {formData.fecha_ultimo_cambio === '1900-01-01' && (
+                <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">Estado: Nunca realizado</p>
+              )}
             </div>
           </div>
         </div>
