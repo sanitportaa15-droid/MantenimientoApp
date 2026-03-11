@@ -145,5 +145,6 @@ export enum MantenimientoTipo {
   SENSOR_LECHE = "Sensor de leche",
   BOMBA_VACIO = "Bomba de vacío",
   BOMBA_CENTRIFUGA_LECHE = "Bomba centrífuga de leche",
-  BOMBA_DIAFRAGMA_LECHE = "Bomba diafragma de leche"
+  BOMBA_DIAFRAGMA_LECHE = "Bomba diafragma de leche",
+  KIT_COLECTOR_LECHE = "Kit de colector de leche"
 }

@@ -160,6 +160,7 @@ export const db = {
         { clave: "bomba_vacio_meses", valor: "12", descripcion: "Meses para bomba de vacío" },
         { clave: "bomba_centrifuga_leche_meses", valor: "6", descripcion: "Meses para bomba centrífuga de leche" },
         { clave: "bomba_diafragma_leche_meses", valor: "4", descripcion: "Meses para bomba diafragma de leche" },
+        { clave: "kit_colector_leche_meses", valor: "12", descripcion: "Meses para kit de colector de leche" },
         { clave: "dias_alerta", valor: "30", descripcion: "Días de antelación para alerta amarilla" },
       ];
       

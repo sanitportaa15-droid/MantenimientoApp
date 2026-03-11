@@ -55,6 +55,7 @@ export function calculateMaintenanceStatus(
         [MantenimientoTipo.BOMBA_VACIO]: "bomba_vacio_meses",
         [MantenimientoTipo.BOMBA_CENTRIFUGA_LECHE]: "bomba_centrifuga_leche_meses",
         [MantenimientoTipo.BOMBA_DIAFRAGMA_LECHE]: "bomba_diafragma_leche_meses",
+        [MantenimientoTipo.KIT_COLECTOR_LECHE]: "kit_colector_leche_meses",
       };
 
       const configClave = mesesMap[tipo];
