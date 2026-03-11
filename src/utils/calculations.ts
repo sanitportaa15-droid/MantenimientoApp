@@ -52,6 +52,9 @@ export function calculateMaintenanceStatus(
         [MantenimientoTipo.DIAFRAGMA_BRAZOS]: "diafragma_brazos_meses",
         [MantenimientoTipo.BUJES]: "bujes_meses",
         [MantenimientoTipo.SENSOR_LECHE]: "sensor_leche_meses",
+        [MantenimientoTipo.BOMBA_VACIO]: "bomba_vacio_meses",
+        [MantenimientoTipo.BOMBA_CENTRIFUGA_LECHE]: "bomba_centrifuga_leche_meses",
+        [MantenimientoTipo.BOMBA_DIAFRAGMA_LECHE]: "bomba_diafragma_leche_meses",
       };
 
       const configClave = mesesMap[tipo];

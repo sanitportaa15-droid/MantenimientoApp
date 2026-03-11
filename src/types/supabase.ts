@@ -142,5 +142,8 @@ export enum MantenimientoTipo {
   SOGAS = "Cambio de sogas",
   DIAFRAGMA_BRAZOS = "Cambio de diafragma de los brazos",
   BUJES = "Cambio de bujes",
-  SENSOR_LECHE = "Sensor de leche"
+  SENSOR_LECHE = "Sensor de leche",
+  BOMBA_VACIO = "Bomba de vacío",
+  BOMBA_CENTRIFUGA_LECHE = "Bomba centrífuga de leche",
+  BOMBA_DIAFRAGMA_LECHE = "Bomba diafragma de leche"
 }

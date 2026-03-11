@@ -58,34 +58,157 @@ export default function TamboDetailPage() {
     }
   }
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (!tambo) return;
-    const doc = new jsPDF();
-    
-    doc.setFontSize(20);
-    doc.text("Reporte Técnico - GanPor Mantenimiento", 20, 20);
-    
-    doc.setFontSize(12);
-    doc.text(`Cliente: ${tambo.clientes.nombre}`, 20, 35);
-    doc.text(`Tambo: ${tambo.nombre}`, 20, 42);
-    doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString()}`, 20, 49);
-    
-    doc.text("Estado Técnico del Equipo", 20, 65);
-    const tableData = statuses.map(s => [
-      s.tipo,
-      s.status.toUpperCase(),
-      formatDate(s.ultimaFecha),
-      formatDate(s.proximaFecha),
-      s.diasRestantes ?? "N/A"
-    ]);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Header
+      doc.setFillColor(16, 185, 129); // Emerald 500
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text("Reporte Técnico", 20, 20);
+      doc.setFontSize(14);
+      doc.text("GanPor Mantenimiento", 20, 30);
+      
+      // Client & Tambo Info
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(16);
+      doc.text("Información General", 20, 55);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("CLIENTE", 20, 65);
+      doc.text("TAMBO", 110, 65);
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.text(tambo.clientes.nombre, 20, 72);
+      doc.text(tambo.nombre, 110, 72);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("VACAS EN ORDEÑE", 20, 82);
+      doc.text("BAJADAS", 70, 82);
+      doc.text("MARCA PEZONERA", 110, 82);
+      doc.text("FECHA REPORTE", 160, 82);
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.text(tambo.vacas_en_ordene.toString(), 20, 89);
+      doc.text(tambo.bajadas.toString(), 70, 89);
+      doc.text(tambo.marca_pezonera || "N/A", 110, 89);
+      doc.text(new Date().toLocaleDateString(), 160, 89);
+      
+      // Technical Status Table
+      doc.setFontSize(16);
+      doc.text("Estado Técnico del Equipo", 20, 105);
+      
+      const statusData = statuses.map(s => [
+        s.tipo,
+        s.status.toUpperCase(),
+        formatDate(s.ultimaFecha),
+        formatDate(s.proximaFecha),
+        s.diasRestantes !== null ? `${s.diasRestantes} días` : "N/A"
+      ]);
 
-    (doc as any).autoTable({
-      startY: 70,
-      head: [['Tipo', 'Estado', 'Último', 'Próximo', 'Días Rest.'],],
-      body: tableData,
-    });
+      (doc as any).autoTable({
+        startY: 110,
+        head: [['Tipo de Mantenimiento', 'Estado', 'Último', 'Próximo', 'Días Rest.'],],
+        body: statusData,
+        headStyles: { fillColor: [16, 185, 129] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { left: 20, right: 20 }
+      });
 
-    doc.save(`Reporte_${tambo.nombre}_${new Date().toISOString().split('T')[0]}.pdf`);
+      let finalY = (doc as any).lastAutoTable.finalY + 15;
+
+      // Maintenance History
+      if (finalY > 240) {
+        doc.addPage();
+        finalY = 20;
+      }
+
+      doc.setFontSize(16);
+      doc.text("Historial de Mantenimientos", 20, finalY);
+      
+      const historyData = mantenimientos.map(m => [
+        formatDate(m.fecha),
+        m.tipo,
+        m.observaciones || "Sin observaciones"
+      ]);
+
+      (doc as any).autoTable({
+        startY: finalY + 5,
+        head: [['Fecha', 'Tipo', 'Observaciones'],],
+        body: historyData,
+        headStyles: { fillColor: [71, 85, 105] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { left: 20, right: 20 }
+      });
+
+      finalY = (doc as any).lastAutoTable.finalY + 15;
+
+      // Observations
+      if (tambo.clientes.observaciones) {
+        if (finalY > 250) {
+          doc.addPage();
+          finalY = 20;
+        }
+        doc.setFontSize(14);
+        doc.text("Observaciones del Cliente", 20, finalY);
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        const splitObs = doc.splitTextToSize(tambo.clientes.observaciones, pageWidth - 40);
+        doc.text(splitObs, 20, finalY + 7);
+        finalY += (splitObs.length * 5) + 15;
+      }
+
+      // Photos
+      const photos = mantenimientos.filter(m => m.foto_url);
+      if (photos.length > 0) {
+        if (finalY > 200) {
+          doc.addPage();
+          finalY = 20;
+        }
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(14);
+        doc.text("Fotografías Registradas", 20, finalY);
+        
+        let photoX = 20;
+        let photoY = finalY + 10;
+        
+        for (const photo of photos) {
+          if (photo.foto_url) {
+            try {
+              // We use a small trick to check if the image is valid and add it
+              // In a real browser environment, we might need to handle CORS
+              doc.addImage(photo.foto_url, 'JPEG', photoX, photoY, 50, 50);
+              photoX += 60;
+              if (photoX > pageWidth - 60) {
+                photoX = 20;
+                photoY += 60;
+                if (photoY > 240) {
+                  doc.addPage();
+                  photoY = 20;
+                }
+              }
+            } catch (e) {
+              console.error("Error adding image to PDF:", e);
+            }
+          }
+        }
+      }
+
+      doc.save(`Reporte_${tambo.nombre}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Error al generar el PDF:", error);
+      alert("Ocurrió un error al generar el PDF. Por favor, revise la consola.");
+    }
   };
 
   if (loading || !tambo) {
@@ -289,9 +412,14 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
   const [observaciones, setObservaciones] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
 
+  const maintenanceTypes = Object.values(MantenimientoTipo);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (selectedTipos.length === 0) return;
+    if (selectedTipos.length === 0) {
+      alert("Por favor, seleccione al menos un tipo de mantenimiento.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -299,8 +427,8 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
         tambo_id: tamboId,
         tipo,
         fecha,
-        observaciones,
-        foto_url: fotoUrl || null
+        observaciones: observaciones.trim() || null,
+        foto_url: fotoUrl.trim() || null
       }));
 
       await db.mantenimientos.createMany(records);
@@ -331,21 +459,24 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-3">
-            <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Seleccionar Trabajos Realizados</label>
+            <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">
+              Seleccionar Trabajos Realizados ({selectedTipos.length})
+            </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {Object.values(MantenimientoTipo).map(tipo => (
+              {maintenanceTypes.map(tipo => (
                 <button
                   key={tipo}
                   type="button"
                   onClick={() => toggleTipo(tipo)}
                   className={cn(
-                    "px-4 py-3 rounded-xl text-sm font-medium border text-left transition-all",
+                    "px-4 py-3 rounded-xl text-sm font-medium border text-left transition-all flex items-center justify-between",
                     selectedTipos.includes(tipo)
                       ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
                       : "bg-white/5 border-white/5 text-zinc-400 hover:border-white/20"
                   )}
                 >
-                  {tipo}
+                  <span>{tipo}</span>
+                  {selectedTipos.includes(tipo) && <CheckCircle2 className="w-4 h-4" />}
                 </button>
               ))}
             </div>
@@ -406,7 +537,7 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
               ) : (
                 <>
                   <Save className="w-5 h-5" />
-                  Guardar Registros
+                  Guardar {selectedTipos.length} Registros
                 </>
               )}
             </button>

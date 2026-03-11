@@ -157,12 +157,21 @@ export const db = {
         { clave: "diafragma_brazos_meses", valor: "12", descripcion: "Meses para diafragma de brazos" },
         { clave: "bujes_meses", valor: "12", descripcion: "Meses para bujes" },
         { clave: "sensor_leche_meses", valor: "6", descripcion: "Meses para sensor de leche" },
-        { clave: "aceite_bomba_meses", valor: "6", descripcion: "Meses para cambio de aceite bomba" },
-        { clave: "regulador_vacio_meses", valor: "1", descripcion: "Meses para limpieza de regulador" },
-        { clave: "filtros_aire_meses", valor: "3", descripcion: "Meses para filtros de aire" },
-        { clave: "colectores_meses", valor: "12", descripcion: "Meses para revisión de colectores" },
+        { clave: "bomba_vacio_meses", valor: "12", descripcion: "Meses para bomba de vacío" },
+        { clave: "bomba_centrifuga_leche_meses", valor: "6", descripcion: "Meses para bomba centrífuga de leche" },
+        { clave: "bomba_diafragma_leche_meses", valor: "4", descripcion: "Meses para bomba diafragma de leche" },
         { clave: "dias_alerta", valor: "30", descripcion: "Días de antelación para alerta amarilla" },
       ];
+      
+      const oldKeys = [
+        "aceite_bomba_meses",
+        "regulador_vacio_meses",
+        "filtros_aire_meses",
+        "colectores_meses"
+      ];
+
+      // Remove old keys
+      await (supabase.from("configuracion") as any).delete().in("clave", oldKeys);
       
       const { data: existing } = await (supabase.from("configuracion") as any).select("clave");
       const existingKeys = new Set((existing as any[])?.map(c => c.clave) || []);
