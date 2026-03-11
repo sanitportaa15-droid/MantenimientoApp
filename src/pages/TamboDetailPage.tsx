@@ -1,0 +1,410 @@
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { 
+  ArrowLeft, 
+  Calendar, 
+  ClipboardList, 
+  History, 
+  Plus, 
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Camera,
+  XCircle,
+  Save
+} from "lucide-react";
+import { db } from "../services/db";
+import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente } from "../types/supabase";
+import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus } from "../utils/calculations";
+import { cn, formatDate } from "../utils/ui";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+
+export default function TamboDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente }) | null>(null);
+  const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
+  const [configs, setConfigs] = useState<Configuracion[]>([]);
+  const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (id) loadData();
+  }, [id]);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      const [tamboData, mantData, configData] = await Promise.all([
+        db.tambos.getById(id!),
+        db.mantenimientos.getByTambo(id!),
+        db.configuracion.getAll()
+      ]);
+      
+      setTambo(tamboData);
+      setMantenimientos(mantData);
+      setConfigs(configData);
+      
+      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData);
+      setStatuses(calcStatuses);
+    } catch (error) {
+      console.error("Error loading tambo details:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const generatePDF = () => {
+    if (!tambo) return;
+    const doc = new jsPDF();
+    
+    doc.setFontSize(20);
+    doc.text("Reporte Técnico - GanPor Mantenimiento", 20, 20);
+    
+    doc.setFontSize(12);
+    doc.text(`Cliente: ${tambo.clientes.nombre}`, 20, 35);
+    doc.text(`Tambo: ${tambo.nombre}`, 20, 42);
+    doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString()}`, 20, 49);
+    
+    doc.text("Estado Técnico del Equipo", 20, 65);
+    const tableData = statuses.map(s => [
+      s.tipo,
+      s.status.toUpperCase(),
+      formatDate(s.ultimaFecha),
+      formatDate(s.proximaFecha),
+      s.diasRestantes ?? "N/A"
+    ]);
+
+    (doc as any).autoTable({
+      startY: 70,
+      head: [['Tipo', 'Estado', 'Último', 'Próximo', 'Días Rest.'],],
+      body: tableData,
+    });
+
+    doc.save(`Reporte_${tambo.nombre}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  if (loading || !tambo) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  const generalStatus = getGeneralStatus(statuses);
+
+  return (
+    <div className="space-y-8 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-3xl font-bold tracking-tight">{tambo.nombre}</h2>
+              <StatusBadge status={generalStatus} />
+            </div>
+            <p className="text-zinc-500">{tambo.clientes.nombre}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={generatePDF}
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Generar Reporte PDF
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black px-4 py-2 rounded-xl font-semibold transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Registrar Mantenimiento
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Technical Status Panel */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <ClipboardList className="text-emerald-400 w-5 h-5" />
+              Estado Técnico del Equipo
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {statuses.map((s) => (
+                <div key={s.tipo} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-white/10 transition-all">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm">{s.tipo}</p>
+                    <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
+                      <span>Último: {formatDate(s.ultimaFecha)}</span>
+                      <span>•</span>
+                      <span>Próximo: {formatDate(s.proximaFecha)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={s.status} size="sm" />
+                    {s.diasRestantes !== null && (
+                      <span className={cn(
+                        "text-[10px] font-bold",
+                        s.status === "rojo" ? "text-red-400" : s.status === "amarillo" ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {s.diasRestantes} días
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <History className="text-emerald-400 w-5 h-5" />
+              Historial de Mantenimientos
+            </h3>
+            <div className="space-y-4">
+              {mantenimientos.length === 0 ? (
+                <p className="text-zinc-500 text-center py-8 italic">No hay registros de mantenimiento.</p>
+              ) : (
+                mantenimientos.map((m) => (
+                  <div key={m.id} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <Calendar className="text-emerald-400 w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <p className="font-bold">{m.tipo}</p>
+                        <p className="text-xs text-zinc-500 font-mono">{formatDate(m.fecha)}</p>
+                      </div>
+                      {m.observaciones && <p className="text-sm text-zinc-400 mt-1">{m.observaciones}</p>}
+                      {m.foto_url && (
+                         <div className="mt-3 rounded-lg overflow-hidden border border-white/10 max-w-xs">
+                           <img src={m.foto_url} alt="Mantenimiento" className="w-full h-32 object-cover" referrerPolicy="no-referrer" />
+                         </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Info */}
+        <div className="space-y-6">
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold">Información del Tambo</h3>
+            
+            <div className="space-y-4">
+              <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
+              <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
+              <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
+              <InfoItem label="Marca Pezonera" value={tambo.marca_pezonera || "N/A"} />
+              <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
+            </div>
+
+            <div className="pt-6 border-t border-white/5">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Contacto Cliente</h4>
+              <div className="space-y-2 text-sm">
+                <p className="flex items-center gap-2"><span className="text-zinc-500">Tel:</span> {tambo.clientes.telefono || "N/A"}</p>
+                <p className="flex items-center gap-2"><span className="text-zinc-500">Email:</span> {tambo.clientes.email || "N/A"}</p>
+                <p className="flex items-center gap-2"><span className="text-zinc-500">Ubicación:</span> {tambo.clientes.ubicacion || "N/A"}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <MaintenanceModal 
+          tamboId={tambo.id} 
+          onClose={() => setIsModalOpen(false)} 
+          onSuccess={() => {
+            setIsModalOpen(false);
+            loadData();
+          }} 
+        />
+      )}
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string, value: string }) {
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
+      <span className="text-zinc-500 text-sm">{label}</span>
+      <span className="font-mono font-bold">{value}</span>
+    </div>
+  );
+}
+
+function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "md" }) {
+  const styles = {
+    verde: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    amarillo: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    rojo: "bg-red-500/10 text-red-400 border-red-500/20"
+  };
+
+  const icons = {
+    verde: CheckCircle2,
+    amarillo: Clock,
+    rojo: AlertCircle
+  };
+
+  const Icon = icons[status];
+
+  return (
+    <div className={cn(
+      "flex items-center gap-1.5 border rounded-full font-bold uppercase tracking-wider",
+      styles[status],
+      size === "sm" ? "px-2 py-0.5 text-[8px]" : "px-3 py-1 text-[10px]"
+    )}>
+      <Icon className={size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3"} />
+      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : "Vencido"}
+    </div>
+  );
+}
+
+function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, onClose: () => void, onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [selectedTipos, setSelectedTipos] = useState<MantenimientoTipo[]>([]);
+  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [observaciones, setObservaciones] = useState("");
+  const [fotoUrl, setFotoUrl] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedTipos.length === 0) return;
+
+    setLoading(true);
+    try {
+      const records = selectedTipos.map(tipo => ({
+        tambo_id: tamboId,
+        tipo,
+        fecha,
+        observaciones,
+        foto_url: fotoUrl || null
+      }));
+
+      await db.mantenimientos.createMany(records);
+      onSuccess();
+    } catch (error) {
+      console.error("Error creating maintenance records:", error);
+      alert("Error al registrar el mantenimiento.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const toggleTipo = (tipo: MantenimientoTipo) => {
+    setSelectedTipos(prev => 
+      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-2xl font-bold">Registrar Mantenimiento</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <XCircle className="w-6 h-6 text-zinc-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Seleccionar Trabajos Realizados</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Object.values(MantenimientoTipo).map(tipo => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => toggleTipo(tipo)}
+                  className={cn(
+                    "px-4 py-3 rounded-xl text-sm font-medium border text-left transition-all",
+                    selectedTipos.includes(tipo)
+                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
+                      : "bg-white/5 border-white/5 text-zinc-400 hover:border-white/20"
+                  )}
+                >
+                  {tipo}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Fecha</label>
+              <input
+                required
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">URL de Foto (Opcional)</label>
+              <div className="relative">
+                <input
+                  type="url"
+                  value={fotoUrl}
+                  onChange={(e) => setFotoUrl(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pl-10 focus:outline-none focus:border-emerald-500 transition-colors"
+                  placeholder="https://..."
+                />
+                <Camera className="absolute left-3 top-3.5 w-4 h-4 text-zinc-500" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Observaciones</label>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              rows={3}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+              placeholder="Detalles del trabajo..."
+            />
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-4 rounded-2xl font-bold border border-white/10 hover:bg-white/5 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              disabled={loading || selectedTipos.length === 0}
+              type="submit"
+              className="flex-[2] bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              {loading ? (
+                <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Guardar Registros
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
