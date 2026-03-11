@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente, Tambo, Configuracion, Mantenimiento } from "../types/supabase";
+import { Cliente, Tambo, Configuracion, Mantenimiento, MantenimientoTipo } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
 import { cn } from "../utils/ui";
 
@@ -31,12 +31,24 @@ export default function Dashboard() {
         const [clientes, tambos, configs] = await Promise.all([
           db.clientes.getAll(),
           db.tambos.getAll(),
-          db.configuracion.getAll()
+          db.configuracion.getAllWithHidden()
         ]);
 
         const tambosWithStatus = await Promise.all(tambos.map(async (t) => {
           const mantenimientos = await db.mantenimientos.getByTambo(t.id);
-          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs);
+          
+          // Extract active types from configs
+          const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
+          let activeTypes = Object.values(MantenimientoTipo);
+          if (activeConfig) {
+            try {
+              activeTypes = JSON.parse(activeConfig.valor);
+            } catch (e) {
+              console.error("Error parsing active types for tambo", t.id);
+            }
+          }
+
+          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypes);
           const generalStatus = getGeneralStatus(statuses);
           return {
             ...t,
@@ -170,7 +182,8 @@ function StatusIndicator({ status }: { status: Status }) {
   const styles = {
     verde: "bg-emerald-500 shadow-emerald-500/50",
     amarillo: "bg-amber-500 shadow-amber-500/50",
-    rojo: "bg-red-500 shadow-red-500/50"
+    rojo: "bg-red-500 shadow-red-500/50",
+    gris: "bg-zinc-500 shadow-zinc-500/50"
   };
 
   return (

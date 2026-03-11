@@ -134,6 +134,13 @@ export type Tambo = Database['public']['Tables']['tambos']['Row'];
 export type Mantenimiento = Database['public']['Tables']['mantenimientos']['Row'];
 export type Configuracion = Database['public']['Tables']['configuracion']['Row'];
 
+export interface TamboMantenimiento {
+  id: string;
+  tambo_id: string;
+  tipo: MantenimientoTipo;
+  fecha_ultimo_mantenimiento: string | null;
+}
+
 export enum MantenimientoTipo {
   PEZONERAS = "Cambio de pezoneras",
   MANGUERAS_LECHE = "Mangueras de leche",

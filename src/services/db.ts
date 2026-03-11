@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -97,6 +97,40 @@ export const db = {
         throw error;
       }
       return data as Tambo;
+    },
+    async getMantenimientosActivos(tamboId: string): Promise<MantenimientoTipo[]> {
+      const { data, error } = await (supabase.from("configuracion") as any)
+        .select("valor")
+        .eq("clave", `tambo_mantenimientos_${tamboId}`)
+        .maybeSingle();
+      
+      if (error || !data) {
+        return Object.values(MantenimientoTipo);
+      }
+      try {
+        return JSON.parse(data.valor);
+      } catch (e) {
+        return Object.values(MantenimientoTipo);
+      }
+    },
+    async setMantenimientosActivos(tamboId: string, tipos: MantenimientoTipo[]) {
+      const clave = `tambo_mantenimientos_${tamboId}`;
+      const valor = JSON.stringify(tipos);
+      
+      const { data: existing } = await (supabase.from("configuracion") as any)
+        .select("id")
+        .eq("clave", clave)
+        .maybeSingle();
+      
+      if (existing) {
+        await (supabase.from("configuracion") as any).update({ valor }).eq("clave", clave);
+      } else {
+        await (supabase.from("configuracion") as any).insert({ 
+          clave, 
+          valor, 
+          descripcion: `Mantenimientos activos para tambo ${tamboId}` 
+        });
+      }
     }
   },
   mantenimientos: {
@@ -127,9 +161,19 @@ export const db = {
   },
   configuracion: {
     async getAll() {
-      const { data, error } = await (supabase.from("configuracion") as any).select("*");
+      const { data, error } = await (supabase.from("configuracion") as any)
+        .select("*")
+        .not("clave", "ilike", "tambo_mantenimientos_%");
       if (error) {
         console.error("Error al obtener configuraciones:", error);
+        throw error;
+      }
+      return data as Configuracion[];
+    },
+    async getAllWithHidden() {
+      const { data, error } = await (supabase.from("configuracion") as any).select("*");
+      if (error) {
+        console.error("Error al obtener todas las configuraciones:", error);
         throw error;
       }
       return data as Configuracion[];

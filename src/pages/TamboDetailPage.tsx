@@ -13,7 +13,9 @@ import {
   Camera,
   XCircle,
   Save,
-  Edit2
+  Edit2,
+  HelpCircle,
+  Settings2
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente } from "../types/supabase";
@@ -29,8 +31,11 @@ export default function TamboDetailPage() {
   const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente }) | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
+  const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>([]);
   const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
+  const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
 
   useEffect(() => {
     if (id) loadData();
@@ -39,17 +44,19 @@ export default function TamboDetailPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
-        db.configuracion.getAll()
+        db.configuracion.getAll(),
+        db.tambos.getMantenimientosActivos(id!)
       ]);
       
       setTambo(tamboData);
       setMantenimientos(mantData);
       setConfigs(configData);
+      setActiveTypes(activeTypesData);
       
-      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData);
+      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesData);
       setStatuses(calcStatuses);
     } catch (error) {
       console.error("Error loading tambo details:", error);
@@ -110,7 +117,7 @@ export default function TamboDetailPage() {
       
       const statusData = statuses.map(s => [
         s.tipo,
-        s.status.toUpperCase(),
+        s.status === "gris" ? "PENDIENTE" : s.status.toUpperCase(),
         formatDate(s.ultimaFecha),
         formatDate(s.proximaFecha),
         s.diasRestantes !== null ? `${s.diasRestantes} días` : "N/A"
@@ -185,8 +192,6 @@ export default function TamboDetailPage() {
         for (const photo of photos) {
           if (photo.foto_url) {
             try {
-              // We use a small trick to check if the image is valid and add it
-              // In a real browser environment, we might need to handle CORS
               doc.addImage(photo.foto_url, 'JPEG', photoX, photoY, 50, 50);
               photoX += 60;
               if (photoX > pageWidth - 60) {
@@ -241,8 +246,8 @@ export default function TamboDetailPage() {
             to={`/tambos/editar/${tambo.id}`}
             className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
           >
-            <Edit2 className="w-4 h-4" />
-            Editar Datos
+            <Settings2 className="w-4 h-4" />
+            Configurar Equipo
           </Link>
           <button 
             onClick={generatePDF}
@@ -265,20 +270,36 @@ export default function TamboDetailPage() {
         {/* Technical Status Panel */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <ClipboardList className="text-emerald-400 w-5 h-5" />
-              Estado Técnico del Equipo
-            </h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <ClipboardList className="text-emerald-400 w-5 h-5" />
+                Estado Técnico del Equipo
+              </h3>
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                {statuses.length} componentes activos
+              </span>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {statuses.map((s) => (
                 <div key={s.tipo} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-white/10 transition-all">
                   <div className="space-y-1">
-                    <p className="font-semibold text-sm">{s.tipo}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm">{s.tipo}</p>
+                      <button 
+                        onClick={() => {
+                          setEditingStatus(s);
+                          setIsEditDateModalOpen(true);
+                        }}
+                        className="p-1 hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Edit2 className="w-3 h-3 text-zinc-500" />
+                      </button>
+                    </div>
                     <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
-                      <span>Último: {formatDate(s.ultimaFecha)}</span>
+                      <span>Último: {formatDate(s.ultimaFecha) || 'NUNCA'}</span>
                       <span>•</span>
-                      <span>Próximo: {formatDate(s.proximaFecha)}</span>
+                      <span>Próximo: {formatDate(s.proximaFecha) || 'N/A'}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -303,10 +324,10 @@ export default function TamboDetailPage() {
               Historial de Mantenimientos
             </h3>
             <div className="space-y-4">
-              {mantenimientos.length === 0 ? (
+              {mantenimientos.filter(m => m.fecha !== '1900-01-01').length === 0 ? (
                 <p className="text-zinc-500 text-center py-8 italic">No hay registros de mantenimiento.</p>
               ) : (
-                mantenimientos.map((m) => (
+                mantenimientos.filter(m => m.fecha !== '1900-01-01').map((m) => (
                   <div key={m.id} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
                     <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
                       <Calendar className="text-emerald-400 w-5 h-5" />
@@ -358,11 +379,28 @@ export default function TamboDetailPage() {
       {isModalOpen && (
         <MaintenanceModal 
           tamboId={tambo.id} 
+          activeTypes={activeTypes}
           onClose={() => setIsModalOpen(false)} 
           onSuccess={() => {
             setIsModalOpen(false);
             loadData();
           }} 
+        />
+      )}
+
+      {isEditDateModalOpen && editingStatus && (
+        <EditLastDateModal
+          tamboId={tambo.id}
+          status={editingStatus}
+          onClose={() => {
+            setIsEditDateModalOpen(false);
+            setEditingStatus(null);
+          }}
+          onSuccess={() => {
+            setIsEditDateModalOpen(false);
+            setEditingStatus(null);
+            loadData();
+          }}
         />
       )}
     </div>
@@ -382,13 +420,15 @@ function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "m
   const styles = {
     verde: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     amarillo: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    rojo: "bg-red-500/10 text-red-400 border-red-500/20"
+    rojo: "bg-red-500/10 text-red-400 border-red-500/20",
+    gris: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
   };
 
   const icons = {
     verde: CheckCircle2,
     amarillo: Clock,
-    rojo: AlertCircle
+    rojo: AlertCircle,
+    gris: HelpCircle
   };
 
   const Icon = icons[status];
@@ -400,19 +440,17 @@ function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "m
       size === "sm" ? "px-2 py-0.5 text-[8px]" : "px-3 py-1 text-[10px]"
     )}>
       <Icon className={size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : "Vencido"}
+      {status === "verde" ? "Al día" : status === "amarillo" ? "Próximo" : status === "rojo" ? "Vencido" : "Pendiente"}
     </div>
   );
 }
 
-function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, onClose: () => void, onSuccess: () => void }) {
+function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboId: string, activeTypes: MantenimientoTipo[], onClose: () => void, onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [selectedTipos, setSelectedTipos] = useState<MantenimientoTipo[]>([]);
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [observaciones, setObservaciones] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
-
-  const maintenanceTypes = Object.values(MantenimientoTipo);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -463,7 +501,7 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
               Seleccionar Trabajos Realizados ({selectedTipos.length})
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {maintenanceTypes.map(tipo => (
+              {activeTypes.map(tipo => (
                 <button
                   key={tipo}
                   type="button"
@@ -538,6 +576,102 @@ function MaintenanceModal({ tamboId, onClose, onSuccess }: { tamboId: string, on
                 <>
                   <Save className="w-5 h-5" />
                   Guardar {selectedTipos.length} Registros
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditLastDateModal({ tamboId, status, onClose, onSuccess }: { tamboId: string, status: MaintenanceStatus, onClose: () => void, onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [neverPerformed, setNeverPerformed] = useState(!status.ultimaFecha);
+  const [fecha, setFecha] = useState(status.ultimaFecha ? status.ultimaFecha.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const finalFecha = neverPerformed ? '1900-01-01' : fecha;
+      
+      // We create a new record with the special date or the selected date
+      // This will become the "latest" record for this type
+      await db.mantenimientos.create({
+        tambo_id: tamboId,
+        tipo: status.tipo,
+        fecha: finalFecha,
+        observaciones: neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha"
+      });
+      
+      onSuccess();
+    } catch (error) {
+      console.error("Error updating last maintenance date:", error);
+      alert("Error al actualizar la fecha.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-md p-6 md:p-8 space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-bold">Editar Última Fecha</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <XCircle className="w-6 h-6 text-zinc-500" />
+          </button>
+        </div>
+
+        <p className="text-sm text-zinc-400">Ajuste la fecha del último mantenimiento para <span className="text-white font-bold">{status.tipo}</span>.</p>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+              <input
+                type="checkbox"
+                checked={neverPerformed}
+                onChange={(e) => setNeverPerformed(e.target.checked)}
+                className="w-5 h-5 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+              />
+              <span className="text-sm font-medium">Nunca realizado todavía</span>
+            </label>
+
+            {!neverPerformed && (
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Fecha Específica</label>
+                <input
+                  required
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-4 rounded-2xl font-bold border border-white/10 hover:bg-white/5 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              disabled={loading}
+              type="submit"
+              className="flex-[2] bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              {loading ? (
+                <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Guardar
                 </>
               )}
             </button>

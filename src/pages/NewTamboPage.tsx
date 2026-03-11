@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente } from "../types/supabase";
-import { ArrowLeft, Save } from "lucide-react";
+import { Cliente, MantenimientoTipo } from "../types/supabase";
+import { ArrowLeft, Save, CheckCircle2 } from "lucide-react";
+import { cn } from "../utils/ui";
 
 export default function NewTamboPage() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function NewTamboPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>(Object.values(MantenimientoTipo));
   const [formData, setFormData] = useState({
     cliente_id: searchParams.get("clienteId") || "",
     nombre: "",
@@ -29,7 +31,11 @@ export default function NewTamboPage() {
         setClientes(clientsData);
 
         if (isEditing) {
-          const tambo = await db.tambos.getById(id!);
+          const [tambo, active] = await Promise.all([
+            db.tambos.getById(id!),
+            db.tambos.getMantenimientosActivos(id!)
+          ]);
+          
           setFormData({
             cliente_id: tambo.cliente_id,
             nombre: tambo.nombre,
@@ -39,6 +45,7 @@ export default function NewTamboPage() {
             marca_pezonera: tambo.marca_pezonera || "",
             fecha_ultimo_cambio: tambo.fecha_ultimo_cambio
           });
+          setActiveTypes(active);
         }
       } catch (error) {
         console.error("Error loading data for tambo:", error);
@@ -57,15 +64,18 @@ export default function NewTamboPage() {
 
     setLoading(true);
     try {
+      let tamboId = id;
       if (isEditing) {
         await db.tambos.update(id!, formData);
-        alert("Tambo actualizado correctamente.");
-        navigate(`/tambos/${id}`);
       } else {
-        await db.tambos.create(formData);
-        alert("Tambo creado correctamente.");
-        navigate("/tambos");
+        const newTambo = await db.tambos.create(formData);
+        tamboId = newTambo.id;
       }
+      
+      await db.tambos.setMantenimientosActivos(tamboId!, activeTypes);
+      
+      alert(isEditing ? "Tambo actualizado correctamente." : "Tambo creado correctamente.");
+      navigate(isEditing ? `/tambos/${id}` : "/tambos");
     } catch (error) {
       console.error("Error saving tambo:", error);
       alert("Error al guardar el tambo.");
@@ -73,6 +83,12 @@ export default function NewTamboPage() {
       setLoading(false);
     }
   }
+
+  const toggleType = (tipo: MantenimientoTipo) => {
+    setActiveTypes(prev => 
+      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
+    );
+  };
 
   if (initialLoading) {
     return (
@@ -83,7 +99,7 @@ export default function NewTamboPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
           <ArrowLeft className="w-6 h-6" />
@@ -98,97 +114,130 @@ export default function NewTamboPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-6">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Cliente *</label>
-          <select
-            required
-            value={formData.cliente_id}
-            onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
-          >
-            <option value="" disabled className="bg-[#0f0f0f]">Seleccionar cliente...</option>
-            {clientes.map(c => (
-              <option key={c.id} value={c.id} className="bg-[#0f0f0f]">{c.nombre}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Nombre del Tambo *</label>
-          <input
-            required
-            type="text"
-            value={formData.nombre}
-            onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-            placeholder="Ej: Tambo Norte"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-6">
+          <h3 className="text-xl font-bold border-b border-white/5 pb-4">Datos Generales</h3>
+          
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Vacas en Ordeñe</label>
-            <input
-              type="number"
-              value={formData.vacas_en_ordene}
-              onChange={(e) => setFormData({ ...formData, vacas_en_ordene: parseInt(e.target.value) })}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-            />
+            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Cliente *</label>
+            <select
+              required
+              value={formData.cliente_id}
+              onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
+            >
+              <option value="" disabled className="bg-[#0f0f0f]">Seleccionar cliente...</option>
+              {clientes.map(c => (
+                <option key={c.id} value={c.id} className="bg-[#0f0f0f]">{c.nombre}</option>
+              ))}
+            </select>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Bajadas</label>
-            <input
-              type="number"
-              value={formData.bajadas}
-              onChange={(e) => setFormData({ ...formData, bajadas: parseInt(e.target.value) })}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Ordeñes x Día</label>
-            <input
-              type="number"
-              value={formData.ordenes_por_dia}
-              onChange={(e) => setFormData({ ...formData, ordenes_por_dia: parseInt(e.target.value) })}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-            />
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Marca Pezonera</label>
+            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Nombre del Tambo *</label>
             <input
+              required
               type="text"
-              value={formData.marca_pezonera}
-              onChange={(e) => setFormData({ ...formData, marca_pezonera: e.target.value })}
+              value={formData.nombre}
+              onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-              placeholder="Ej: DeLaval, Westfalia..."
+              placeholder="Ej: Tambo Norte"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Fecha Último Cambio</label>
-            <input
-              type="date"
-              value={formData.fecha_ultimo_cambio}
-              onChange={(e) => setFormData({ ...formData, fecha_ultimo_cambio: e.target.value })}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Vacas en Ordeñe</label>
+              <input
+                type="number"
+                value={formData.vacas_en_ordene}
+                onChange={(e) => setFormData({ ...formData, vacas_en_ordene: parseInt(e.target.value) || 0 })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Bajadas</label>
+              <input
+                type="number"
+                value={formData.bajadas}
+                onChange={(e) => setFormData({ ...formData, bajadas: parseInt(e.target.value) || 0 })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Ordeñes x Día</label>
+              <input
+                type="number"
+                value={formData.ordenes_por_dia}
+                onChange={(e) => setFormData({ ...formData, ordenes_por_dia: parseInt(e.target.value) || 0 })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Marca Pezonera</label>
+              <input
+                type="text"
+                value={formData.marca_pezonera}
+                onChange={(e) => setFormData({ ...formData, marca_pezonera: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                placeholder="Ej: DeLaval, Westfalia..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Fecha Último Cambio</label>
+              <input
+                type="date"
+                value={formData.fecha_ultimo_cambio}
+                onChange={(e) => setFormData({ ...formData, fecha_ultimo_cambio: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-6">
+          <div className="flex items-center justify-between border-b border-white/5 pb-4">
+            <h3 className="text-xl font-bold">Mantenimientos Activos</h3>
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md">
+              {activeTypes.length} SELECCIONADOS
+            </span>
+          </div>
+          <p className="text-sm text-zinc-500">Marque los componentes que este equipo posee para habilitar su seguimiento técnico.</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Object.values(MantenimientoTipo).map(tipo => (
+              <button
+                key={tipo}
+                type="button"
+                onClick={() => toggleType(tipo)}
+                className={cn(
+                  "flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all",
+                  activeTypes.includes(tipo)
+                    ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
+                    : "bg-white/5 border-white/5 text-zinc-400 hover:border-white/20"
+                )}
+              >
+                <span>{tipo}</span>
+                {activeTypes.includes(tipo) && <CheckCircle2 className="w-4 h-4" />}
+              </button>
+            ))}
           </div>
         </div>
 
         <button
           disabled={loading}
           type="submit"
-          className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+          className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black font-bold py-5 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-lg"
         >
           {loading ? (
             <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
           ) : (
             <>
-              <Save className="w-5 h-5" />
-              Guardar Tambo
+              <Save className="w-6 h-6" />
+              {isEditing ? "Actualizar Tambo" : "Guardar Tambo"}
             </>
           )}
         </button>

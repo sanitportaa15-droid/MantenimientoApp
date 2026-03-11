@@ -1,7 +1,7 @@
 import { addMonths, differenceInDays, parseISO } from "date-fns";
 import { Mantenimiento, MantenimientoTipo, Tambo, Configuracion } from "../types/supabase";
 
-export type Status = "verde" | "amarillo" | "rojo";
+export type Status = "verde" | "amarillo" | "rojo" | "gris";
 
 export interface MaintenanceStatus {
   tipo: MantenimientoTipo;
@@ -14,7 +14,8 @@ export interface MaintenanceStatus {
 export function calculateMaintenanceStatus(
   tambo: Tambo,
   mantenimientos: Mantenimiento[],
-  configs: Configuracion[]
+  configs: Configuracion[],
+  activeTypes: MantenimientoTipo[] = Object.values(MantenimientoTipo)
 ): MaintenanceStatus[] {
   const getConfig = (clave: string, defaultValue: number) => {
     const config = configs.find(c => c.clave === clave);
@@ -23,7 +24,7 @@ export function calculateMaintenanceStatus(
 
   const diasAlerta = getConfig("dias_alerta", 30);
 
-  return Object.values(MantenimientoTipo).map(tipo => {
+  return activeTypes.map(tipo => {
     const ultimo = mantenimientos
       .filter(m => m.tipo === tipo)
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
@@ -33,13 +34,23 @@ export function calculateMaintenanceStatus(
     let diasRestantes: number | null = null;
     let status: Status = "rojo";
 
+    // Handle "Never performed" or special initial date
+    if (!ultimo || ultimo.fecha === '1900-01-01') {
+      return {
+        tipo,
+        ultimaFecha: null,
+        proximaFecha: null,
+        diasRestantes: null,
+        status: "gris"
+      };
+    }
+
     if (tipo === MantenimientoTipo.PEZONERAS) {
       const maxOrdenes = getConfig("pezonera_max_ordenes", 2500);
       if (ultimaFecha) {
         // Cálculo basado en ordeñes
-        // Días = maxOrdenes / (vacas * ordenes_por_dia / bajadas)
         const ordenesPorDiaTotal = (tambo.vacas_en_ordene * tambo.ordenes_por_dia) / tambo.bajadas;
-        const diasVidaUtil = maxOrdenes / ordenesPorDiaTotal;
+        const diasVidaUtil = maxOrdenes / (ordenesPorDiaTotal || 1);
         proximaFecha = addMonths(ultimaFecha, 0); // Reset base
         proximaFecha.setDate(ultimaFecha.getDate() + Math.floor(diasVidaUtil));
       }
@@ -85,5 +96,6 @@ export function calculateMaintenanceStatus(
 export function getGeneralStatus(statuses: MaintenanceStatus[]): Status {
   if (statuses.some(s => s.status === "rojo")) return "rojo";
   if (statuses.some(s => s.status === "amarillo")) return "amarillo";
+  if (statuses.every(s => s.status === "gris")) return "gris";
   return "verde";
 }
