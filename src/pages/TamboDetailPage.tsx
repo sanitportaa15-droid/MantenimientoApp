@@ -18,11 +18,11 @@ import {
   Settings2
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente } from "../types/supabase";
+import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente, Reclamo } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +30,7 @@ export default function TamboDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente }) | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
+  const [reclamos, setReclamos] = useState<Reclamo[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
   const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>([]);
   const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
@@ -44,17 +45,19 @@ export default function TamboDetailPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData, activeTypesData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesData, reclamosData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
-        db.tambos.getMantenimientosActivos(id!)
+        db.tambos.getMantenimientosActivos(id!),
+        db.reclamos.getByTambo(id!)
       ]);
       
       setTambo(tamboData);
       setMantenimientos(mantData);
       setConfigs(configData);
       setActiveTypes(activeTypesData);
+      setReclamos(reclamosData);
       
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesData);
       setStatuses(calcStatuses);
@@ -66,7 +69,12 @@ export default function TamboDetailPage() {
   }
 
   const generatePDF = async () => {
-    if (!tambo) return;
+    console.log("Iniciando generación de PDF para:", tambo?.nombre);
+    if (!tambo) {
+      console.error("Error: No hay datos del tambo cargados.");
+      return;
+    }
+    
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -100,16 +108,18 @@ export default function TamboDetailPage() {
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text("VACAS EN ORDEÑE", 20, 82);
-      doc.text("BAJADAS", 70, 82);
-      doc.text("MARCA PEZONERA", 110, 82);
-      doc.text("FECHA REPORTE", 160, 82);
+      doc.text("BAJADAS", 60, 82);
+      doc.text("ORDEÑES/DÍA", 90, 82);
+      doc.text("MARCA PEZONERA", 120, 82);
+      doc.text("FECHA REPORTE", 165, 82);
       
       doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.text(tambo.vacas_en_ordene.toString(), 20, 89);
-      doc.text(tambo.bajadas.toString(), 70, 89);
-      doc.text(tambo.marca_pezonera || "N/A", 110, 89);
-      doc.text(new Date().toLocaleDateString(), 160, 89);
+      doc.text(tambo.bajadas.toString(), 60, 89);
+      doc.text(tambo.ordenes_por_dia.toString(), 90, 89);
+      doc.text(tambo.marca_pezonera || "N/A", 120, 89);
+      doc.text(new Date().toLocaleDateString(), 165, 89);
       
       // Technical Status Table
       doc.setFontSize(16);
@@ -123,7 +133,7 @@ export default function TamboDetailPage() {
         s.diasRestantes !== null ? `${s.diasRestantes} días` : "N/A"
       ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: 110,
         head: [['Tipo de Mantenimiento', 'Estado', 'Último', 'Próximo', 'Días Rest.'],],
         body: statusData,
@@ -143,13 +153,15 @@ export default function TamboDetailPage() {
       doc.setFontSize(16);
       doc.text("Historial de Mantenimientos", 20, finalY);
       
-      const historyData = mantenimientos.map(m => [
-        formatDate(m.fecha),
-        m.tipo,
-        m.observaciones || "Sin observaciones"
-      ]);
+      const historyData = mantenimientos
+        .filter(m => m.fecha !== '1900-01-01')
+        .map(m => [
+          formatDate(m.fecha),
+          m.tipo,
+          m.observaciones || "Sin observaciones"
+        ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: finalY + 5,
         head: [['Fecha', 'Tipo', 'Observaciones'],],
         body: historyData,
@@ -159,6 +171,39 @@ export default function TamboDetailPage() {
       });
 
       finalY = (doc as any).lastAutoTable.finalY + 15;
+
+      // Reclamos Section
+      if (finalY > 240) {
+        doc.addPage();
+        finalY = 20;
+      }
+
+      doc.setFontSize(16);
+      doc.text("Reclamos Registrados", 20, finalY);
+
+      if (reclamos.length === 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("No hay reclamos registrados", 20, finalY + 10);
+        finalY += 20;
+      } else {
+        const reclamosData = reclamos.map(r => [
+          formatDate(r.fecha_reclamo),
+          r.titulo,
+          r.descripcion || "Sin descripción",
+          r.estado
+        ]);
+
+        autoTable(doc, {
+          startY: finalY + 5,
+          head: [['Fecha', 'Título', 'Descripción', 'Estado'],],
+          body: reclamosData,
+          headStyles: { fillColor: [245, 158, 11] }, // Amber 500
+          alternateRowStyles: { fillColor: [245, 245, 245] },
+          margin: { left: 20, right: 20 }
+        });
+        finalY = (doc as any).lastAutoTable.finalY + 15;
+      }
 
       // Observations
       if (tambo.clientes.observaciones) {
@@ -370,6 +415,42 @@ export default function TamboDetailPage() {
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Tel:</span> {tambo.clientes.telefono || "N/A"}</p>
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Email:</span> {tambo.clientes.email || "N/A"}</p>
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Ubicación:</span> {tambo.clientes.ubicacion || "N/A"}</p>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Reclamos Activos</h4>
+                <Link to="/reclamos/nuevo" className="text-emerald-400 hover:text-emerald-300">
+                  <Plus className="w-4 h-4" />
+                </Link>
+              </div>
+              <div className="space-y-3">
+                {reclamos.filter(r => r.estado !== 'Resuelto').length === 0 ? (
+                  <p className="text-xs text-zinc-500 italic">No hay reclamos pendientes.</p>
+                ) : (
+                  reclamos.filter(r => r.estado !== 'Resuelto').slice(0, 3).map(r => (
+                    <div key={r.id} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <div className="flex justify-between items-start">
+                        <p className="text-sm font-bold truncate pr-2">{r.titulo}</p>
+                        <span className={cn(
+                          "text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase",
+                          r.prioridad === 'Alta' ? "bg-red-500/20 text-red-400" : 
+                          r.prioridad === 'Media' ? "bg-amber-500/20 text-amber-400" : 
+                          "bg-blue-500/20 text-blue-400"
+                        )}>
+                          {r.prioridad}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500">{formatDate(r.fecha_reclamo)}</p>
+                    </div>
+                  ))
+                )}
+                {reclamos.length > 3 && (
+                  <Link to="/reclamos" className="block text-center text-xs text-zinc-500 hover:text-white transition-colors pt-2">
+                    Ver todos los reclamos
+                  </Link>
+                )}
               </div>
             </div>
           </div>

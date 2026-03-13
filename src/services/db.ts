@@ -239,6 +239,17 @@ export const db = {
       }
       return data as any[];
     },
+    async getByTambo(tamboId: string) {
+      const { data, error } = await (supabase.from("reclamos") as any)
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .order("fecha_reclamo", { ascending: false });
+      if (error) {
+        console.error("Error al obtener reclamos por tambo:", error);
+        throw error;
+      }
+      return data as Reclamo[];
+    },
     async getById(id: string) {
       const { data, error } = await (supabase.from("reclamos") as any)
         .select("*, tambos(*, clientes(*))")
