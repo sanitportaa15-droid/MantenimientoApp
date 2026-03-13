@@ -8,6 +8,9 @@ import NewTamboPage from "./pages/NewTamboPage";
 import TamboDetailPage from "./pages/TamboDetailPage";
 import ConfigPage from "./pages/ConfigPage";
 import TambosPage from "./pages/TambosPage";
+import ReclamosPage from "./pages/ReclamosPage";
+import NewReclamoPage from "./pages/NewReclamoPage";
+import ConvertReclamoPage from "./pages/ConvertReclamoPage";
 import { db } from "./services/db";
 
 export default function App() {
@@ -28,6 +31,10 @@ export default function App() {
           <Route path="/tambos/nuevo" element={<NewTamboPage />} />
           <Route path="/tambos/editar/:id" element={<NewTamboPage />} />
           <Route path="/tambos/:id" element={<TamboDetailPage />} />
+          <Route path="/reclamos" element={<ReclamosPage />} />
+          <Route path="/reclamos/nuevo" element={<NewReclamoPage />} />
+          <Route path="/reclamos/editar/:id" element={<NewReclamoPage />} />
+          <Route path="/reclamos/convertir/:id" element={<ConvertReclamoPage />} />
           <Route path="/config" element={<ConfigPage />} />
         </Routes>
       </Layout>

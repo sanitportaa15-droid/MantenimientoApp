@@ -7,11 +7,12 @@ import {
   AlertTriangle, 
   XCircle,
   ArrowRight,
-  HelpCircle
+  HelpCircle,
+  MessageSquare
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente, Tambo, Configuracion, Mantenimiento, MantenimientoTipo } from "../types/supabase";
+import { Cliente, Tambo, Configuracion, Mantenimiento, MantenimientoTipo, ReclamoEstado } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
 import { cn } from "../utils/ui";
 
@@ -25,15 +26,22 @@ export default function Dashboard() {
     vencidos: 0,
     nunca: 0
   });
+  const [reclamosStats, setReclamosStats] = useState({
+    pendientes: 0,
+    programados: 0,
+    resueltos: 0
+  });
   const [tambosList, setTambosList] = useState<(Tambo & { clienteNombre: string, status: Status })[]>([]);
+  const [recentReclamos, setRecentReclamos] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [clientes, tambos, configs] = await Promise.all([
+        const [clientes, tambos, configs, reclamos] = await Promise.all([
           db.clientes.getAll(),
           db.tambos.getAll(),
-          db.configuracion.getAllWithHidden()
+          db.configuracion.getAllWithHidden(),
+          db.reclamos.getAll()
         ]);
 
         const tambosWithStatus = await Promise.all(tambos.map(async (t) => {
@@ -68,6 +76,13 @@ export default function Dashboard() {
           nunca: tambosWithStatus.filter(t => t.status === "gris").length
         });
 
+        setReclamosStats({
+          pendientes: reclamos.filter(r => r.estado === ReclamoEstado.PENDIENTE).length,
+          programados: reclamos.filter(r => r.estado === ReclamoEstado.PROGRAMADO).length,
+          resueltos: reclamos.filter(r => r.estado === ReclamoEstado.RESUELTO).length
+        });
+
+        setRecentReclamos(reclamos.filter(r => r.estado !== ReclamoEstado.RESUELTO).slice(0, 3));
         setTambosList(tambosWithStatus);
       } catch (error) {
         console.error("Error loading dashboard:", error);
@@ -103,6 +118,10 @@ export default function Dashboard() {
             <Plus className="w-4 h-4" />
             Nuevo Tambo
           </Link>
+          <Link to="/reclamos/nuevo" className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-4 py-2 rounded-xl font-semibold border border-amber-500/20 transition-colors">
+            <Plus className="w-4 h-4" />
+            Nuevo Reclamo
+          </Link>
         </div>
       </div>
 
@@ -116,47 +135,104 @@ export default function Dashboard() {
         <StatCard label="Nunca" value={stats.nunca} icon={HelpCircle} color="zinc" />
       </div>
 
-      {/* Tambos List */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-2">
-          <h3 className="text-xl font-bold">Estado Técnico del Equipo</h3>
-          <Link to="/tambos" className="text-emerald-400 text-sm font-medium flex items-center gap-1 hover:underline">
-            Ver todos <ArrowRight className="w-3 h-3" />
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Tambos List */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-bold">Estado Técnico del Equipo</h3>
+            <Link to="/tambos" className="text-emerald-400 text-sm font-medium flex items-center gap-1 hover:underline">
+              Ver todos <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tambosList.slice(0, 4).map((tambo) => (
+              <Link 
+                key={tambo.id} 
+                to={`/tambos/${tambo.id}`}
+                className="group bg-[#0f0f0f] border border-white/5 rounded-2xl p-5 hover:border-white/20 transition-all hover:shadow-xl hover:shadow-black/40"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h4 className="font-bold text-lg group-hover:text-emerald-400 transition-colors">{tambo.nombre}</h4>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">{tambo.clienteNombre}</p>
+                  </div>
+                  <StatusIndicator status={tambo.status} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-white/5 rounded-lg p-2">
+                    <p className="text-zinc-500 text-[10px] uppercase font-bold">Vacas</p>
+                    <p className="font-mono font-medium">{tambo.vacas_en_ordene}</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-2">
+                    <p className="text-zinc-500 text-[10px] uppercase font-bold">Bajadas</p>
+                    <p className="font-mono font-medium">{tambo.bajadas}</p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-zinc-400">
+                  <span>Último: {tambo.fecha_ultimo_cambio === '1900-01-01' ? 'NUNCA' : (tambo.fecha_ultimo_cambio || 'N/A')}</span>
+                  <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md font-bold text-[10px]">DETALLES</span>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tambosList.map((tambo) => (
-            <Link 
-              key={tambo.id} 
-              to={`/tambos/${tambo.id}`}
-              className="group bg-[#0f0f0f] border border-white/5 rounded-2xl p-5 hover:border-white/20 transition-all hover:shadow-xl hover:shadow-black/40"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h4 className="font-bold text-lg group-hover:text-emerald-400 transition-colors">{tambo.nombre}</h4>
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">{tambo.clienteNombre}</p>
-                </div>
-                <StatusIndicator status={tambo.status} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-white/5 rounded-lg p-2">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold">Vacas</p>
-                  <p className="font-mono font-medium">{tambo.vacas_en_ordene}</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-2">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold">Bajadas</p>
-                  <p className="font-mono font-medium">{tambo.bajadas}</p>
-                </div>
-              </div>
-              
-              <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-zinc-400">
-                <span>Último cambio: {tambo.fecha_ultimo_cambio === '1900-01-01' ? 'NUNCA' : (tambo.fecha_ultimo_cambio || 'N/A')}</span>
-                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md font-bold">DETALLES</span>
-              </div>
+        {/* Reclamos Panel */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-bold">Reclamos</h3>
+            <Link to="/reclamos" className="text-emerald-400 text-sm font-medium flex items-center gap-1 hover:underline">
+              Ver todos <ArrowRight className="w-3 h-3" />
             </Link>
-          ))}
+          </div>
+
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl overflow-hidden">
+            <div className="grid grid-cols-3 border-b border-white/5">
+              <div className="p-4 text-center border-r border-white/5">
+                <p className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Pendientes</p>
+                <p className="text-xl font-bold font-mono">{reclamosStats.pendientes}</p>
+              </div>
+              <div className="p-4 text-center border-r border-white/5">
+                <p className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Programados</p>
+                <p className="text-xl font-bold font-mono text-blue-400">{reclamosStats.programados}</p>
+              </div>
+              <div className="p-4 text-center">
+                <p className="text-zinc-500 text-[10px] uppercase font-bold mb-1">Resueltos</p>
+                <p className="text-xl font-bold font-mono text-emerald-400">{reclamosStats.resueltos}</p>
+              </div>
+            </div>
+
+            <div className="p-2 space-y-2">
+              {recentReclamos.length > 0 ? (
+                recentReclamos.map(r => (
+                  <Link 
+                    key={r.id} 
+                    to="/reclamos"
+                    className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-2xl transition-colors group"
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                      r.estado === ReclamoEstado.PENDIENTE ? "bg-zinc-500/10 text-zinc-400" : "bg-blue-500/10 text-blue-400"
+                    )}>
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate group-hover:text-emerald-400 transition-colors">{r.titulo}</p>
+                      <p className="text-[10px] text-zinc-500 font-medium uppercase truncate">{r.tambos.nombre}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-zinc-700 group-hover:text-emerald-400 transition-colors" />
+                  </Link>
+                ))
+              ) : (
+                <div className="p-8 text-center">
+                  <p className="text-zinc-600 text-sm">No hay reclamos activos</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

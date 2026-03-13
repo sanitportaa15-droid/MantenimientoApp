@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database, Reclamo } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -225,6 +225,59 @@ export const db = {
       if (toInsert.length > 0) {
         const { error } = await (supabase.from("configuracion") as any).insert(toInsert);
         if (error) console.error("Error al sembrar configuraciones por defecto:", error);
+      }
+    }
+  },
+  reclamos: {
+    async getAll() {
+      const { data, error } = await (supabase.from("reclamos") as any)
+        .select("*, tambos(nombre, clientes(nombre))")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error al obtener reclamos:", error);
+        throw error;
+      }
+      return data as any[];
+    },
+    async getById(id: string) {
+      const { data, error } = await (supabase.from("reclamos") as any)
+        .select("*, tambos(*, clientes(*))")
+        .eq("id", id)
+        .single();
+      if (error) {
+        console.error("Error al obtener reclamo por ID:", error);
+        throw error;
+      }
+      return data as any;
+    },
+    async create(reclamo: Database['public']['Tables']['reclamos']['Insert']) {
+      const { data, error } = await (supabase.from("reclamos") as any)
+        .insert(reclamo)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error guardando reclamo:", error);
+        throw error;
+      }
+      return data as Reclamo;
+    },
+    async update(id: string, reclamo: Partial<Database['public']['Tables']['reclamos']['Update']>) {
+      const { data, error } = await (supabase.from("reclamos") as any)
+        .update(reclamo)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error actualizando reclamo:", error);
+        throw error;
+      }
+      return data as Reclamo;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("reclamos").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando reclamo:", error);
+        throw error;
       }
     }
   }

@@ -7,7 +7,8 @@ import {
   Menu, 
   X, 
   ChevronRight,
-  Droplets
+  Droplets,
+  MessageSquare
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -23,6 +24,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
     { name: "Clientes", path: "/clientes", icon: Users },
     { name: "Tambos", path: "/tambos", icon: Droplets },
+    { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Configuración", path: "/config", icon: Settings },
   ];
 

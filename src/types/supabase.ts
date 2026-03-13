@@ -125,6 +125,41 @@ export interface Database {
           created_at?: string
         }
       }
+      reclamos: {
+        Row: {
+          id: string
+          tambo_id: string
+          titulo: string
+          descripcion: string | null
+          fecha_reclamo: string
+          fecha_programada: string | null
+          estado: ReclamoEstado
+          prioridad: ReclamoPrioridad
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id: string
+          titulo: string
+          descripcion?: string | null
+          fecha_reclamo?: string
+          fecha_programada?: string | null
+          estado?: ReclamoEstado
+          prioridad?: ReclamoPrioridad
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string
+          titulo?: string
+          descripcion?: string | null
+          fecha_reclamo?: string
+          fecha_programada?: string | null
+          estado?: ReclamoEstado
+          prioridad?: ReclamoPrioridad
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -133,6 +168,21 @@ export type Cliente = Database['public']['Tables']['clientes']['Row'];
 export type Tambo = Database['public']['Tables']['tambos']['Row'];
 export type Mantenimiento = Database['public']['Tables']['mantenimientos']['Row'];
 export type Configuracion = Database['public']['Tables']['configuracion']['Row'];
+export type Reclamo = Database['public']['Tables']['reclamos']['Row'];
+
+export enum ReclamoEstado {
+  PENDIENTE = "Pendiente",
+  PROGRAMADO = "Programado",
+  EN_PROCESO = "En proceso",
+  RESUELTO = "Resuelto"
+}
+
+export enum ReclamoPrioridad {
+  BAJA = "Baja",
+  MEDIA = "Media",
+  ALTA = "Alta",
+  URGENTE = "Urgente"
+}
 
 export interface TamboMantenimiento {
   id: string;
