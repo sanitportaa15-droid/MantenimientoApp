@@ -1,20 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Reclamo, ReclamoEstado, MantenimientoTipo } from "../types/supabase";
-import { ArrowLeft, Save, CheckCircle2, Camera, Settings2, Wrench, Eye } from "lucide-react";
+import { Reclamo, ReclamoEstado, MantenimientoTipo, TipoReparacion } from "../types/supabase";
+import { ArrowLeft, Save, CheckCircle2, Camera, Settings2, Wrench, Eye, Plus, RefreshCw } from "lucide-react";
 import { cn } from "../utils/ui";
-
-const REPAIR_TYPES = [
-  "Falla eléctrica",
-  "Falla energética",
-  "Pérdida de vacío",
-  "Fuga de aire",
-  "Problema de lavado",
-  "Ajuste de regulador",
-  "Revisión general",
-  "Otro"
-];
 
 export default function ConvertReclamoPage() {
   const navigate = useNavigate();
@@ -24,6 +13,8 @@ export default function ConvertReclamoPage() {
   const [reclamo, setReclamo] = useState<any>(null);
   const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>([]);
   const [selectedTipos, setSelectedTipos] = useState<MantenimientoTipo[]>([]);
+  const [repairTypes, setRepairTypes] = useState<TipoReparacion[]>([]);
+  const [isSavingNewType, setIsSavingNewType] = useState(false);
   
   const [resolutionType, setResolutionType] = useState<"mantenimiento" | "reparacion" | "revision">("mantenimiento");
   const [repairType, setRepairType] = useState("");
@@ -36,13 +27,18 @@ export default function ConvertReclamoPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await db.reclamos.getById(id!);
-        setReclamo(data);
+        const reclamoData = await db.reclamos.getById(id!);
+        setReclamo(reclamoData);
         
-        const types = await db.tambos.getMantenimientosActivos(data.tambo_id);
-        setActiveTypes(types);
+        const [maintTypes, repairTypesData] = await Promise.all([
+          db.tambos.getMantenimientosActivos(reclamoData.tambo_id),
+          db.tipos_reparacion.getAll()
+        ]);
+        
+        setActiveTypes(maintTypes);
+        setRepairTypes(repairTypesData);
       } catch (error) {
-        console.error("Error loading reclamo:", error);
+        console.error("Error loading data:", error);
         alert("Error al cargar los datos.");
         navigate("/reclamos");
       } finally {
@@ -51,6 +47,27 @@ export default function ConvertReclamoPage() {
     }
     loadData();
   }, [id]);
+
+  async function handleSaveNewRepairType() {
+    if (!otherRepairType.trim()) return;
+    setIsSavingNewType(true);
+    try {
+      const created = await db.tipos_reparacion.create({
+        nombre: otherRepairType.trim(),
+        descripcion: "Agregado desde resolución de reclamo"
+      });
+      setRepairTypes([...repairTypes, created]);
+      setRepairType(created.nombre);
+      setOtherRepairType("");
+      alert("Tipo de reparación guardado correctamente.");
+    } catch (error) {
+      console.error("Error saving new repair type:", error);
+      alert("Error al guardar el nuevo tipo de reparación.");
+    } finally {
+      setIsSavingNewType(null as any); // Reset
+      setIsSavingNewType(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -232,23 +249,36 @@ ${fotoUrl ? `Foto: ${fotoUrl}\n` : ""}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
                 >
                   <option value="" disabled>Seleccione una falla...</option>
-                  {REPAIR_TYPES.map(type => (
-                    <option key={type} value={type} className="bg-[#0f0f0f]">{type}</option>
+                  {repairTypes.map(type => (
+                    <option key={type.id} value={type.nombre} className="bg-[#0f0f0f]">{type.nombre}</option>
                   ))}
+                  <option value="Otro" className="bg-[#0f0f0f]">Otro tipo de reparación...</option>
                 </select>
               </div>
 
               {repairType === "Otro" && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                   <label className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Otro tipo de falla</label>
-                  <input
-                    required={repairType === "Otro"}
-                    type="text"
-                    value={otherRepairType}
-                    onChange={(e) => setOtherRepairType(e.target.value)}
-                    placeholder="Escriba el problema..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      required={repairType === "Otro"}
+                      type="text"
+                      value={otherRepairType}
+                      onChange={(e) => setOtherRepairType(e.target.value)}
+                      placeholder="Escriba el problema..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveNewRepairType}
+                      disabled={!otherRepairType.trim() || isSavingNewType}
+                      className="px-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-all flex items-center gap-2 text-sm disabled:opacity-50"
+                      title="Guardar como nuevo tipo de reparación"
+                    >
+                      {isSavingNewType ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      <span className="hidden md:inline">Guardar</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database, Reclamo } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database, Reclamo, TipoReparacion } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -289,6 +289,56 @@ export const db = {
       if (error) {
         console.error("Error eliminando reclamo:", error);
         throw error;
+      }
+    }
+  },
+  tipos_reparacion: {
+    async getAll() {
+      const { data, error } = await supabase.from("tipos_reparacion").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener tipos de reparación:", error);
+        throw error;
+      }
+      return data as TipoReparacion[];
+    },
+    async create(tipo: Database['public']['Tables']['tipos_reparacion']['Insert']) {
+      const { data, error } = await (supabase.from("tipos_reparacion") as any).insert(tipo).select().single();
+      if (error) {
+        console.error("Error guardando tipo de reparación:", error);
+        throw error;
+      }
+      return data as TipoReparacion;
+    },
+    async update(id: string, tipo: Partial<Database['public']['Tables']['tipos_reparacion']['Update']>) {
+      const { data, error } = await (supabase.from("tipos_reparacion") as any).update(tipo).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando tipo de reparación:", error);
+        throw error;
+      }
+      return data as TipoReparacion;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("tipos_reparacion").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando tipo de reparación:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaultTypes = [
+        { nombre: 'Falla eléctrica', descripcion: 'Problema eléctrico en el sistema' },
+        { nombre: 'Falla energética', descripcion: 'Problema relacionado con energía o tensión' },
+        { nombre: 'Pérdida de vacío', descripcion: 'Caída de vacío en la línea' },
+        { nombre: 'Fuga de aire', descripcion: 'Entrada de aire en el sistema' },
+        { nombre: 'Problema de lavado', descripcion: 'Problema en sistema de lavado' },
+        { nombre: 'Ajuste de regulador', descripcion: 'Ajuste del regulador de vacío' },
+        { nombre: 'Revisión general', descripcion: 'Chequeo general del sistema' },
+      ];
+      
+      const { data: existing } = await supabase.from("tipos_reparacion").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("tipos_reparacion") as any).insert(defaultTypes);
+        if (error) console.error("Error al sembrar tipos de reparación por defecto:", error);
       }
     }
   }

@@ -160,6 +160,26 @@ export interface Database {
           created_at?: string
         }
       }
+      tipos_reparacion: {
+        Row: {
+          id: string
+          nombre: string
+          descripcion: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          descripcion?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          descripcion?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -169,6 +189,7 @@ export type Tambo = Database['public']['Tables']['tambos']['Row'];
 export type Mantenimiento = Database['public']['Tables']['mantenimientos']['Row'];
 export type Configuracion = Database['public']['Tables']['configuracion']['Row'];
 export type Reclamo = Database['public']['Tables']['reclamos']['Row'];
+export type TipoReparacion = Database['public']['Tables']['tipos_reparacion']['Row'];
 
 export enum ReclamoEstado {
   PENDIENTE = "Pendiente",
