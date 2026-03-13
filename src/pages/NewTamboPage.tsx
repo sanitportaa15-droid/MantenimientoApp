@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente, MantenimientoTipo } from "../types/supabase";
+import { Cliente, TipoMantenimiento } from "../types/supabase";
 import { ArrowLeft, Save, CheckCircle2 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -13,7 +13,8 @@ export default function NewTamboPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>(Object.values(MantenimientoTipo));
+  const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
+  const [activeTypes, setActiveTypes] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     cliente_id: searchParams.get("clienteId") || "",
     nombre: "",
@@ -27,8 +28,12 @@ export default function NewTamboPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const clientsData = await db.clientes.getAll();
+        const [clientsData, maintTypesData] = await Promise.all([
+          db.clientes.getAll(),
+          db.tipos_mantenimiento.getAll()
+        ]);
         setClientes(clientsData);
+        setAllMaintTypes(maintTypesData);
 
         if (isEditing) {
           const [tambo, active] = await Promise.all([
@@ -46,6 +51,8 @@ export default function NewTamboPage() {
             fecha_ultimo_cambio: tambo.fecha_ultimo_cambio
           });
           setActiveTypes(active);
+        } else {
+          setActiveTypes(maintTypesData.map(t => t.nombre));
         }
       } catch (error) {
         console.error("Error loading data for tambo:", error);
@@ -84,7 +91,7 @@ export default function NewTamboPage() {
     }
   }
 
-  const toggleType = (tipo: MantenimientoTipo) => {
+  const toggleType = (tipo: string) => {
     setActiveTypes(prev => 
       prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
     );
@@ -220,20 +227,20 @@ export default function NewTamboPage() {
           <p className="text-sm text-zinc-500">Marque los componentes que este equipo posee para habilitar su seguimiento técnico.</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {Object.values(MantenimientoTipo).map(tipo => (
+            {allMaintTypes.map(tipo => (
               <button
-                key={tipo}
+                key={tipo.id}
                 type="button"
-                onClick={() => toggleType(tipo)}
+                onClick={() => toggleType(tipo.nombre)}
                 className={cn(
                   "flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all",
-                  activeTypes.includes(tipo)
+                  activeTypes.includes(tipo.nombre)
                     ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
                     : "bg-white/5 border-white/5 text-zinc-400 hover:border-white/20"
                 )}
               >
-                <span>{tipo}</span>
-                {activeTypes.includes(tipo) && <CheckCircle2 className="w-4 h-4" />}
+                <span>{tipo.nombre}</span>
+                {activeTypes.includes(tipo.nombre) && <CheckCircle2 className="w-4 h-4" />}
               </button>
             ))}
           </div>

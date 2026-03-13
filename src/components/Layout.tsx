@@ -8,7 +8,8 @@ import {
   X, 
   ChevronRight,
   Droplets,
-  MessageSquare
+  MessageSquare,
+  Terminal
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -26,6 +27,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Tambos", path: "/tambos", icon: Droplets },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Configuración", path: "/config", icon: Settings },
+    { name: "Config. Técnica", path: "/config/tecnica", icon: Terminal },
   ];
 
   // Close sidebar on mobile when route changes

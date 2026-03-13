@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
-import { Tambo, Configuracion, MantenimientoTipo } from "../types/supabase";
+import { Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
 import { Droplets, Search, Plus, MapPin, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
@@ -18,9 +18,10 @@ export default function TambosPage() {
   async function loadTambos() {
     try {
       setLoading(true);
-      const [tambosData, configs] = await Promise.all([
+      const [tambosData, configs, allMaintTypes] = await Promise.all([
         db.tambos.getAll(),
-        db.configuracion.getAllWithHidden()
+        db.configuracion.getAllWithHidden(),
+        db.tipos_mantenimiento.getAll()
       ]);
 
       const tambosWithStatus = await Promise.all(tambosData.map(async (t) => {
@@ -28,16 +29,17 @@ export default function TambosPage() {
         
         // Extract active types from configs
         const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
-        let activeTypes = Object.values(MantenimientoTipo);
+        let activeTypesNames: string[] = allMaintTypes.map(t => t.nombre);
         if (activeConfig) {
           try {
-            activeTypes = JSON.parse(activeConfig.valor);
+            activeTypesNames = JSON.parse(activeConfig.valor);
           } catch (e) {
             console.error("Error parsing active types for tambo", t.id);
           }
         }
 
-        const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypes);
+        const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
+        const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
         const generalStatus = getGeneralStatus(statuses);
         return {
           ...t,

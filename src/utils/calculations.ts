@@ -1,10 +1,10 @@
 import { addMonths, differenceInDays, parseISO } from "date-fns";
-import { Mantenimiento, MantenimientoTipo, Tambo, Configuracion } from "../types/supabase";
+import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
 
 export type Status = "verde" | "amarillo" | "rojo" | "gris";
 
 export interface MaintenanceStatus {
-  tipo: MantenimientoTipo;
+  tipo: string;
   ultimaFecha: Date | null;
   proximaFecha: Date | null;
   diasRestantes: number | null;
@@ -15,7 +15,7 @@ export function calculateMaintenanceStatus(
   tambo: Tambo,
   mantenimientos: Mantenimiento[],
   configs: Configuracion[],
-  activeTypes: MantenimientoTipo[] = Object.values(MantenimientoTipo)
+  activeTypes: TipoMantenimiento[]
 ): MaintenanceStatus[] {
   const getConfig = (clave: string, defaultValue: number) => {
     const config = configs.find(c => c.clave === clave);
@@ -24,7 +24,8 @@ export function calculateMaintenanceStatus(
 
   const diasAlerta = getConfig("dias_alerta", 30);
 
-  return activeTypes.map(tipo => {
+  return activeTypes.map(tipoObj => {
+    const tipo = tipoObj.nombre;
     const ultimo = mantenimientos
       .filter(m => m.tipo === tipo)
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
@@ -32,7 +33,7 @@ export function calculateMaintenanceStatus(
     let ultimaFecha = ultimo ? parseISO(ultimo.fecha) : null;
     
     // Fallback for pezoneras using the tambo's specific field if no maintenance record exists
-    if (!ultimaFecha && tipo === MantenimientoTipo.PEZONERAS && tambo.fecha_ultimo_cambio) {
+    if (!ultimaFecha && tipo.toLowerCase().includes("pezonera") && tambo.fecha_ultimo_cambio) {
       ultimaFecha = parseISO(tambo.fecha_ultimo_cambio);
     }
 
@@ -51,7 +52,7 @@ export function calculateMaintenanceStatus(
       };
     }
 
-    if (tipo === MantenimientoTipo.PEZONERAS) {
+    if (tipo.toLowerCase().includes("pezonera")) {
       const maxOrdenes = getConfig("pezonera_max_ordenes", 2500);
       if (ultimaFecha) {
         // Cálculo basado en ordeñes
@@ -61,23 +62,8 @@ export function calculateMaintenanceStatus(
         proximaFecha.setDate(ultimaFecha.getDate() + Math.floor(diasVidaUtil));
       }
     } else {
-      const mesesMap: Record<string, string> = {
-        [MantenimientoTipo.MANGUERAS_LECHE]: "mangueras_leche_meses",
-        [MantenimientoTipo.MANGUERAS_PULSADO]: "mangueras_pulsado_meses",
-        [MantenimientoTipo.PULSADORES]: "pulsadores_meses",
-        [MantenimientoTipo.SOGAS]: "sogas_meses",
-        [MantenimientoTipo.DIAFRAGMA_BRAZOS]: "diafragma_brazos_meses",
-        [MantenimientoTipo.BUJES]: "bujes_meses",
-        [MantenimientoTipo.SENSOR_LECHE]: "sensor_leche_meses",
-        [MantenimientoTipo.BOMBA_VACIO]: "bomba_vacio_meses",
-        [MantenimientoTipo.BOMBA_CENTRIFUGA_LECHE]: "bomba_centrifuga_leche_meses",
-        [MantenimientoTipo.BOMBA_DIAFRAGMA_LECHE]: "bomba_diafragma_leche_meses",
-        [MantenimientoTipo.KIT_COLECTOR_LECHE]: "kit_colector_leche_meses",
-      };
-
-      const configClave = mesesMap[tipo];
-      if (configClave && ultimaFecha) {
-        const meses = getConfig(configClave, 12);
+      const meses = tipoObj.frecuencia_meses || 12;
+      if (ultimaFecha) {
         proximaFecha = addMonths(ultimaFecha, meses);
       }
     }

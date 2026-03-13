@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente, Tambo, Configuracion, Mantenimiento, MantenimientoTipo, ReclamoEstado } from "../types/supabase";
+import { Cliente, Tambo, Configuracion, Mantenimiento, ReclamoEstado, TipoMantenimiento } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
 import { cn } from "../utils/ui";
 
@@ -37,11 +37,12 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [clientes, tambos, configs, reclamos] = await Promise.all([
+        const [clientes, tambos, configs, reclamos, allMaintTypes] = await Promise.all([
           db.clientes.getAll(),
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
-          db.reclamos.getAll()
+          db.reclamos.getAll(),
+          db.tipos_mantenimiento.getAll()
         ]);
 
         const tambosWithStatus = await Promise.all(tambos.map(async (t) => {
@@ -49,16 +50,17 @@ export default function Dashboard() {
           
           // Extract active types from configs
           const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
-          let activeTypes = Object.values(MantenimientoTipo);
+          let activeTypesNames: string[] = allMaintTypes.map(t => t.nombre);
           if (activeConfig) {
             try {
-              activeTypes = JSON.parse(activeConfig.valor);
+              activeTypesNames = JSON.parse(activeConfig.valor);
             } catch (e) {
               console.error("Error parsing active types for tambo", t.id);
             }
           }
 
-          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypes);
+          const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
+          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
           const generalStatus = getGeneralStatus(statuses);
           return {
             ...t,

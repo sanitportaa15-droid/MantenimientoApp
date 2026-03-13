@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Tambo, ReclamoEstado, ReclamoPrioridad } from "../types/supabase";
+import { Tambo, ReclamoEstado, ReclamoPrioridad, PrioridadReclamo, EstadoReclamo } from "../types/supabase";
 import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -12,6 +12,8 @@ export default function NewReclamoPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const [tambos, setTambos] = useState<any[]>([]);
+  const [priorities, setPriorities] = useState<PrioridadReclamo[]>([]);
+  const [statuses, setStatuses] = useState<EstadoReclamo[]>([]);
   const [formData, setFormData] = useState({
     tambo_id: "",
     titulo: "",
@@ -25,8 +27,14 @@ export default function NewReclamoPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const tambosData = await db.tambos.getAll();
+        const [tambosData, prioritiesData, statusesData] = await Promise.all([
+          db.tambos.getAll(),
+          db.prioridades_reclamo.getAll(),
+          db.estados_reclamo.getAll()
+        ]);
         setTambos(tambosData);
+        setPriorities(prioritiesData);
+        setStatuses(statusesData);
 
         if (isEditing) {
           const reclamo = await db.reclamos.getById(id!);
@@ -153,8 +161,8 @@ export default function NewReclamoPage() {
                 onChange={(e) => setFormData({ ...formData, prioridad: e.target.value as ReclamoPrioridad })}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
               >
-                {Object.values(ReclamoPrioridad).map(p => (
-                  <option key={p} value={p} className="bg-[#0f0f0f]">{p}</option>
+                {priorities.map(p => (
+                  <option key={p.id} value={p.nombre} className="bg-[#0f0f0f]">{p.nombre}</option>
                 ))}
               </select>
             </div>
@@ -165,8 +173,8 @@ export default function NewReclamoPage() {
                 onChange={(e) => setFormData({ ...formData, estado: e.target.value as ReclamoEstado })}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
               >
-                {Object.values(ReclamoEstado).map(e => (
-                  <option key={e} value={e} className="bg-[#0f0f0f]">{e}</option>
+                {statuses.map(s => (
+                  <option key={s.id} value={s.nombre} className="bg-[#0f0f0f]">{s.nombre}</option>
                 ))}
               </select>
             </div>

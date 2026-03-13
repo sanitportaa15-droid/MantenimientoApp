@@ -7,6 +7,7 @@ import NewClientPage from "./pages/NewClientPage";
 import NewTamboPage from "./pages/NewTamboPage";
 import TamboDetailPage from "./pages/TamboDetailPage";
 import ConfigPage from "./pages/ConfigPage";
+import TechnicalConfigPage from "./pages/TechnicalConfigPage";
 import TambosPage from "./pages/TambosPage";
 import ReclamosPage from "./pages/ReclamosPage";
 import NewReclamoPage from "./pages/NewReclamoPage";
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/reclamos/editar/:id" element={<NewReclamoPage />} />
           <Route path="/reclamos/convertir/:id" element={<ConvertReclamoPage />} />
           <Route path="/config" element={<ConfigPage />} />
+          <Route path="/config/tecnica" element={<TechnicalConfigPage />} />
         </Routes>
       </Layout>
     </Router>

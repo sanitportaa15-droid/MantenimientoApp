@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Reclamo, ReclamoEstado, MantenimientoTipo, TipoReparacion } from "../types/supabase";
+import { Reclamo, ReclamoEstado, TipoReparacion } from "../types/supabase";
 import { ArrowLeft, Save, CheckCircle2, Camera, Settings2, Wrench, Eye, Plus, RefreshCw } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -11,8 +11,8 @@ export default function ConvertReclamoPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [reclamo, setReclamo] = useState<any>(null);
-  const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>([]);
-  const [selectedTipos, setSelectedTipos] = useState<MantenimientoTipo[]>([]);
+  const [activeTypes, setActiveTypes] = useState<string[]>([]);
+  const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
   const [repairTypes, setRepairTypes] = useState<TipoReparacion[]>([]);
   const [isSavingNewType, setIsSavingNewType] = useState(false);
   
@@ -125,7 +125,7 @@ ${fotoUrl ? `Foto: ${fotoUrl}\n` : ""}
     }
   }
 
-  const toggleTipo = (tipo: MantenimientoTipo) => {
+  const toggleTipo = (tipo: string) => {
     setSelectedTipos(prev => 
       prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
     );

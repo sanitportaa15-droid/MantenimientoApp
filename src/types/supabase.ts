@@ -180,6 +180,63 @@ export interface Database {
           created_at?: string
         }
       }
+      tipos_mantenimiento: {
+        Row: {
+          id: string
+          nombre: string
+          frecuencia_meses: number | null
+          descripcion: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          frecuencia_meses?: number | null
+          descripcion?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          frecuencia_meses?: number | null
+          descripcion?: string | null
+          created_at?: string
+        }
+      }
+      prioridades_reclamo: {
+        Row: {
+          id: string
+          nombre: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          created_at?: string
+        }
+      }
+      estados_reclamo: {
+        Row: {
+          id: string
+          nombre: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -190,6 +247,9 @@ export type Mantenimiento = Database['public']['Tables']['mantenimientos']['Row'
 export type Configuracion = Database['public']['Tables']['configuracion']['Row'];
 export type Reclamo = Database['public']['Tables']['reclamos']['Row'];
 export type TipoReparacion = Database['public']['Tables']['tipos_reparacion']['Row'];
+export type TipoMantenimiento = Database['public']['Tables']['tipos_mantenimiento']['Row'];
+export type PrioridadReclamo = Database['public']['Tables']['prioridades_reclamo']['Row'];
+export type EstadoReclamo = Database['public']['Tables']['estados_reclamo']['Row'];
 
 export enum ReclamoEstado {
   PENDIENTE = "Pendiente",
@@ -208,21 +268,6 @@ export enum ReclamoPrioridad {
 export interface TamboMantenimiento {
   id: string;
   tambo_id: string;
-  tipo: MantenimientoTipo;
+  tipo: string;
   fecha_ultimo_mantenimiento: string | null;
-}
-
-export enum MantenimientoTipo {
-  PEZONERAS = "Cambio de pezoneras",
-  MANGUERAS_LECHE = "Mangueras de leche",
-  MANGUERAS_PULSADO = "Mangueras de pulsado",
-  PULSADORES = "Pulsadores",
-  SOGAS = "Cambio de sogas",
-  DIAFRAGMA_BRAZOS = "Cambio de diafragma de los brazos",
-  BUJES = "Cambio de bujes",
-  SENSOR_LECHE = "Sensor de leche",
-  BOMBA_VACIO = "Bomba de vacío",
-  BOMBA_CENTRIFUGA_LECHE = "Bomba centrífuga de leche",
-  BOMBA_DIAFRAGMA_LECHE = "Bomba diafragma de leche",
-  KIT_COLECTOR_LECHE = "Kit de colector de leche"
 }

@@ -18,7 +18,7 @@ import {
   Settings2
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Cliente, Reclamo } from "../types/supabase";
+import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
@@ -32,7 +32,8 @@ export default function TamboDetailPage() {
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [reclamos, setReclamos] = useState<Reclamo[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
-  const [activeTypes, setActiveTypes] = useState<MantenimientoTipo[]>([]);
+  const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
+  const [activeTypes, setActiveTypes] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
@@ -45,21 +46,24 @@ export default function TamboDetailPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData, activeTypesData, reclamosData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
         db.tambos.getMantenimientosActivos(id!),
-        db.reclamos.getByTambo(id!)
+        db.reclamos.getByTambo(id!),
+        db.tipos_mantenimiento.getAll()
       ]);
       
       setTambo(tamboData);
       setMantenimientos(mantData);
       setConfigs(configData);
-      setActiveTypes(activeTypesData);
+      setActiveTypes(activeTypesNames);
       setReclamos(reclamosData);
+      setAllMaintTypes(allMaintTypesData);
       
-      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesData);
+      const activeTypesObjects = allMaintTypesData.filter(t => activeTypesNames.includes(t.nombre));
+      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesObjects);
       setStatuses(calcStatuses);
     } catch (error) {
       console.error("Error loading tambo details:", error);
@@ -526,9 +530,9 @@ function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "m
   );
 }
 
-function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboId: string, activeTypes: MantenimientoTipo[], onClose: () => void, onSuccess: () => void }) {
+function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboId: string, activeTypes: string[], onClose: () => void, onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
-  const [selectedTipos, setSelectedTipos] = useState<MantenimientoTipo[]>([]);
+  const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [observaciones, setObservaciones] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
@@ -560,7 +564,7 @@ function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboI
     }
   }
 
-  const toggleTipo = (tipo: MantenimientoTipo) => {
+  const toggleTipo = (tipo: string) => {
     setSelectedTipos(prev => 
       prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
     );

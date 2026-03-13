@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, MantenimientoTipo, Configuracion, Database, Reclamo, TipoReparacion } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -98,22 +98,24 @@ export const db = {
       }
       return data as Tambo;
     },
-    async getMantenimientosActivos(tamboId: string): Promise<MantenimientoTipo[]> {
+    async getMantenimientosActivos(tamboId: string): Promise<string[]> {
       const { data, error } = await (supabase.from("configuracion") as any)
         .select("valor")
         .eq("clave", `tambo_mantenimientos_${tamboId}`)
         .maybeSingle();
       
       if (error || !data) {
-        return Object.values(MantenimientoTipo);
+        const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
+        return allTypes?.map((t: any) => t.nombre) || [];
       }
       try {
         return JSON.parse(data.valor);
       } catch (e) {
-        return Object.values(MantenimientoTipo);
+        const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
+        return allTypes?.map((t: any) => t.nombre) || [];
       }
     },
-    async setMantenimientosActivos(tamboId: string, tipos: MantenimientoTipo[]) {
+    async setMantenimientosActivos(tamboId: string, tipos: string[]) {
       const clave = `tambo_mantenimientos_${tamboId}`;
       const valor = JSON.stringify(tipos);
       
@@ -339,6 +341,153 @@ export const db = {
       if (existing && existing.length === 0) {
         const { error } = await (supabase.from("tipos_reparacion") as any).insert(defaultTypes);
         if (error) console.error("Error al sembrar tipos de reparación por defecto:", error);
+      }
+    }
+  },
+  tipos_mantenimiento: {
+    async getAll() {
+      const { data, error } = await supabase.from("tipos_mantenimiento").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener tipos de mantenimiento:", error);
+        throw error;
+      }
+      return data as TipoMantenimiento[];
+    },
+    async create(tipo: Database['public']['Tables']['tipos_mantenimiento']['Insert']) {
+      const { data, error } = await (supabase.from("tipos_mantenimiento") as any).insert(tipo).select().single();
+      if (error) {
+        console.error("Error guardando tipo de mantenimiento:", error);
+        throw error;
+      }
+      return data as TipoMantenimiento;
+    },
+    async update(id: string, tipo: Partial<Database['public']['Tables']['tipos_mantenimiento']['Update']>) {
+      const { data, error } = await (supabase.from("tipos_mantenimiento") as any).update(tipo).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando tipo de mantenimiento:", error);
+        throw error;
+      }
+      return data as TipoMantenimiento;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("tipos_mantenimiento").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando tipo de mantenimiento:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaultTypes = [
+        { nombre: "Cambio de pezoneras", frecuencia_meses: 4, descripcion: "Cambio periódico de pezoneras" },
+        { nombre: "Mangueras de leche", frecuencia_meses: 12, descripcion: "Cambio de mangueras de leche" },
+        { nombre: "Mangueras de pulsado", frecuencia_meses: 12, descripcion: "Cambio de mangueras de pulsado" },
+        { nombre: "Pulsadores", frecuencia_meses: 6, descripcion: "Mantenimiento de pulsadores" },
+        { nombre: "Cambio de sogas", frecuencia_meses: 4, descripcion: "Cambio de sogas de retiro" },
+        { nombre: "Cambio de diafragma de los brazos", frecuencia_meses: 12, descripcion: "Mantenimiento de brazos" },
+        { nombre: "Cambio de bujes", frecuencia_meses: 12, descripcion: "Cambio de bujes generales" },
+        { nombre: "Sensor de leche", frecuencia_meses: 6, descripcion: "Limpieza y calibración de sensores" },
+        { nombre: "Bomba de vacío", frecuencia_meses: 12, descripcion: "Mantenimiento preventivo de bomba" },
+        { nombre: "Bomba centrífuga de leche", frecuencia_meses: 6, descripcion: "Revisión de sellos y motor" },
+        { nombre: "Bomba diafragma de leche", frecuencia_meses: 4, descripcion: "Cambio de diafragmas" },
+        { nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores" }
+      ];
+      
+      const { data: existing } = await supabase.from("tipos_mantenimiento").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("tipos_mantenimiento") as any).insert(defaultTypes);
+        if (error) console.error("Error al sembrar tipos de mantenimiento por defecto:", error);
+      }
+    }
+  },
+  prioridades_reclamo: {
+    async getAll() {
+      const { data, error } = await supabase.from("prioridades_reclamo").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener prioridades:", error);
+        throw error;
+      }
+      return data as PrioridadReclamo[];
+    },
+    async create(prioridad: Database['public']['Tables']['prioridades_reclamo']['Insert']) {
+      const { data, error } = await (supabase.from("prioridades_reclamo") as any).insert(prioridad).select().single();
+      if (error) {
+        console.error("Error guardando prioridad:", error);
+        throw error;
+      }
+      return data as PrioridadReclamo;
+    },
+    async update(id: string, prioridad: Partial<Database['public']['Tables']['prioridades_reclamo']['Update']>) {
+      const { data, error } = await (supabase.from("prioridades_reclamo") as any).update(prioridad).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando prioridad:", error);
+        throw error;
+      }
+      return data as PrioridadReclamo;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("prioridades_reclamo").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando prioridad:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaults = [
+        { nombre: "Baja" },
+        { nombre: "Media" },
+        { nombre: "Alta" },
+        { nombre: "Urgente" }
+      ];
+      const { data: existing } = await supabase.from("prioridades_reclamo").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("prioridades_reclamo") as any).insert(defaults);
+        if (error) console.error("Error al sembrar prioridades por defecto:", error);
+      }
+    }
+  },
+  estados_reclamo: {
+    async getAll() {
+      const { data, error } = await supabase.from("estados_reclamo").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener estados:", error);
+        throw error;
+      }
+      return data as EstadoReclamo[];
+    },
+    async create(estado: Database['public']['Tables']['estados_reclamo']['Insert']) {
+      const { data, error } = await (supabase.from("estados_reclamo") as any).insert(estado).select().single();
+      if (error) {
+        console.error("Error guardando estado:", error);
+        throw error;
+      }
+      return data as EstadoReclamo;
+    },
+    async update(id: string, estado: Partial<Database['public']['Tables']['estados_reclamo']['Update']>) {
+      const { data, error } = await (supabase.from("estados_reclamo") as any).update(estado).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando estado:", error);
+        throw error;
+      }
+      return data as EstadoReclamo;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("estados_reclamo").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando estado:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaults = [
+        { nombre: "Pendiente" },
+        { nombre: "Programado" },
+        { nombre: "En proceso" },
+        { nombre: "Resuelto" }
+      ];
+      const { data: existing } = await supabase.from("estados_reclamo").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("estados_reclamo") as any).insert(defaults);
+        if (error) console.error("Error al sembrar estados por defecto:", error);
       }
     }
   }
