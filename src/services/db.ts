@@ -144,6 +144,14 @@ export const db = {
       }
       return data as Mantenimiento[];
     },
+    async getAll() {
+      const { data, error } = await (supabase.from("mantenimientos") as any).select("*, tambos(nombre)").order("fecha", { ascending: false });
+      if (error) {
+        console.error("Error al obtener todos los mantenimientos:", error);
+        throw error;
+      }
+      return data as any[];
+    },
     async create(mantenimiento: Database['public']['Tables']['mantenimientos']['Insert']) {
       const { data, error } = await (supabase.from("mantenimientos") as any).insert(mantenimiento).select().single();
       if (error) {

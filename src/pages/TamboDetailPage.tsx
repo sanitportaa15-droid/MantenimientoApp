@@ -15,7 +15,9 @@ import {
   Save,
   Edit2,
   HelpCircle,
-  Settings2
+  Settings2,
+  Info,
+  Activity
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento } from "../types/supabase";
@@ -23,6 +25,8 @@ import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+type TabType = "info" | "history" | "reclamos";
 
 export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,6 +39,7 @@ export default function TamboDetailPage() {
   const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
   const [activeTypes, setActiveTypes] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>("info");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
@@ -275,6 +280,12 @@ export default function TamboDetailPage() {
 
   const generalStatus = getGeneralStatus(statuses);
 
+  const tabs = [
+    { id: "info", label: "Información", icon: Info },
+    { id: "history", label: "Historial", icon: History },
+    { id: "reclamos", label: "Reclamos", icon: ClipboardList },
+  ];
+
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -315,151 +326,219 @@ export default function TamboDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Technical Status Panel */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold flex items-center gap-2">
-                <ClipboardList className="text-emerald-400 w-5 h-5" />
-                Estado Técnico del Equipo
-              </h3>
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                {statuses.length} componentes activos
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {statuses.map((s) => (
-                <div key={s.tipo} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-white/10 transition-all">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm">{s.tipo}</p>
-                      <button 
-                        onClick={() => {
-                          setEditingStatus(s);
-                          setIsEditDateModalOpen(true);
-                        }}
-                        className="p-1 hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Edit2 className="w-3 h-3 text-zinc-500" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
-                      <span>Último: {s.ultimaFecha ? formatDate(s.ultimaFecha) : 'NUNCA'}</span>
-                      <span>•</span>
-                      <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <StatusBadge status={s.status} size="sm" />
-                    {s.diasRestantes !== null && (
-                      <span className={cn(
-                        "text-[10px] font-bold",
-                        s.status === "rojo" ? "text-red-400" : s.status === "amarillo" ? "text-amber-400" : "text-emerald-400"
-                      )}>
-                        {s.diasRestantes} días
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-1 bg-[#0f0f0f] p-1 rounded-2xl border border-white/5 w-fit overflow-x-auto max-w-full">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as TabType)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
+                activeTab === tab.id
+                  ? "bg-emerald-500 text-black"
+                  : "text-zinc-500 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
-          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
-            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <History className="text-emerald-400 w-5 h-5" />
-              Historial de Mantenimientos
-            </h3>
-            <div className="space-y-4">
-              {mantenimientos.filter(m => m.fecha !== '1900-01-01').length === 0 ? (
-                <p className="text-zinc-500 text-center py-8 italic">No hay registros de mantenimiento.</p>
-              ) : (
-                mantenimientos.filter(m => m.fecha !== '1900-01-01').map((m) => (
-                  <div key={m.id} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <Calendar className="text-emerald-400 w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <p className="font-bold">{m.tipo}</p>
-                        <p className="text-xs text-zinc-500 font-mono">{formatDate(m.fecha)}</p>
+      {activeTab === "info" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+          {/* Technical Status Panel */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <ClipboardList className="text-emerald-400 w-5 h-5" />
+                  Estado Técnico del Equipo
+                </h3>
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  {statuses.length} componentes activos
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {statuses.map((s) => (
+                  <div key={s.tipo} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-white/10 transition-all">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">{s.tipo}</p>
+                        <button 
+                          onClick={() => {
+                            setEditingStatus(s);
+                            setIsEditDateModalOpen(true);
+                          }}
+                          className="p-1 hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Edit2 className="w-3 h-3 text-zinc-500" />
+                        </button>
                       </div>
-                      {m.observaciones && <p className="text-sm text-zinc-400 mt-1">{m.observaciones}</p>}
-                      {m.foto_url && (
-                         <div className="mt-3 rounded-lg overflow-hidden border border-white/10 max-w-xs">
-                           <img src={m.foto_url} alt="Mantenimiento" className="w-full h-32 object-cover" referrerPolicy="no-referrer" />
-                         </div>
+                      <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
+                        <span>Último: {s.ultimaFecha ? formatDate(s.ultimaFecha) : 'NUNCA'}</span>
+                        <span>•</span>
+                        <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={s.status} size="sm" />
+                      {s.diasRestantes !== null && (
+                        <span className={cn(
+                          "text-[10px] font-bold",
+                          s.status === "rojo" ? "text-red-400" : s.status === "amarillo" ? "text-amber-400" : "text-emerald-400"
+                        )}>
+                          {s.diasRestantes} días
+                        </span>
                       )}
                     </div>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Info className="text-emerald-400 w-5 h-5" />
+                Detalles Adicionales
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
+                  <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
+                  <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
+                </div>
+                <div className="space-y-4">
+                  <InfoItem label="Marca Pezonera" value={tambo.marca_pezonera || "N/A"} />
+                  <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Sidebar Info */}
-        <div className="space-y-6">
-          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold">Información del Tambo</h3>
-            
-            <div className="space-y-4">
-              <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
-              <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
-              <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
-              <InfoItem label="Marca Pezonera" value={tambo.marca_pezonera || "N/A"} />
-              <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
-            </div>
-
-            <div className="pt-6 border-t border-white/5">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Contacto Cliente</h4>
-              <div className="space-y-2 text-sm">
+          {/* Sidebar Info */}
+          <div className="space-y-6">
+            <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 space-y-6">
+              <h3 className="text-lg font-bold">Contacto Cliente</h3>
+              <div className="space-y-4 text-sm">
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Tel:</span> {tambo.clientes.telefono || "N/A"}</p>
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Email:</span> {tambo.clientes.email || "N/A"}</p>
                 <p className="flex items-center gap-2"><span className="text-zinc-500">Ubicación:</span> {tambo.clientes.ubicacion || "N/A"}</p>
               </div>
-            </div>
 
-            <div className="pt-6 border-t border-white/5">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Reclamos Activos</h4>
-                <Link to="/reclamos/nuevo" className="text-emerald-400 hover:text-emerald-300">
-                  <Plus className="w-4 h-4" />
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {reclamos.filter(r => r.estado !== 'Resuelto').length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">No hay reclamos pendientes.</p>
-                ) : (
-                  reclamos.filter(r => r.estado !== 'Resuelto').slice(0, 3).map(r => (
-                    <div key={r.id} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
-                      <div className="flex justify-between items-start">
-                        <p className="text-sm font-bold truncate pr-2">{r.titulo}</p>
-                        <span className={cn(
-                          "text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase",
-                          r.prioridad === 'Alta' ? "bg-red-500/20 text-red-400" : 
-                          r.prioridad === 'Media' ? "bg-amber-500/20 text-amber-400" : 
-                          "bg-blue-500/20 text-blue-400"
-                        )}>
-                          {r.prioridad}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-zinc-500">{formatDate(r.fecha_reclamo)}</p>
-                    </div>
-                  ))
-                )}
-                {reclamos.length > 3 && (
-                  <Link to="/reclamos" className="block text-center text-xs text-zinc-500 hover:text-white transition-colors pt-2">
-                    Ver todos los reclamos
-                  </Link>
-                )}
-              </div>
+              {tambo.clientes.observaciones && (
+                <div className="pt-6 border-t border-white/5">
+                  <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-2">Observaciones</h4>
+                  <p className="text-sm text-zinc-400 leading-relaxed">{tambo.clientes.observaciones}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === "history" && (
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <History className="text-emerald-400 w-5 h-5" />
+            Historial de Mantenimientos
+          </h3>
+          <div className="space-y-4">
+            {mantenimientos.filter(m => m.fecha !== '1900-01-01').length === 0 ? (
+              <p className="text-zinc-500 text-center py-8 italic">No hay registros de mantenimiento.</p>
+            ) : (
+              mantenimientos.filter(m => m.fecha !== '1900-01-01').map((m) => (
+                <div key={m.id} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                    <Calendar className="text-emerald-400 w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <p className="font-bold">{m.tipo}</p>
+                      <p className="text-xs text-zinc-500 font-mono">{formatDate(m.fecha)}</p>
+                    </div>
+                    {m.observaciones && <p className="text-sm text-zinc-400 mt-1">{m.observaciones}</p>}
+                    {m.foto_url && (
+                       <div className="mt-3 rounded-lg overflow-hidden border border-white/10 max-w-xs">
+                         <img src={m.foto_url} alt="Mantenimiento" className="w-full h-32 object-cover" referrerPolicy="no-referrer" />
+                       </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "reclamos" && (
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <ClipboardList className="text-emerald-400 w-5 h-5" />
+              Reclamos del Tambo
+            </h3>
+            <Link 
+              to="/reclamos/nuevo" 
+              className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Reclamo
+            </Link>
+          </div>
+          <div className="space-y-4">
+            {reclamos.length === 0 ? (
+              <p className="text-zinc-500 text-center py-8 italic">No hay reclamos registrados.</p>
+            ) : (
+              reclamos.map((r) => (
+                <div key={r.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-bold text-lg">{r.titulo}</h4>
+                      <p className="text-xs text-zinc-500 font-mono">{formatDate(r.fecha_reclamo)}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "text-[10px] px-2 py-1 rounded-full font-bold uppercase",
+                        r.prioridad === 'Alta' || r.prioridad === 'Urgente' ? "bg-red-500/20 text-red-400" : 
+                        r.prioridad === 'Media' ? "bg-amber-500/20 text-amber-400" : 
+                        "bg-blue-500/20 text-blue-400"
+                      )}>
+                        {r.prioridad}
+                      </span>
+                      <span className={cn(
+                        "text-[10px] px-2 py-1 rounded-full font-bold uppercase",
+                        r.estado === 'Resuelto' ? "bg-emerald-500/20 text-emerald-400" : 
+                        r.estado === 'En proceso' ? "bg-blue-500/20 text-blue-400" : 
+                        "bg-zinc-500/20 text-zinc-400"
+                      )}>
+                        {r.estado}
+                      </span>
+                    </div>
+                  </div>
+                  {r.descripcion && (
+                    <div className="p-3 bg-black/20 rounded-xl text-sm text-zinc-400 whitespace-pre-wrap">
+                      {r.descripcion}
+                    </div>
+                  )}
+                  {r.estado !== 'Resuelto' && (
+                    <Link 
+                      to={`/reclamos/resolver/${r.id}`}
+                      className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 text-sm font-bold"
+                    >
+                      Resolver Reclamo
+                    </Link>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <MaintenanceModal 
