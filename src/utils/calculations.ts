@@ -1,4 +1,4 @@
-import { addMonths, differenceInDays, parseISO } from "date-fns";
+import { addMonths, differenceInDays, parseISO, startOfDay } from "date-fns";
 import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
 
 export type Status = "verde" | "amarillo" | "rojo" | "gris";
@@ -23,26 +23,35 @@ export function calculateMaintenanceStatus(
   };
 
   const diasAlerta = getConfig("dias_alerta", 30);
+  const today = startOfDay(new Date());
 
   return activeTypes.map(tipoObj => {
     const tipo = tipoObj.nombre;
-    const ultimo = mantenimientos
+    
+    // Get the latest maintenance record for this type
+    const ultimoRecord = mantenimientos
       .filter(m => m.tipo === tipo)
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
 
-    let ultimaFecha = ultimo ? parseISO(ultimo.fecha) : null;
+    let ultimaFecha: Date | null = null;
+    let isNeverPerformed = false;
     
-    // Fallback for pezoneras using the tambo's specific field if no maintenance record exists
-    if (!ultimaFecha && tipo.toLowerCase().includes("pezonera") && tambo.fecha_ultimo_cambio) {
+    // 1. Use specific record if it exists
+    if (ultimoRecord) {
+      if (ultimoRecord.fecha === '1900-01-01') {
+        isNeverPerformed = true;
+      } else {
+        ultimaFecha = parseISO(ultimoRecord.fecha);
+      }
+    }
+
+    // 2. Fallback to general date ONLY if no specific record exists (not even a 'never performed' one)
+    if (!ultimaFecha && !isNeverPerformed && tambo.fecha_ultimo_cambio && tambo.fecha_ultimo_cambio !== '1900-01-01') {
       ultimaFecha = parseISO(tambo.fecha_ultimo_cambio);
     }
 
-    let proximaFecha: Date | null = null;
-    let diasRestantes: number | null = null;
-    let status: Status = "rojo";
-
-    // Handle "Never performed" or special initial date
-    if ((!ultimo && !ultimaFecha) || (ultimo?.fecha === '1900-01-01') || (tambo.fecha_ultimo_cambio === '1900-01-01' && !ultimo)) {
+    // 3. If still no date, it's never been performed
+    if (!ultimaFecha) {
       return {
         tipo,
         ultimaFecha: null,
@@ -52,27 +61,34 @@ export function calculateMaintenanceStatus(
       };
     }
 
+    let proximaFecha: Date | null = null;
+    let status: Status = "rojo";
+    let diasRestantes: number | null = null;
+
     if (tipo.toLowerCase().includes("pezonera")) {
       const maxOrdenes = getConfig("pezonera_max_ordenes", 2500);
-      if (ultimaFecha) {
-        // Cálculo basado en ordeñes
-        const ordenesPorDiaTotal = (tambo.vacas_en_ordene * tambo.ordenes_por_dia) / tambo.bajadas;
-        const diasVidaUtil = maxOrdenes / (ordenesPorDiaTotal || 1);
-        proximaFecha = addMonths(ultimaFecha, 0); // Reset base
-        proximaFecha.setDate(ultimaFecha.getDate() + Math.floor(diasVidaUtil));
-      }
+      // Calculation based on milkings
+      const ordenesPorDiaTotal = (tambo.vacas_en_ordene * tambo.ordenes_por_dia) / (tambo.bajadas || 1);
+      const diasVidaUtil = maxOrdenes / (ordenesPorDiaTotal || 1);
+      
+      proximaFecha = new Date(ultimaFecha);
+      proximaFecha.setDate(ultimaFecha.getDate() + Math.floor(diasVidaUtil));
     } else {
       const meses = tipoObj.frecuencia_meses || 12;
-      if (ultimaFecha) {
-        proximaFecha = addMonths(ultimaFecha, meses);
-      }
+      proximaFecha = addMonths(ultimaFecha, meses);
     }
 
     if (proximaFecha) {
-      diasRestantes = differenceInDays(proximaFecha, new Date());
-      if (diasRestantes > diasAlerta) status = "verde";
-      else if (diasRestantes > 0) status = "amarillo";
-      else status = "rojo";
+      const proximaFechaStart = startOfDay(proximaFecha);
+      diasRestantes = differenceInDays(proximaFechaStart, today);
+
+      if (today > proximaFechaStart) {
+        status = "rojo"; // VENCIDO
+      } else if (diasRestantes <= diasAlerta) {
+        status = "amarillo"; // PRÓXIMO
+      } else {
+        status = "verde"; // AL DÍA
+      }
     }
 
     return {

@@ -77,8 +77,18 @@ export default function MaintenanceStatusPage() {
       loadData();
     });
 
+    const configSubscription = db.configuracion.subscribeToChanges(() => {
+      loadData();
+    });
+
+    const maintTypesSubscription = db.tipos_mantenimiento.subscribeToChanges(() => {
+      loadData();
+    });
+
     return () => {
       mantenimientosSubscription.unsubscribe();
+      configSubscription.unsubscribe();
+      maintTypesSubscription.unsubscribe();
     };
   }, [filterStatus]);
 

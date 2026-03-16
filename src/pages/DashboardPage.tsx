@@ -94,6 +94,25 @@ export default function Dashboard() {
     }
 
     loadDashboard();
+
+    // Real-time subscriptions
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
+      loadDashboard();
+    });
+
+    const configSubscription = db.configuracion.subscribeToChanges(() => {
+      loadDashboard();
+    });
+
+    const maintTypesSubscription = db.tipos_mantenimiento.subscribeToChanges(() => {
+      loadDashboard();
+    });
+
+    return () => {
+      mantenimientosSubscription.unsubscribe();
+      configSubscription.unsubscribe();
+      maintTypesSubscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {

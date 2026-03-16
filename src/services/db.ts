@@ -133,6 +133,13 @@ export const db = {
           descripcion: `Mantenimientos activos para tambo ${tamboId}` 
         });
       }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('tambos-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tambos' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   mantenimientos: {
@@ -164,6 +171,32 @@ export const db = {
       const { data, error } = await (supabase.from("mantenimientos") as any).insert(mantenimientos).select();
       if (error) {
         console.error("Error guardando múltiples mantenimientos:", error);
+        throw error;
+      }
+      return data as Mantenimiento[];
+    },
+    async update(id: string, mantenimiento: Partial<Database['public']['Tables']['mantenimientos']['Update']>) {
+      const { data, error } = await (supabase.from("mantenimientos") as any)
+        .update(mantenimiento)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Error actualizando mantenimiento:", error);
+        throw error;
+      }
+      return data as Mantenimiento;
+    },
+    async updateByType(tamboId: string, tipo: string, fecha: string, observaciones: string) {
+      const { data, error } = await (supabase.from("mantenimientos") as any)
+        .update({ fecha, observaciones })
+        .eq("tambo_id", tamboId)
+        .eq("tipo", tipo)
+        .select();
+      
+      if (error) {
+        console.error("Error actualizando mantenimientos por tipo:", error);
         throw error;
       }
       return data as Mantenimiento[];
@@ -246,6 +279,13 @@ export const db = {
         const { error } = await (supabase.from("configuracion") as any).insert(toInsert);
         if (error) console.error("Error al sembrar configuraciones por defecto:", error);
       }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('configuracion-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracion' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   reclamos: {
@@ -379,6 +419,13 @@ export const db = {
         const { error } = await (supabase.from("tipos_reparacion") as any).insert(defaultTypes);
         if (error) console.error("Error al sembrar tipos de reparación por defecto:", error);
       }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('tipos-reparacion-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_reparacion' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   tipos_mantenimiento: {
@@ -434,6 +481,13 @@ export const db = {
         const { error } = await (supabase.from("tipos_mantenimiento") as any).insert(defaultTypes);
         if (error) console.error("Error al sembrar tipos de mantenimiento por defecto:", error);
       }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('tipos-mantenimiento-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_mantenimiento' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   prioridades_reclamo: {

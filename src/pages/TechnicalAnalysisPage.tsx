@@ -66,17 +66,20 @@ export default function TechnicalAnalysisPage() {
     loadData();
 
     // Real-time subscription
-    const reclamosSubscription = db.reclamos.subscribeToChanges(() => {
-      loadData();
-    });
-
-    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
-      loadData();
-    });
+    const reclamosSubscription = db.reclamos.subscribeToChanges(() => loadData());
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => loadData());
+    const configSubscription = db.configuracion.subscribeToChanges(() => loadData());
+    const maintTypesSubscription = db.tipos_mantenimiento.subscribeToChanges(() => loadData());
+    const tambosSubscription = db.tambos.subscribeToChanges(() => loadData());
+    const repairTypesSubscription = db.tipos_reparacion.subscribeToChanges(() => loadData());
 
     return () => {
       reclamosSubscription.unsubscribe();
       mantenimientosSubscription.unsubscribe();
+      configSubscription.unsubscribe();
+      maintTypesSubscription.unsubscribe();
+      tambosSubscription.unsubscribe();
+      repairTypesSubscription.unsubscribe();
     };
   }, []);
 

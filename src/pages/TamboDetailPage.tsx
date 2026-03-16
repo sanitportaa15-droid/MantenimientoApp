@@ -47,6 +47,25 @@ export default function TamboDetailPage() {
 
   useEffect(() => {
     if (id) loadData();
+
+    // Real-time subscriptions
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
+      if (id) loadData();
+    });
+
+    const configSubscription = db.configuracion.subscribeToChanges(() => {
+      if (id) loadData();
+    });
+
+    const maintTypesSubscription = db.tipos_mantenimiento.subscribeToChanges(() => {
+      if (id) loadData();
+    });
+
+    return () => {
+      mantenimientosSubscription.unsubscribe();
+      configSubscription.unsubscribe();
+      maintTypesSubscription.unsubscribe();
+    };
   }, [id, showResolvedReclamos]);
 
   async function loadData() {
@@ -578,6 +597,7 @@ export default function TamboDetailPage() {
         <EditLastDateModal
           tamboId={tambo.id}
           status={editingStatus}
+          mantenimientos={mantenimientos}
           onClose={() => {
             setIsEditDateModalOpen(false);
             setEditingStatus(null);
@@ -772,7 +792,7 @@ function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboI
   );
 }
 
-function EditLastDateModal({ tamboId, status, onClose, onSuccess }: { tamboId: string, status: MaintenanceStatus, onClose: () => void, onSuccess: () => void }) {
+function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess }: { tamboId: string, status: MaintenanceStatus, mantenimientos: Mantenimiento[], onClose: () => void, onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [neverPerformed, setNeverPerformed] = useState(!status.ultimaFecha);
   const [fecha, setFecha] = useState(status.ultimaFecha ? status.ultimaFecha.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -782,14 +802,27 @@ function EditLastDateModal({ tamboId, status, onClose, onSuccess }: { tamboId: s
     setLoading(true);
     try {
       const finalFecha = neverPerformed ? '1900-01-01' : fecha;
+      const obs = neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha";
       
-      // We create a new record with the special date or the selected date
-      // This will become the "latest" record for this type
-      await db.mantenimientos.create({
-        tambo_id: tamboId,
-        tipo: status.tipo,
-        fecha: finalFecha,
-        observaciones: neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha"
+      // 1. Update all records of this type for this tambo (as per user request)
+      const records = mantenimientos.filter(m => m.tipo === status.tipo);
+      
+      if (records.length > 0) {
+        await db.mantenimientos.updateByType(tamboId, status.tipo, finalFecha, obs);
+      } else {
+        // Create a new one if none exists
+        await db.mantenimientos.create({
+          tambo_id: tamboId,
+          tipo: status.tipo,
+          fecha: finalFecha,
+          observaciones: obs
+        });
+      }
+
+      // 2. Also update the tambo's global date to ensure consistency
+      // since it's used as a fallback in calculations
+      await db.tambos.update(tamboId, {
+        fecha_ultimo_cambio: finalFecha
       });
       
       onSuccess();
