@@ -11,15 +11,16 @@ export default function ReclamosPage() {
   const [reclamos, setReclamos] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterEstado, setFilterEstado] = useState<string>("Todos");
+  const [showResolved, setShowResolved] = useState(false);
 
   useEffect(() => {
     loadReclamos();
-  }, []);
+  }, [showResolved]);
 
   async function loadReclamos() {
     try {
       setLoading(true);
-      const data = await db.reclamos.getAll();
+      const data = await db.reclamos.getAll(!showResolved);
       setReclamos(data);
     } catch (error) {
       console.error("Error loading reclamos:", error);
@@ -105,6 +106,18 @@ export default function ReclamosPage() {
             ))}
           </select>
         </div>
+        <button
+          onClick={() => setShowResolved(!showResolved)}
+          className={cn(
+            "flex items-center gap-2 px-6 py-4 rounded-2xl font-bold transition-all border",
+            showResolved 
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+              : "bg-[#0f0f0f] border-white/5 text-zinc-400 hover:border-white/10"
+          )}
+        >
+          {showResolved ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+          {showResolved ? "Viendo Historial" : "Ver Resueltos"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4">

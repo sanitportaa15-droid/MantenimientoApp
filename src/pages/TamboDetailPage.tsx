@@ -40,13 +40,14 @@ export default function TamboDetailPage() {
   const [activeTypes, setActiveTypes] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("info");
+  const [showResolvedReclamos, setShowResolvedReclamos] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
 
   useEffect(() => {
     if (id) loadData();
-  }, [id]);
+  }, [id, showResolvedReclamos]);
 
   async function loadData() {
     try {
@@ -56,7 +57,7 @@ export default function TamboDetailPage() {
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
         db.tambos.getMantenimientosActivos(id!),
-        db.reclamos.getByTambo(id!),
+        db.reclamos.getByTambo(id!, !showResolvedReclamos),
         db.tipos_mantenimiento.getAll()
       ]);
       
@@ -484,18 +485,32 @@ export default function TamboDetailPage() {
 
       {activeTab === "reclamos" && (
         <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <h3 className="text-xl font-bold flex items-center gap-2">
               <ClipboardList className="text-emerald-400 w-5 h-5" />
               Reclamos del Tambo
             </h3>
-            <Link 
-              to="/reclamos/nuevo" 
-              className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Nuevo Reclamo
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowResolvedReclamos(!showResolvedReclamos)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border",
+                  showResolvedReclamos 
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+                    : "bg-white/5 border-white/5 text-zinc-400 hover:border-white/10"
+                )}
+              >
+                {showResolvedReclamos ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                {showResolvedReclamos ? "Viendo Historial" : "Ver Resueltos"}
+              </button>
+              <Link 
+                to="/reclamos/nuevo" 
+                className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Nuevo Reclamo
+              </Link>
+            </div>
           </div>
           <div className="space-y-4">
             {reclamos.length === 0 ? (

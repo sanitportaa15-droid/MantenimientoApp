@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -249,21 +249,33 @@ export const db = {
     }
   },
   reclamos: {
-    async getAll() {
-      const { data, error } = await (supabase.from("reclamos") as any)
+    async getAll(activeOnly = false) {
+      let query = (supabase.from("reclamos") as any)
         .select("*, tambos(nombre, clientes(nombre))")
         .order("created_at", { ascending: false });
+      
+      if (activeOnly) {
+        query = query.neq("estado", ReclamoEstado.RESUELTO);
+      }
+
+      const { data, error } = await query;
       if (error) {
         console.error("Error al obtener reclamos:", error);
         throw error;
       }
       return data as any[];
     },
-    async getByTambo(tamboId: string) {
-      const { data, error } = await (supabase.from("reclamos") as any)
+    async getByTambo(tamboId: string, activeOnly = false) {
+      let query = (supabase.from("reclamos") as any)
         .select("*")
         .eq("tambo_id", tamboId)
         .order("fecha_reclamo", { ascending: false });
+      
+      if (activeOnly) {
+        query = query.neq("estado", ReclamoEstado.RESUELTO);
+      }
+
+      const { data, error } = await query;
       if (error) {
         console.error("Error al obtener reclamos por tambo:", error);
         throw error;
