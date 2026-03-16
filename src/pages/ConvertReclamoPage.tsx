@@ -99,12 +99,28 @@ export default function ConvertReclamoPage() {
         await db.mantenimientos.createMany(records);
       }
 
-      // 2. Update claim description with resolution details
-      const finalRepairType = repairType === "Otro" ? otherRepairType : repairType;
+      // 2. Handle Repair Type ID
+      let finalRepairTypeId = null;
+      if (resolutionType === "reparacion") {
+        if (repairType === "Otro" && otherRepairType.trim()) {
+          // Auto-save the new repair type if not saved yet
+          const created = await db.tipos_reparacion.create({
+            nombre: otherRepairType.trim(),
+            descripcion: "Agregado desde resolución de reclamo"
+          });
+          finalRepairTypeId = created.id;
+        } else {
+          const selected = repairTypes.find(t => t.nombre === repairType);
+          finalRepairTypeId = selected?.id || null;
+        }
+      }
+
+      // 3. Update claim description with resolution details
+      const finalRepairTypeName = repairType === "Otro" ? otherRepairType : repairType;
       const resolutionSummary = `
 --- RESOLUCIÓN ---
 Tipo: ${resolutionType === "mantenimiento" ? "Mantenimiento realizado" : resolutionType === "reparacion" ? "Reparación / Falla corregida" : "Solo revisión"}
-${resolutionType === "reparacion" ? `Falla: ${finalRepairType}\n` : ""}
+${resolutionType === "reparacion" ? `Falla: ${finalRepairTypeName}\n` : ""}
 Fecha: ${fecha}
 Observaciones: ${observaciones.trim() || "Sin observaciones"}
 ${fotoUrl ? `Foto: ${fotoUrl}\n` : ""}
@@ -112,12 +128,12 @@ ${fotoUrl ? `Foto: ${fotoUrl}\n` : ""}
 
       const updatedDescription = `${reclamo.descripcion || ""}\n${resolutionSummary}`;
 
-      // 3. Mark claim as resolved
-      const selectedRepairTypeObj = repairTypes.find(t => t.nombre === repairType);
+      // 4. Mark claim as resolved with specific fields requested
       await db.reclamos.update(id!, { 
         estado: ReclamoEstado.RESUELTO,
-        descripcion: updatedDescription.trim(),
-        tipo_reparacion_id: selectedRepairTypeObj?.id || null
+        tipo_reparacion_id: finalRepairTypeId,
+        fecha_programada: fecha, // Using the work date as requested
+        descripcion: updatedDescription.trim()
       });
 
       alert("Reclamo resuelto correctamente.");
