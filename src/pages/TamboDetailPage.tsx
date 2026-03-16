@@ -303,6 +303,13 @@ export default function TamboDetailPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link 
+            to={`/tambos/analisis/${tambo.id}`}
+            className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl font-semibold border border-emerald-500/20 transition-colors"
+          >
+            <Activity className="w-4 h-4" />
+            Análisis Técnico
+          </Link>
+          <Link 
             to={`/tambos/editar/${tambo.id}`}
             className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
           >

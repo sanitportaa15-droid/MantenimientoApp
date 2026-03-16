@@ -129,12 +129,12 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-        <StatCard label="Clientes" value={stats.clientes} icon={Users} color="zinc" />
-        <StatCard label="Tambos" value={stats.tambos} icon={Droplets} color="zinc" />
-        <StatCard label="Al día" value={stats.alDia} icon={CheckCircle2} color="emerald" />
-        <StatCard label="Próximos" value={stats.proximos} icon={AlertTriangle} color="amber" />
-        <StatCard label="Vencidos" value={stats.vencidos} icon={XCircle} color="red" />
-        <StatCard label="Nunca" value={stats.nunca} icon={HelpCircle} color="zinc" />
+        <StatCard label="Clientes" value={stats.clientes} icon={Users} color="zinc" to="/clientes" />
+        <StatCard label="Tambos" value={stats.tambos} icon={Droplets} color="zinc" to="/tambos" />
+        <StatCard label="Al día" value={stats.alDia} icon={CheckCircle2} color="emerald" to="/mantenimientos-estado?status=verde" />
+        <StatCard label="Próximos" value={stats.proximos} icon={AlertTriangle} color="amber" to="/mantenimientos-estado?status=amarillo" />
+        <StatCard label="Vencidos" value={stats.vencidos} icon={XCircle} color="red" to="/mantenimientos-estado?status=rojo" />
+        <StatCard label="Nunca" value={stats.nunca} icon={HelpCircle} color="zinc" to="/mantenimientos-estado?status=gris" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -241,7 +241,7 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, icon: Icon, color }: { label: string, value: number, icon: any, color: "zinc" | "emerald" | "amber" | "red" }) {
+function StatCard({ label, value, icon: Icon, color, to }: { label: string, value: number, icon: any, color: "zinc" | "emerald" | "amber" | "red", to?: string }) {
   const colors = {
     zinc: "text-zinc-400 bg-zinc-400/10",
     emerald: "text-emerald-400 bg-emerald-400/10",
@@ -249,13 +249,27 @@ function StatCard({ label, value, icon: Icon, color }: { label: string, value: n
     red: "text-red-400 bg-red-400/10"
   };
 
-  return (
-    <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-5">
+  const content = (
+    <>
       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4", colors[color])}>
         <Icon className="w-5 h-5" />
       </div>
       <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">{label}</p>
       <p className="text-3xl font-bold mt-1 font-mono">{value}</p>
+    </>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-5 hover:border-white/20 transition-all hover:shadow-xl hover:shadow-black/40 group">
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-5">
+      {content}
     </div>
   );
 }

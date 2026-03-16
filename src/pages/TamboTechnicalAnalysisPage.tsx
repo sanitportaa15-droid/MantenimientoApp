@@ -24,7 +24,7 @@ import {
 } from "recharts";
 import { db } from "../services/db";
 import { Tambo, Reclamo, Mantenimiento, TipoReparacion, Configuracion } from "../types/supabase";
-import { calculateMaintenanceStatus, MaintenanceStatus } from "../utils/calculations";
+import { calculateMaintenanceStatus, MaintenanceStatus, calculateReliability, getReliabilityStatus } from "../utils/calculations";
 import { format, subMonths, startOfMonth, isAfter, isSameMonth, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "../utils/ui";
@@ -77,19 +77,11 @@ export default function TamboTechnicalAnalysisPage() {
   }, [tambo, mantenimientos, configs, allMaintTypes, activeTypesNames]);
 
   const analysis = useMemo(() => {
-    if (loading || !tambo) return null;
+    if (loading || !tambo || !configs) return null;
 
-    // Reliability Score Calculation
-    let score = 100;
-    score -= reclamos.length * 5;
-    
-    const overdueCount = statuses.filter(s => s.status === 'vencido').length;
-    score -= overdueCount * 10;
-    
-    const performedCount = mantenimientos.length;
-    score += performedCount * 3;
-
-    const finalScore = Math.max(0, Math.min(100, score));
+    // Reliability Score Calculation using the utility function
+    const finalScore = calculateReliability(reclamos, mantenimientos, statuses, configs);
+    const relStatus = getReliabilityStatus(finalScore);
 
     // Charts Data
     const last12Months = Array.from({ length: 12 }, (_, i) => {
@@ -108,12 +100,14 @@ export default function TamboTechnicalAnalysisPage() {
     });
 
     const repairCounts: Record<string, number> = {};
-    reclamos.filter(r => r.tipo_reparacion_id).forEach(r => {
-      const tipo = tiposReparacion.find(t => t.id === r.tipo_reparacion_id);
-      if (tipo) {
-        repairCounts[tipo.nombre] = (repairCounts[tipo.nombre] || 0) + 1;
-      }
-    });
+    reclamos
+      .filter(r => r.estado === 'Resuelto' && r.tipo_reparacion_id)
+      .forEach(r => {
+        const tipo = tiposReparacion.find(t => t.id === r.tipo_reparacion_id);
+        if (tipo) {
+          repairCounts[tipo.nombre] = (repairCounts[tipo.nombre] || 0) + 1;
+        }
+      });
 
     const commonRepairs = Object.entries(repairCounts)
       .map(([name, count]) => ({ name, count }))
@@ -131,7 +125,10 @@ export default function TamboTechnicalAnalysisPage() {
     // Diagnosis
     const diagnosisMessages = [];
     if (finalScore < 70) diagnosisMessages.push("Estado crítico: Requiere intervención técnica inmediata.");
+    
+    const overdueCount = statuses.filter(s => s.status === 'rojo').length;
     if (overdueCount > 0) diagnosisMessages.push(`Hay ${overdueCount} mantenimientos vencidos que afectan la confiabilidad.`);
+    
     if (reclamos.length > 5) diagnosisMessages.push("Alta frecuencia de reclamos en el último período.");
     if (commonRepairs.length > 0 && commonRepairs[0].count > 3) {
       diagnosisMessages.push(`Falla recurrente detectada: ${commonRepairs[0].name}.`);
@@ -140,12 +137,13 @@ export default function TamboTechnicalAnalysisPage() {
 
     return {
       finalScore,
+      relStatus,
       last12Months,
       commonRepairs,
       commonMaint,
       diagnosisMessages
     };
-  }, [loading, tambo, reclamos, mantenimientos, statuses, tiposReparacion]);
+  }, [loading, tambo, reclamos, mantenimientos, statuses, tiposReparacion, configs]);
 
   if (loading) {
     return (
@@ -225,8 +223,7 @@ export default function TamboTechnicalAnalysisPage() {
               (analysis?.finalScore || 0) >= 85 ? "bg-emerald-500/10 text-emerald-400" :
               (analysis?.finalScore || 0) >= 70 ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400"
             )}>
-              {(analysis?.finalScore || 0) >= 85 ? "Excelente" :
-               (analysis?.finalScore || 0) >= 70 ? "Atención" : "Crítico"}
+              {analysis?.relStatus.label}
             </div>
           </div>
 

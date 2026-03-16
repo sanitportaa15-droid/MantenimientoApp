@@ -135,6 +135,7 @@ export interface Database {
           fecha_programada: string | null
           estado: ReclamoEstado
           prioridad: ReclamoPrioridad
+          tipo_reparacion_id: string | null
           created_at: string
         }
         Insert: {
@@ -146,6 +147,7 @@ export interface Database {
           fecha_programada?: string | null
           estado?: ReclamoEstado
           prioridad?: ReclamoPrioridad
+          tipo_reparacion_id?: string | null
           created_at?: string
         }
         Update: {
@@ -157,6 +159,7 @@ export interface Database {
           fecha_programada?: string | null
           estado?: ReclamoEstado
           prioridad?: ReclamoPrioridad
+          tipo_reparacion_id?: string | null
           created_at?: string
         }
       }

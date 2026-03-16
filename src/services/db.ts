@@ -216,6 +216,9 @@ export const db = {
         { clave: "bomba_diafragma_leche_meses", valor: "4", descripcion: "Meses para bomba diafragma de leche" },
         { clave: "kit_colector_leche_meses", valor: "12", descripcion: "Meses para kit de colector de leche" },
         { clave: "dias_alerta", valor: "30", descripcion: "Días de antelación para alerta amarilla" },
+        { clave: "reclamo_deduccion", valor: "7", descripcion: "Puntos a restar por cada reclamo" },
+        { clave: "vencido_deduccion", valor: "10", descripcion: "Puntos a restar por mantenimiento vencido" },
+        { clave: "mantenimiento_adicion", valor: "3", descripcion: "Puntos a sumar por mantenimiento realizado" },
       ];
       
       const oldKeys = [

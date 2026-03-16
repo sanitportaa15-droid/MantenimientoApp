@@ -91,3 +91,40 @@ export function getGeneralStatus(statuses: MaintenanceStatus[]): Status {
   if (statuses.every(s => s.status === "gris")) return "gris";
   return "verde";
 }
+
+export function calculateReliability(
+  reclamos: any[],
+  mantenimientos: any[],
+  statuses: MaintenanceStatus[],
+  configs: Configuracion[]
+): number {
+  const getConfig = (clave: string, defaultValue: number) => {
+    const config = configs.find(c => c.clave === clave);
+    return config ? parseInt(config.valor) : defaultValue;
+  };
+
+  const reclamoDeduccion = getConfig("reclamo_deduccion", 7);
+  const vencidoDeduccion = getConfig("vencido_deduccion", 10);
+  const mantenimientoAdicion = getConfig("mantenimiento_adicion", 3);
+
+  let score = 100;
+
+  // Restar por cada reclamo
+  score -= reclamos.length * reclamoDeduccion;
+
+  // Restar por cada mantenimiento vencido
+  const vencidos = statuses.filter(s => s.status === "rojo").length;
+  score -= vencidos * vencidoDeduccion;
+
+  // Sumar por cada mantenimiento realizado
+  const realizados = mantenimientos.filter(m => m.fecha !== '1900-01-01').length;
+  score += realizados * mantenimientoAdicion;
+
+  return Math.min(100, Math.max(0, score));
+}
+
+export function getReliabilityStatus(score: number): { label: string, color: string } {
+  if (score >= 85) return { label: "Excelente", color: "text-emerald-400" };
+  if (score >= 70) return { label: "Atención", color: "text-amber-400" };
+  return { label: "Crítico", color: "text-red-400" };
+}

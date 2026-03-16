@@ -110,9 +110,11 @@ ${fotoUrl ? `Foto: ${fotoUrl}\n` : ""}
       const updatedDescription = `${reclamo.descripcion || ""}\n${resolutionSummary}`;
 
       // 3. Mark claim as resolved
+      const selectedRepairTypeObj = repairTypes.find(t => t.nombre === repairType);
       await db.reclamos.update(id!, { 
         estado: ReclamoEstado.RESUELTO,
-        descripcion: updatedDescription.trim()
+        descripcion: updatedDescription.trim(),
+        tipo_reparacion_id: selectedRepairTypeObj?.id || null
       });
 
       alert("Reclamo resuelto correctamente.");

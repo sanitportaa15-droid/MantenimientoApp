@@ -114,14 +114,16 @@ export default function TechnicalAnalysisPage() {
       if (monthData) monthData.count++;
     });
 
-    // Common repairs
+    // Common repairs (only from resolved claims)
     const repairCounts: Record<string, number> = {};
-    reclamos.filter(r => r.tipo_reparacion_id).forEach(r => {
-      const tipo = tiposReparacion.find(t => t.id === r.tipo_reparacion_id);
-      if (tipo) {
-        repairCounts[tipo.nombre] = (repairCounts[tipo.nombre] || 0) + 1;
-      }
-    });
+    reclamos
+      .filter(r => r.estado === 'Resuelto' && r.tipo_reparacion_id)
+      .forEach(r => {
+        const tipo = tiposReparacion.find(t => t.id === r.tipo_reparacion_id);
+        if (tipo) {
+          repairCounts[tipo.nombre] = (repairCounts[tipo.nombre] || 0) + 1;
+        }
+      });
 
     const commonRepairs = Object.entries(repairCounts)
       .map(([name, count]) => ({ name, count }))
