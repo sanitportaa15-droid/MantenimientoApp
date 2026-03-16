@@ -67,7 +67,22 @@ export default function TamboTechnicalAnalysisPage() {
         setLoading(false);
       }
     }
+
     loadData();
+
+    // Real-time subscription
+    const reclamosSubscription = db.reclamos.subscribeToChanges(() => {
+      loadData();
+    });
+
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
+      loadData();
+    });
+
+    return () => {
+      reclamosSubscription.unsubscribe();
+      mantenimientosSubscription.unsubscribe();
+    };
   }, [id]);
 
   const statuses = useMemo(() => {

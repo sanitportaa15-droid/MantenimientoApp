@@ -73,8 +73,11 @@ export default function ConvertReclamoPage() {
     e.preventDefault();
     
     if (resolutionType === "mantenimiento" && selectedTipos.length === 0) {
-      alert("Por favor, seleccione al menos un tipo de mantenimiento.");
-      return;
+      // Allow resolving without maintenance if the user confirms or just skip maintenance creation
+      // The user said "La aplicación debe permitir resolver reclamos sin mantenimiento"
+      // So we don't need to alert here if they want to just close it.
+      // But usually "mantenimiento" implies selecting something.
+      // Let's just allow it and skip creation.
     }
 
     if (resolutionType === "reparacion" && !repairType) {
@@ -84,8 +87,8 @@ export default function ConvertReclamoPage() {
 
     setLoading(true);
     try {
-      // 1. If maintenance, create records
-      if (resolutionType === "mantenimiento") {
+      // 1. If maintenance and types selected, create records
+      if (resolutionType === "mantenimiento" && selectedTipos.length > 0) {
         const records = selectedTipos.map(tipo => ({
           tambo_id: reclamo.tambo_id,
           tipo,

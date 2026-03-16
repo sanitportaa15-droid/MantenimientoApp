@@ -71,6 +71,15 @@ export default function MaintenanceStatusPage() {
     }
 
     loadData();
+
+    // Real-time subscription
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
+      loadData();
+    });
+
+    return () => {
+      mantenimientosSubscription.unsubscribe();
+    };
   }, [filterStatus]);
 
   const filteredData = useMemo(() => {

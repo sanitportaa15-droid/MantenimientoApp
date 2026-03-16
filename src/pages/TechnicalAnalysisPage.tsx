@@ -62,7 +62,22 @@ export default function TechnicalAnalysisPage() {
         setLoading(false);
       }
     }
+
     loadData();
+
+    // Real-time subscription
+    const reclamosSubscription = db.reclamos.subscribeToChanges(() => {
+      loadData();
+    });
+
+    const mantenimientosSubscription = db.mantenimientos.subscribeToChanges(() => {
+      loadData();
+    });
+
+    return () => {
+      reclamosSubscription.unsubscribe();
+      mantenimientosSubscription.unsubscribe();
+    };
   }, []);
 
   const stats = useMemo(() => {

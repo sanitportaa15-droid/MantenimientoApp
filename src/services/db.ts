@@ -167,6 +167,13 @@ export const db = {
         throw error;
       }
       return data as Mantenimiento[];
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('mantenimientos-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mantenimientos' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   configuracion: {
@@ -303,6 +310,13 @@ export const db = {
         console.error("Error eliminando reclamo:", error);
         throw error;
       }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('reclamos-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reclamos' }, callback)
+        .subscribe();
+      return subscription;
     }
   },
   tipos_reparacion: {
