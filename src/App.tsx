@@ -6,7 +6,6 @@ import ClientsPage from "./pages/ClientsPage";
 import NewClientPage from "./pages/NewClientPage";
 import NewTamboPage from "./pages/NewTamboPage";
 import TamboDetailPage from "./pages/TamboDetailPage";
-import ConfigPage from "./pages/ConfigPage";
 import TechnicalConfigPage from "./pages/TechnicalConfigPage";
 import TambosPage from "./pages/TambosPage";
 import ReclamosPage from "./pages/ReclamosPage";
@@ -42,7 +41,6 @@ export default function App() {
           <Route path="/analisis-tecnico" element={<TechnicalAnalysisPage />} />
           <Route path="/analisis-tecnico/:id" element={<TamboTechnicalAnalysisPage />} />
           <Route path="/mantenimientos-estado" element={<MaintenanceStatusPage />} />
-          <Route path="/config" element={<ConfigPage />} />
           <Route path="/config/tecnica" element={<TechnicalConfigPage />} />
         </Routes>
       </Layout>

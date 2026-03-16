@@ -29,7 +29,6 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 },
-    { name: "Configuración del Sistema", path: "/config", icon: Settings },
   ];
 
   // Close sidebar on mobile when route changes
