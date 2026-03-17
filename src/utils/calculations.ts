@@ -28,7 +28,7 @@ export function calculateMaintenanceStatus(
   return activeTypes.map(tipoObj => {
     const tipo = tipoObj.nombre;
     
-    // Get the latest maintenance record for this type
+    // 1. Obtener la fecha del último mantenimiento (fecha_ultimo)
     const ultimoRecord = mantenimientos
       .filter(m => m.tipo === tipo)
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
@@ -36,7 +36,6 @@ export function calculateMaintenanceStatus(
     let ultimaFecha: Date | null = null;
     let isNeverPerformed = false;
     
-    // 1. Use specific record if it exists
     if (ultimoRecord) {
       if (ultimoRecord.fecha === '1900-01-01') {
         isNeverPerformed = true;
@@ -45,13 +44,13 @@ export function calculateMaintenanceStatus(
       }
     }
 
-    // 2. Fallback to general date ONLY if no specific record exists (not even a 'never performed' one)
+    // Fallback to general date ONLY if no specific record exists
     if (!ultimaFecha && !isNeverPerformed && tambo.fecha_ultimo_cambio && tambo.fecha_ultimo_cambio !== '1900-01-01') {
       ultimaFecha = parseISO(tambo.fecha_ultimo_cambio);
     }
 
-    // 3. If still no date, it's never been performed
-    if (!ultimaFecha) {
+    // Si el mantenimiento está marcado como "nunca realizado" o no hay fecha -> NEUTRO (gris)
+    if (!ultimaFecha || isNeverPerformed) {
       return {
         tipo,
         ultimaFecha: null,
@@ -61,34 +60,24 @@ export function calculateMaintenanceStatus(
       };
     }
 
-    let proximaFecha: Date | null = null;
-    let status: Status = "rojo";
-    let diasRestantes: number | null = null;
+    // 2. Obtener la frecuencia en meses del mantenimiento
+    const meses = tipoObj.frecuencia_meses || 12;
 
-    if (tipo.toLowerCase().includes("pezonera")) {
-      const maxOrdenes = getConfig("pezonera_max_ordenes", 2500);
-      // Calculation based on milkings
-      const ordenesPorDiaTotal = (tambo.vacas_en_ordene * tambo.ordenes_por_dia) / (tambo.bajadas || 1);
-      const diasVidaUtil = maxOrdenes / (ordenesPorDiaTotal || 1);
-      
-      proximaFecha = new Date(ultimaFecha);
-      proximaFecha.setDate(ultimaFecha.getDate() + Math.floor(diasVidaUtil));
+    // 3. Calcular: fecha_proximo = fecha_ultimo + frecuencia_meses
+    const proximaFecha = addMonths(ultimaFecha, meses);
+    const proximaFechaStart = startOfDay(proximaFecha);
+
+    // 4. Calcular: dias_restantes = fecha_proximo - fecha_actual
+    const diasRestantes = differenceInDays(proximaFechaStart, today);
+
+    // 5. Determinar estado:
+    let status: Status = "verde";
+    if (diasRestantes < 0) {
+      status = "rojo"; // VENCIDO
+    } else if (diasRestantes <= diasAlerta) {
+      status = "amarillo"; // PRÓXIMO
     } else {
-      const meses = tipoObj.frecuencia_meses || 12;
-      proximaFecha = addMonths(ultimaFecha, meses);
-    }
-
-    if (proximaFecha) {
-      const proximaFechaStart = startOfDay(proximaFecha);
-      diasRestantes = differenceInDays(proximaFechaStart, today);
-
-      if (today > proximaFechaStart) {
-        status = "rojo"; // VENCIDO
-      } else if (diasRestantes <= diasAlerta) {
-        status = "amarillo"; // PRÓXIMO
-      } else {
-        status = "verde"; // AL DÍA
-      }
+      status = "verde"; // AL DÍA
     }
 
     return {
