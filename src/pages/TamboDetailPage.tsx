@@ -802,22 +802,15 @@ function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess
     setLoading(true);
     try {
       const finalFecha = neverPerformed ? '1900-01-01' : fecha;
-      const obs = neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha";
+      const obs = neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha (Registro rápido)";
       
-      // 1. Update all records of this type for this tambo (as per user request)
-      const records = mantenimientos.filter(m => m.tipo === status.tipo);
-      
-      if (records.length > 0) {
-        await db.mantenimientos.updateByType(tamboId, status.tipo, finalFecha, obs);
-      } else {
-        // Create a new one if none exists
-        await db.mantenimientos.create({
-          tambo_id: tamboId,
-          tipo: status.tipo,
-          fecha: finalFecha,
-          observaciones: obs
-        });
-      }
+      // Always INSERT a new record to preserve history and follow "INSERT, no UPDATE" rule
+      await db.mantenimientos.create({
+        tambo_id: tamboId,
+        tipo: status.tipo,
+        fecha: finalFecha,
+        observaciones: obs
+      });
 
       onSuccess();
     } catch (error) {

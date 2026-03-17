@@ -188,19 +188,6 @@ export const db = {
       }
       return data as Mantenimiento;
     },
-    async updateByType(tamboId: string, tipo: string, fecha: string, observaciones: string) {
-      const { data, error } = await (supabase.from("mantenimientos") as any)
-        .update({ fecha, observaciones })
-        .eq("tambo_id", tamboId)
-        .eq("tipo", tipo)
-        .select();
-      
-      if (error) {
-        console.error("Error actualizando mantenimientos por tipo:", error);
-        throw error;
-      }
-      return data as Mantenimiento[];
-    },
     subscribeToChanges(callback: () => void) {
       const subscription = supabase
         .channel('mantenimientos-changes')
