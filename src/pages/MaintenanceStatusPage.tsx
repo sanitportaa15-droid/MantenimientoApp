@@ -105,7 +105,7 @@ export default function MaintenanceStatusPage() {
       case "verde": return { label: "Al día", icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10" };
       case "amarillo": return { label: "Próximo", icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10" };
       case "rojo": return { label: "Vencido", icon: XCircle, color: "text-red-400", bg: "bg-red-500/10" };
-      case "gris": return { label: "Nunca", icon: HelpCircle, color: "text-zinc-400", bg: "bg-zinc-500/10" };
+      case "gris": return { label: "Nunca realizado", icon: HelpCircle, color: "text-zinc-400", bg: "bg-zinc-500/10" };
     }
   };
 

@@ -188,6 +188,13 @@ export const db = {
       }
       return data as Mantenimiento;
     },
+    async deleteByType(tamboId: string, tipo: string) {
+      const { error } = await supabase.from("mantenimientos").delete().eq("tambo_id", tamboId).eq("tipo", tipo);
+      if (error) {
+        console.error("Error eliminando mantenimientos por tipo:", error);
+        throw error;
+      }
+    },
     subscribeToChanges(callback: () => void) {
       const subscription = supabase
         .channel('mantenimientos-changes')

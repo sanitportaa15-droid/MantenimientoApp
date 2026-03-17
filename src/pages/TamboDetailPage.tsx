@@ -801,17 +801,20 @@ function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess
     e.preventDefault();
     setLoading(true);
     try {
-      const finalFecha = neverPerformed ? '1900-01-01' : fecha;
       const obs = neverPerformed ? "Marcado como nunca realizado" : "Actualización manual de fecha (Registro rápido)";
       
-      // Always INSERT a new record to preserve history and follow "INSERT, no UPDATE" rule
-      await db.mantenimientos.create({
-        tambo_id: tamboId,
-        tipo: status.tipo,
-        fecha: finalFecha,
-        observaciones: obs
-      });
-
+      if (neverPerformed) {
+        // If marking as never, delete all previous history for this type
+        await db.mantenimientos.deleteByType(tamboId, status.tipo);
+      } else {
+        // Always INSERT a new record to preserve history and follow "INSERT, no UPDATE" rule
+        await db.mantenimientos.create({
+          tambo_id: tamboId,
+          tipo: status.tipo,
+          fecha: fecha,
+          observaciones: obs
+        });
+      }
       onSuccess();
     } catch (error) {
       console.error("Error updating last maintenance date:", error);

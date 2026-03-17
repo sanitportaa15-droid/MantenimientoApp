@@ -153,7 +153,7 @@ export default function Dashboard() {
         <StatCard label="Al día" value={stats.alDia} icon={CheckCircle2} color="emerald" to="/mantenimientos-estado?status=verde" />
         <StatCard label="Próximos" value={stats.proximos} icon={AlertTriangle} color="amber" to="/mantenimientos-estado?status=amarillo" />
         <StatCard label="Vencidos" value={stats.vencidos} icon={XCircle} color="red" to="/mantenimientos-estado?status=rojo" />
-        <StatCard label="Nunca" value={stats.nunca} icon={HelpCircle} color="zinc" to="/mantenimientos-estado?status=gris" />
+        <StatCard label="Sin datos" value={stats.nunca} icon={HelpCircle} color="zinc" to="/mantenimientos-estado?status=gris" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -198,7 +198,7 @@ function StatusBadge({ status }: { status: Status }) {
     verde: "Al día",
     amarillo: "Próximo",
     rojo: "Vencido",
-    gris: "Nunca"
+    gris: "Nunca realizado"
   };
 
   return (
