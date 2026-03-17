@@ -14,6 +14,9 @@ interface FilteredItem {
   ultimaFecha: string | null;
   estado: Status;
   diasVencido: number | null;
+  frecuenciaLabel?: string;
+  ordenosPorPezonera?: number;
+  diasEstimados?: number;
 }
 
 export default function FilteredResultsPage() {
@@ -60,7 +63,10 @@ export default function FilteredResultsPage() {
               tipoMantenimiento: s.tipo,
               ultimaFecha: s.ultimaFecha ? s.ultimaFecha.toISOString().split('T')[0] : null,
               estado: s.status,
-              diasVencido: s.diasRestantes !== null && s.diasRestantes < 0 ? Math.abs(s.diasRestantes) : null
+              diasVencido: s.diasRestantes !== null && s.diasRestantes < 0 ? Math.abs(s.diasRestantes) : null,
+              frecuenciaLabel: s.frecuenciaLabel,
+              ordenosPorPezonera: s.ordenosPorPezonera,
+              diasEstimados: s.diasEstimados
             });
           });
         }
@@ -151,7 +157,17 @@ export default function FilteredResultsPage() {
                 <tr key={index} className="hover:bg-white/[0.02] transition-colors group">
                   <td className="px-6 py-4 font-medium">{item.cliente}</td>
                   <td className="px-6 py-4">{item.tambo}</td>
-                  <td className="px-6 py-4 text-zinc-300">{item.tipoMantenimiento}</td>
+                  <td className="px-6 py-4">
+                    <div className="text-zinc-300">{item.tipoMantenimiento}</div>
+                    {item.frecuenciaLabel && (
+                      <div className="text-[10px] text-zinc-500 italic">{item.frecuenciaLabel}</div>
+                    )}
+                    {item.tipoMantenimiento === "Cambio de pezoneras" && item.ordenosPorPezonera !== undefined && (
+                      <div className="text-[9px] text-zinc-600 mt-0.5">
+                        {item.ordenosPorPezonera.toFixed(1)} ord/día • {item.diasEstimados} días dur.
+                      </div>
+                    )}
+                  </td>
                   <td className="px-6 py-4 font-mono text-sm">
                     {item.ultimaFecha ? formatDate(item.ultimaFecha) : "NUNCA"}
                   </td>

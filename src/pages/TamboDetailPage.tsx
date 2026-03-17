@@ -411,6 +411,17 @@ export default function TamboDetailPage() {
                         <span>•</span>
                         <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
                       </div>
+                      {s.frecuenciaLabel && (
+                        <div className="text-[9px] text-zinc-600 font-medium italic mt-0.5">
+                          {s.frecuenciaLabel}
+                        </div>
+                      )}
+                      {s.tipo === "Cambio de pezoneras" && s.ordenosPorPezonera !== undefined && (
+                        <div className="text-[9px] text-zinc-500 mt-1 space-y-0.5 border-t border-white/5 pt-1">
+                          <p>Ordeños por pezonera/día: <span className="text-zinc-300 font-bold">{s.ordenosPorPezonera.toFixed(1)}</span></p>
+                          <p>Días estimados de duración: <span className="text-zinc-300 font-bold">{s.diasEstimados} días</span></p>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={s.status} size="sm" />

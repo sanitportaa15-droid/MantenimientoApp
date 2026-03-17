@@ -180,7 +180,15 @@ export default function MaintenanceStatusPage() {
                         <div className="text-xs text-zinc-500">{item.clienteNombre}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm text-zinc-300">{item.tipo}</span>
+                        <div className="text-sm text-zinc-300">{item.tipo}</div>
+                        {item.frecuenciaLabel && (
+                          <div className="text-[10px] text-zinc-500 italic">{item.frecuenciaLabel}</div>
+                        )}
+                        {item.tipo === "Cambio de pezoneras" && item.ordenosPorPezonera !== undefined && (
+                          <div className="text-[9px] text-zinc-600 mt-0.5">
+                            {item.ordenosPorPezonera.toFixed(1)} ord/día • {item.diasEstimados} días dur.
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-sm font-mono text-zinc-400">

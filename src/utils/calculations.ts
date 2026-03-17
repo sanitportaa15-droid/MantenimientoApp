@@ -1,4 +1,4 @@
-import { addMonths, differenceInDays, parseISO, startOfDay } from "date-fns";
+import { addDays, addMonths, differenceInDays, parseISO, startOfDay } from "date-fns";
 import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
 
 export type Status = "verde" | "amarillo" | "rojo" | "gris";
@@ -9,6 +9,9 @@ export interface MaintenanceStatus {
   proximaFecha: Date | null;
   diasRestantes: number | null;
   status: Status;
+  frecuenciaLabel?: string;
+  ordenosPorPezonera?: number;
+  diasEstimados?: number;
 }
 
 export function calculateMaintenanceStatus(
@@ -51,15 +54,39 @@ export function calculateMaintenanceStatus(
         ultimaFecha: null,
         proximaFecha: null,
         diasRestantes: null,
-        status: "gris"
+        status: "gris",
+        frecuenciaLabel: tipo === "Cambio de pezoneras" ? "Cada 3200 ordeños" : `Cada ${tipoObj.frecuencia_meses || 12} meses`
       };
     }
 
-    // 2. Obtener la frecuencia en meses del mantenimiento
-    const meses = tipoObj.frecuencia_meses || 12;
+    let proximaFecha: Date;
+    let frecuenciaLabel: string;
+    let ordenosPorPezonera: number | undefined;
+    let diasEstimados: number | undefined;
 
-    // 3. Calcular: fecha_proximo = fecha_ultimo + frecuencia_meses
-    const proximaFecha = addMonths(ultimaFecha, meses);
+    if (tipo === "Cambio de pezoneras") {
+      // FÓRMULA OFICIAL:
+      // 1. ordeños_por_pezonera = (vacas_en_ordeñe × ordeños_por_día) / bajadas
+      // 2. dias_hasta_cambio = 3200 / ordeños_por_pezonera
+      
+      const vacas = tambo.vacas_en_ordene || 0;
+      const ordenes = tambo.ordenes_por_dia || 0;
+      const bajadas = tambo.bajadas || 1; // Evitar división por cero
+      
+      ordenosPorPezonera = (vacas * ordenes) / bajadas;
+      
+      // Evitar división por cero si ordenosPorPezonera es 0
+      diasEstimados = ordenosPorPezonera > 0 ? Math.floor(3200 / ordenosPorPezonera) : 365;
+      
+      proximaFecha = addDays(ultimaFecha, diasEstimados);
+      frecuenciaLabel = "Frecuencia calculada: 3200 ordeños";
+    } else {
+      // Cálculo por meses (resto de mantenimientos)
+      const meses = tipoObj.frecuencia_meses || 12;
+      proximaFecha = addMonths(ultimaFecha, meses);
+      frecuenciaLabel = `Cada ${meses} meses`;
+    }
+
     const proximaFechaStart = startOfDay(proximaFecha);
 
     // 4. Calcular: dias_restantes = fecha_proximo - fecha_actual
@@ -80,7 +107,10 @@ export function calculateMaintenanceStatus(
       ultimaFecha,
       proximaFecha,
       diasRestantes,
-      status
+      status,
+      frecuenciaLabel,
+      ordenosPorPezonera,
+      diasEstimados
     };
   });
 }
