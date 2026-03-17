@@ -819,12 +819,6 @@ function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess
         });
       }
 
-      // 2. Also update the tambo's global date to ensure consistency
-      // since it's used as a fallback in calculations
-      await db.tambos.update(tamboId, {
-        fecha_ultimo_cambio: finalFecha
-      });
-      
       onSuccess();
     } catch (error) {
       console.error("Error updating last maintenance date:", error);

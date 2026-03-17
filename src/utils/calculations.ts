@@ -44,11 +44,6 @@ export function calculateMaintenanceStatus(
       }
     }
 
-    // Fallback to general date ONLY if no specific record exists
-    if (!ultimaFecha && !isNeverPerformed && tambo.fecha_ultimo_cambio && tambo.fecha_ultimo_cambio !== '1900-01-01') {
-      ultimaFecha = parseISO(tambo.fecha_ultimo_cambio);
-    }
-
     // Si el mantenimiento está marcado como "nunca realizado" o no hay fecha -> NEUTRO (gris)
     if (!ultimaFecha || isNeverPerformed) {
       return {
