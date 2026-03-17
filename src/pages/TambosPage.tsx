@@ -130,9 +130,7 @@ export default function TambosPage() {
 
             <div className="pt-6 border-t border-white/5 flex justify-between items-center text-xs">
               <span className="text-zinc-500">Marca: {tambo.marca_pezonera || "N/A"}</span>
-              <span className="bg-white/5 px-2 py-1 rounded-md text-zinc-300 font-mono">
-                {tambo.fecha_ultimo_cambio === '1900-01-01' ? "NUNCA" : (tambo.fecha_ultimo_cambio ? new Date(tambo.fecha_ultimo_cambio).toLocaleDateString() : "Sin fecha")}
-              </span>
+              <span className="text-emerald-400 font-bold uppercase tracking-widest">Ver Ficha</span>
             </div>
           </Link>
         ))}

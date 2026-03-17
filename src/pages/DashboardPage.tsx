@@ -193,8 +193,7 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-zinc-400">
-                  <span>Último: {tambo.fecha_ultimo_cambio === '1900-01-01' ? 'NUNCA' : (tambo.fecha_ultimo_cambio || 'N/A')}</span>
-                  <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md font-bold text-[10px]">DETALLES</span>
+                  <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-md font-bold text-[10px]">VER DETALLES</span>
                 </div>
               </Link>
             ))}
