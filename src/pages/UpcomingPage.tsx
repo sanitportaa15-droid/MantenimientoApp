@@ -14,7 +14,7 @@ import { calculateMaintenanceStatus, MaintenanceStatus } from "../utils/calculat
 import { format, addDays, isWithinInterval, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn, formatDate } from "../utils/ui";
-import { Insumo, Tambo, Relevo } from "../types/supabase";
+import { Insumo, Tambo } from "../types/supabase";
 
 type Period = "30" | "60" | "next_month";
 
@@ -38,100 +38,152 @@ export default function UpcomingPage() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [tambosData, configsData, maintTypesData] = await Promise.all([
+        setLoading(true);
+        const [tambosData, configsData, maintTypesData, allMantenimientos, allComponentes] = await Promise.all([
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
-          db.tipos_mantenimiento.getAll()
+          db.tipos_mantenimiento.getAll(),
+          db.mantenimientos.getAll(),
+          db.componentes.getAll ? db.componentes.getAll() : db.componentes.getByTambo("") // Fallback if getAll doesn't exist yet, but I should add it
         ]);
 
+        const today = new Date();
+        let interval: { start: Date; end: Date };
+
+        if (period === "30") {
+          interval = { start: today, end: addDays(today, 30) };
+        } else if (period === "60") {
+          interval = { start: today, end: addDays(today, 60) };
+        } else {
+          const nextMonth = addMonths(today, 1);
+          interval = { start: startOfMonth(nextMonth), end: endOfMonth(nextMonth) };
+        }
+
+        const results: UpcomingItem[] = [];
+
+        for (const t of tambosData) {
+          const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
+          const ficha = Array.isArray(t.ficha_tecnica) ? t.ficha_tecnica[0] : t.ficha_tecnica;
+          const tamboComponentes = allComponentes.filter((c: any) => c.tambo_id === t.id);
+          
+          const technicalData = {
+            ...t,
+            vacas_en_ordene: ficha?.vacas_en_ordene || t.vacas_en_ordene || 0,
+            bajadas: ficha?.bajadas || t.bajadas || 1,
+            ordenes_por_dia: ficha?.ordenes_por_dia || t.ordenes_por_dia || 0,
+            marca_pezonera: ficha?.marca_pezoneras || t.marca_pezonera || "Sin definir"
+          };
+
+          const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
+          let activeTypesNames: string[] = maintTypesData.map(type => type.nombre);
+          if (activeConfig) {
+            try {
+              activeTypesNames = JSON.parse(activeConfig.valor);
+            } catch (e) {
+              console.error("Error parsing active types for tambo", t.id);
+            }
+          }
+
+          const activeTypesObjects = maintTypesData.filter(type => activeTypesNames.includes(type.nombre));
+          const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configsData, activeTypesObjects);
+
+          statuses.forEach(s => {
+            if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {
+              if (s.tipo === "Cambio de pezoneras") {
+                results.push({
+                  tamboId: t.id,
+                  tamboNombre: t.nombre,
+                  clienteNombre: t.clientes?.nombre || "Sin cliente",
+                  cantidad: (ficha?.bajadas || t.bajadas || 0) * 4,
+                  tipoInsumo: `Pezoneras ${ficha?.tipo_pezoneras || t.marca_pezonera || "Sin definir"}`,
+                  ...s
+                });
+              } else if (s.tipo.toLowerCase().includes("pulsador")) {
+                results.push({
+                  tamboId: t.id,
+                  tamboNombre: t.nombre,
+                  clienteNombre: t.clientes?.nombre || "Sin cliente",
+                  cantidad: ficha?.cantidad_pulsadores || 0,
+                  tipoInsumo: `Kit Pulsador ${ficha?.tipo_pulsadores || ""}`,
+                  ...s
+                });
+              } else if (s.tipo.toLowerCase().includes("bomba de leche")) {
+                let added = false;
+                if (ficha?.usa_sello) {
+                  results.push({
+                    tamboId: t.id,
+                    tamboNombre: t.nombre,
+                    clienteNombre: t.clientes?.nombre || "Sin cliente",
+                    cantidad: 1,
+                    tipoInsumo: `Sello Mecánico (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
+                    ...s
+                  });
+                  added = true;
+                }
+                if (ficha?.usa_turbina) {
+                  results.push({
+                    tamboId: t.id,
+                    tamboNombre: t.nombre,
+                    clienteNombre: t.clientes?.nombre || "Sin cliente",
+                    cantidad: 1,
+                    tipoInsumo: `Turbina (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
+                    ...s
+                  });
+                  added = true;
+                }
+                if (ficha?.usa_guarnicion) {
+                  results.push({
+                    tamboId: t.id,
+                    tamboNombre: t.nombre,
+                    clienteNombre: t.clientes?.nombre || "Sin cliente",
+                    cantidad: 1,
+                    tipoInsumo: `Guarnición (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
+                    ...s
+                  });
+                  added = true;
+                }
+                if (!added) {
+                  results.push({
+                    tamboId: t.id,
+                    tamboNombre: t.nombre,
+                    clienteNombre: t.clientes?.nombre || "Sin cliente",
+                    cantidad: 1,
+                    tipoInsumo: `Mantenimiento ${ficha?.tipo_bomba_leche || "Bomba Leche"}`,
+                    ...s
+                  });
+                }
+              } else {
+                const matchingComp = tamboComponentes.find((c: any) => 
+                  s.tipo.toLowerCase().includes(c.tipo.toLowerCase()) || 
+                  c.tipo.toLowerCase().includes(s.tipo.toLowerCase())
+                );
+
+                results.push({
+                  tamboId: t.id,
+                  tamboNombre: t.nombre,
+                  clienteNombre: t.clientes?.nombre || "Sin cliente",
+                  cantidad: matchingComp ? matchingComp.cantidad : 1,
+                  tipoInsumo: matchingComp ? `Kit/Repuesto ${matchingComp.tipo}` : s.tipo,
+                  ...s
+                });
+              }
+            }
+          });
+        }
+
+        setUpcomingData(results);
         setTambos(tambosData);
         setConfigs(configsData);
         setAllMaintTypes(maintTypesData);
       } catch (error) {
-        console.error("Error loading initial data:", error);
+        console.error("Error loading upcoming data:", error);
       } finally {
         setLoading(false);
       }
     }
 
     loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (loading) return;
-
-    const today = new Date();
-    let interval: { start: Date; end: Date };
-
-    if (period === "30") {
-      interval = { start: today, end: addDays(today, 30) };
-    } else if (period === "60") {
-      interval = { start: today, end: addDays(today, 60) };
-    } else {
-      const nextMonth = addMonths(today, 1);
-      interval = { start: startOfMonth(nextMonth), end: endOfMonth(nextMonth) };
-    }
-
-    const calculateUpcoming = async () => {
-      const results: UpcomingItem[] = [];
-
-      for (const t of tambos) {
-        const mantenimientos = await db.mantenimientos.getByTambo(t.id);
-        const ficha = t.ficha_tecnica?.[0] || t.ficha_tecnica; // Handle array or single object
-        
-        // Use ficha_tecnica data if available, otherwise use tambo data
-        const technicalData = {
-          ...t,
-          vacas_en_ordene: ficha?.vacas_en_ordene || t.vacas_en_ordene,
-          bajadas: ficha?.bajadas || t.bajadas,
-          ordenes_por_dia: ficha?.ordenes_por_dia || t.ordenes_por_dia,
-          marca_pezonera: ficha?.marca_pezoneras || t.marca_pezonera
-        };
-
-        const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
-        let activeTypesNames: string[] = allMaintTypes.map(type => type.nombre);
-        if (activeConfig) {
-          try {
-            activeTypesNames = JSON.parse(activeConfig.valor);
-          } catch (e) {
-            console.error("Error parsing active types for tambo", t.id);
-          }
-        }
-
-        const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
-        const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configs, activeTypesObjects);
-
-        statuses.forEach(s => {
-          if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {
-            let cantidad = 0;
-            let tipoInsumo = "Sin definir";
-
-            if (s.tipo === "Cambio de pezoneras") {
-              cantidad = (technicalData.bajadas || 0) * 4;
-              tipoInsumo = technicalData.marca_pezonera || "Sin definir";
-            } else {
-              // For other types, we default to 1 unit of the maintenance type itself
-              cantidad = 1;
-              tipoInsumo = s.tipo;
-            }
-
-            results.push({
-              tamboId: t.id,
-              tamboNombre: t.nombre,
-              clienteNombre: t.clientes?.nombre || "Sin cliente",
-              cantidad,
-              tipoInsumo,
-              ...s
-            });
-          }
-        });
-      }
-
-      setUpcomingData(results);
-    };
-
-    calculateUpcoming();
-  }, [period, tambos, configs, allMaintTypes, loading]);
+  }, [period]);
 
   const filteredData = useMemo(() => {
     return upcomingData.filter(item => 

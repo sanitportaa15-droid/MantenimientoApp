@@ -30,7 +30,6 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Tambos", path: "/tambos", icon: Droplets },
     { name: "Próximos", path: "/proximos", icon: Calendar },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
-    { name: "Relevos Técnicos", path: "/relevos", icon: Wrench },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 },
   ];

@@ -229,6 +229,29 @@ export interface Database {
           created_at?: string
         }
       }
+      componentes: {
+        Row: {
+          id: string
+          tambo_id: string
+          tipo: string
+          cantidad: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id: string
+          tipo: string
+          cantidad: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string
+          tipo?: string
+          cantidad?: number
+          created_at?: string
+        }
+      }
       ficha_tecnica: {
         Row: {
           id: string
@@ -241,6 +264,10 @@ export interface Database {
           tipo_bomba_vacio: string | null
           tipo_equipo: string | null
           observaciones: string | null
+          cantidad_pulsadores: number | null
+          usa_sello: boolean | null
+          usa_turbina: boolean | null
+          usa_guarnicion: boolean | null
           datos_extra: Json | null
           created_at: string
         }
@@ -255,6 +282,10 @@ export interface Database {
           tipo_bomba_vacio?: string | null
           tipo_equipo?: string | null
           observaciones?: string | null
+          cantidad_pulsadores?: number | null
+          usa_sello?: boolean | null
+          usa_turbina?: boolean | null
+          usa_guarnicion?: boolean | null
           datos_extra?: Json | null
           created_at?: string
         }
@@ -269,6 +300,10 @@ export interface Database {
           tipo_bomba_vacio?: string | null
           tipo_equipo?: string | null
           observaciones?: string | null
+          cantidad_pulsadores?: number | null
+          usa_sello?: boolean | null
+          usa_turbina?: boolean | null
+          usa_guarnicion?: boolean | null
           datos_extra?: Json | null
           created_at?: string
         }
@@ -367,9 +402,9 @@ export type TipoReparacion = Database['public']['Tables']['tipos_reparacion']['R
 export type TipoMantenimiento = Database['public']['Tables']['tipos_mantenimiento']['Row'];
 export type PrioridadReclamo = Database['public']['Tables']['prioridades_reclamo']['Row'];
 export type EstadoReclamo = Database['public']['Tables']['estados_reclamo']['Row'];
-export type Relevo = Database['public']['Tables']['relevos']['Row'];
 export type Insumo = Database['public']['Tables']['insumos']['Row'];
 export type FichaTecnica = Database['public']['Tables']['ficha_tecnica']['Row'];
+export type Componente = Database['public']['Tables']['componentes']['Row'];
 
 export enum ReclamoEstado {
   PENDIENTE = "Pendiente",

@@ -38,16 +38,17 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [clientes, tambos, configs, reclamos, allMaintTypes] = await Promise.all([
+        const [clientes, tambos, configs, reclamos, allMaintTypes, allMantenimientos] = await Promise.all([
           db.clientes.getAll(),
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
           db.reclamos.getAll(),
-          db.tipos_mantenimiento.getAll()
+          db.tipos_mantenimiento.getAll(),
+          db.mantenimientos.getAll()
         ]);
 
-        const tambosWithStatus = await Promise.all(tambos.map(async (t) => {
-          const mantenimientos = await db.mantenimientos.getByTambo(t.id);
+        const tambosWithStatus = tambos.map((t) => {
+          const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
           
           // Extract active types from configs
           const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
@@ -63,12 +64,16 @@ export default function Dashboard() {
           const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
           const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
           const generalStatus = getGeneralStatus(statuses);
+          
+          // Defensive check for clientes join
+          const cliente = Array.isArray(t.clientes) ? t.clientes[0] : t.clientes;
+          
           return {
             ...t,
-            clienteNombre: t.clientes.nombre,
+            clienteNombre: cliente?.nombre || "Sin cliente",
             status: generalStatus
           };
-        }));
+        });
 
         setStats({
           clientes: clientes.length,
@@ -242,7 +247,9 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate group-hover:text-emerald-400 transition-colors">{r.titulo}</p>
-                      <p className="text-[10px] text-zinc-500 font-medium uppercase truncate">{r.tambos.nombre}</p>
+                      <p className="text-[10px] text-zinc-500 font-medium uppercase truncate">
+                        {Array.isArray(r.tambos) ? r.tambos[0]?.nombre : r.tambos?.nombre}
+                      </p>
                     </div>
                     <ArrowRight className="w-4 h-4 text-zinc-700 group-hover:text-emerald-400 transition-colors" />
                   </Link>

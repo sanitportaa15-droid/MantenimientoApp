@@ -18,14 +18,15 @@ export default function TambosPage() {
   async function loadTambos() {
     try {
       setLoading(true);
-      const [tambosData, configs, allMaintTypes] = await Promise.all([
+      const [tambosData, configs, allMaintTypes, allMantenimientos] = await Promise.all([
         db.tambos.getAll(),
         db.configuracion.getAllWithHidden(),
-        db.tipos_mantenimiento.getAll()
+        db.tipos_mantenimiento.getAll(),
+        db.mantenimientos.getAll()
       ]);
 
-      const tambosWithStatus = await Promise.all(tambosData.map(async (t) => {
-        const mantenimientos = await db.mantenimientos.getByTambo(t.id);
+      const tambosWithStatus = tambosData.map((t) => {
+        const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
         
         // Extract active types from configs
         const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
@@ -41,12 +42,16 @@ export default function TambosPage() {
         const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
         const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
         const generalStatus = getGeneralStatus(statuses);
+        
+        // Defensive check for clientes join
+        const cliente = Array.isArray(t.clientes) ? t.clientes[0] : t.clientes;
+        
         return {
           ...t,
-          clienteNombre: t.clientes.nombre,
+          clienteNombre: cliente?.nombre || "Sin cliente",
           status: generalStatus
         };
-      }));
+      });
 
       setTambos(tambosWithStatus);
     } catch (error) {

@@ -26,16 +26,17 @@ export default function MaintenanceStatusPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [tambos, configs, allMaintTypes] = await Promise.all([
+        const [tambos, configs, allMaintTypes, allMantenimientos] = await Promise.all([
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
-          db.tipos_mantenimiento.getAll()
+          db.tipos_mantenimiento.getAll(),
+          db.mantenimientos.getAll()
         ]);
 
         const allStatuses: any[] = [];
 
         for (const t of tambos) {
-          const mantenimientos = await db.mantenimientos.getByTambo(t.id);
+          const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
           
           const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
           let activeTypesNames: string[] = allMaintTypes.map(t => t.nombre);
@@ -50,12 +51,16 @@ export default function MaintenanceStatusPage() {
           const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
           const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
           
+          // Defensive check for clientes join
+          const cliente = Array.isArray(t.clientes) ? t.clientes[0] : t.clientes;
+          const clienteNombre = cliente?.nombre || "Sin cliente";
+
           statuses.forEach(s => {
             if (!filterStatus || s.status === filterStatus) {
               allStatuses.push({
                 tamboId: t.id,
                 tamboNombre: t.nombre,
-                clienteNombre: t.clientes.nombre,
+                clienteNombre: clienteNombre,
                 ...s
               });
             }
