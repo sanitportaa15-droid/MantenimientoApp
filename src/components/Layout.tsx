@@ -12,7 +12,8 @@ import {
   Terminal,
   Settings2,
   Wrench,
-  Calendar
+  Calendar,
+  Package
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -28,6 +29,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
     { name: "Clientes", path: "/clientes", icon: Users },
     { name: "Tambos", path: "/tambos", icon: Droplets },
+    { name: "Insumos", path: "/insumos", icon: Package },
     { name: "Próximos", path: "/proximos", icon: Calendar },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },

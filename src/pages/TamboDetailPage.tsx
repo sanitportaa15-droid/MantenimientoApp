@@ -18,14 +18,17 @@ import {
   Settings2,
   Info,
   Activity,
-  Wrench
+  Wrench,
+  Package
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, Pezonera, TamboComponente } from "../types/supabase";
-import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus, calculateComponentQuantity } from "../utils/calculations";
+import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, Pezonera, TamboComponente, TamboInsumo, Insumo } from "../types/supabase";
+import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus, calculateSupplies, calculateInsumos, InsumoCalculado } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+import FichaTecnicaModal from "../components/FichaTecnicaModal";
 
 type TabType = "info" | "history" | "reclamos" | "technical";
 
@@ -33,11 +36,13 @@ export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [tambo, setTambo] = useState<any>(null);
+  const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null, insumos: Insumo | null }) | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [reclamos, setReclamos] = useState<Reclamo[]>([]);
-  const [catalogComponentes, setCatalogComponentes] = useState<Componente[]>([]);
-  const [pezoneras, setPezoneras] = useState<Pezonera[]>([]);
+  const [tamboComponentes, setTamboComponentes] = useState<(TamboComponente & { componentes: Componente })[]>([]);
+  const [tamboInsumos, setTamboInsumos] = useState<(TamboInsumo & { insumos: Insumo })[]>([]);
+  const [calculatedSupplies, setCalculatedSupplies] = useState<InsumoCalculado[]>([]);
+  const [calculatedInsumos, setCalculatedInsumos] = useState<InsumoCalculado[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
   const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
   const [activeTypes, setActiveTypes] = useState<string[]>([]);
@@ -45,11 +50,17 @@ export default function TamboDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>("info");
   const [showResolvedReclamos, setShowResolvedReclamos] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFichaModalOpen, setIsFichaModalOpen] = useState(false);
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
 
   // Technical Sheet Form State
+  const [fichaForm, setFichaForm] = useState<Partial<FichaTecnica & { bajadas: number, vacas_en_ordene: number, ordenes_por_dia: number }>>({});
   const [isSavingFicha, setIsSavingFicha] = useState(false);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldValue, setNewFieldValue] = useState("");
+  const [newCompTipo, setNewCompTipo] = useState("");
+  const [newCompCantidad, setNewCompCantidad] = useState(0);
 
   useEffect(() => {
     if (id) loadData();
@@ -77,15 +88,15 @@ export default function TamboDetailPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, catalogComponentesData, pezonerasData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, tamboCompsData, tamboInsumosData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
         db.tambos.getMantenimientosActivos(id!),
         db.reclamos.getByTambo(id!, !showResolvedReclamos),
         db.tipos_mantenimiento.getAll(),
-        db.componentes.getAll(),
-        db.pezoneras.getAll()
+        db.tambo_componentes.getByTambo(id!),
+        db.tambo_insumos.getByTambo(id!)
       ]);
       
       setTambo(tamboData);
@@ -94,8 +105,54 @@ export default function TamboDetailPage() {
       setActiveTypes(activeTypesNames);
       setReclamos(reclamosData);
       setAllMaintTypes(allMaintTypesData);
-      setCatalogComponentes(catalogComponentesData);
-      setPezoneras(pezonerasData);
+      setTamboComponentes(tamboCompsData);
+      setTamboInsumos(tamboInsumosData);
+
+      const supplies = calculateSupplies(tamboData, tamboCompsData);
+      setCalculatedSupplies(supplies);
+
+      const insumos = calculateInsumos(tamboData, tamboInsumosData);
+      setCalculatedInsumos(insumos);
+
+      // Handle ficha_tecnica as single object or first element of array
+      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
+
+      // Auto-create technical sheet if it doesn't exist
+      if (!ficha) {
+        try {
+          const newFicha = await db.ficha_tecnica.create({
+            tambo_id: id!,
+            marca_pezoneras: tamboData.insumos?.nombre || "",
+            bajadas: tamboData.bajadas
+          });
+          setTambo({ ...tamboData, ficha_tecnica: newFicha });
+          setFichaForm({
+            ...newFicha,
+            bajadas: tamboData.bajadas,
+            vacas_en_ordene: tamboData.vacas_en_ordene,
+            ordenes_por_dia: tamboData.ordenes_por_dia
+          });
+        } catch (e) {
+          console.error("Error creating auto technical sheet:", e);
+          // Still set ficha form with tambo data even if creation fails
+          setFichaForm({
+            bajadas: tamboData.bajadas,
+            vacas_en_ordene: tamboData.vacas_en_ordene,
+            ordenes_por_dia: tamboData.ordenes_por_dia
+          });
+        }
+      } else {
+        setFichaForm({
+          ...ficha,
+          bajadas: ficha.bajadas || tamboData.bajadas,
+          vacas_en_ordene: ficha.vacas_en_ordene || tamboData.vacas_en_ordene,
+          ordenes_por_dia: ficha.ordenes_por_dia || tamboData.ordenes_por_dia,
+          usa_sello: ficha.usa_sello ?? true,
+          usa_turbina: ficha.usa_turbina ?? true,
+          usa_guarnicion: ficha.usa_guarnicion ?? true,
+        });
+        setTambo({ ...tamboData, ficha_tecnica: ficha });
+      }
       
       const activeTypesObjects = allMaintTypesData.filter(t => activeTypesNames.includes(t.nombre));
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesObjects);
@@ -106,6 +163,29 @@ export default function TamboDetailPage() {
       setLoading(false);
     }
   }
+
+  const handleAddDynamicField = () => {
+    if (!newFieldName.trim()) return;
+    const currentExtra = (fichaForm.datos_extra as Record<string, any>) || {};
+    setFichaForm({
+      ...fichaForm,
+      datos_extra: {
+        ...currentExtra,
+        [newFieldName]: newFieldValue
+      }
+    });
+    setNewFieldName("");
+    setNewFieldValue("");
+  };
+
+  const handleRemoveDynamicField = (key: string) => {
+    const currentExtra = { ...(fichaForm.datos_extra as Record<string, any>) };
+    delete currentExtra[key];
+    setFichaForm({
+      ...fichaForm,
+      datos_extra: currentExtra
+    });
+  };
 
   const generatePDF = async () => {
     console.log("Iniciando generación de PDF para:", tambo?.nombre);
@@ -157,7 +237,7 @@ export default function TamboDetailPage() {
       doc.text(tambo.vacas_en_ordene.toString(), 20, 89);
       doc.text(tambo.bajadas.toString(), 60, 89);
       doc.text(tambo.ordenes_por_dia.toString(), 90, 89);
-      doc.text(tambo.marca_pezonera || "N/A", 120, 89);
+      doc.text(tambo.insumos?.nombre || "N/A", 120, 89);
       doc.text(new Date().toLocaleDateString(), 165, 89);
       
       // Technical Status Table
@@ -317,6 +397,35 @@ export default function TamboDetailPage() {
     { id: "reclamos", label: "Reclamos", icon: ClipboardList },
   ];
 
+  const handleSaveFicha = async () => {
+    if (!tambo?.ficha_tecnica?.id) return;
+    try {
+      setIsSavingFicha(true);
+      
+      // Split data for both tables
+      const { bajadas, vacas_en_ordene, ordenes_por_dia, ...fichaData } = fichaForm;
+      
+      // Update Ficha Técnica
+      const updatedFicha = await db.ficha_tecnica.update(tambo.ficha_tecnica.id, fichaData);
+      
+      // Update Tambo (if values changed)
+      const updatedTambo = await db.tambos.update(tambo.id, {
+        bajadas,
+        vacas_en_ordene,
+        ordenes_por_dia
+      });
+
+      setTambo({ ...updatedTambo, clientes: tambo.clientes, ficha_tecnica: updatedFicha });
+      alert("Ficha técnica actualizada correctamente");
+      loadData(); // Reload to update statuses
+    } catch (error) {
+      console.error("Error saving ficha:", error);
+      alert("Error al guardar la ficha técnica");
+    } finally {
+      setIsSavingFicha(false);
+    }
+  };
+
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -450,24 +559,23 @@ export default function TamboDetailPage() {
               </div>
             </div>
 
-      <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
-        <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-          <Info className="text-emerald-400 w-5 h-5" />
-          Detalles Adicionales
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
-            <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
-            <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
-          </div>
-          <div className="space-y-4">
-            <InfoItem label="Modelo Pezonera" value={tambo.pezoneras?.nombre || "N/A"} />
-            <InfoItem label="Brazos Extractores" value={tambo.tiene_brazos_extractores ? "SÍ" : "NO"} />
-            <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
-          </div>
-        </div>
-      </div>
+            <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Info className="text-emerald-400 w-5 h-5" />
+                Detalles Adicionales
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
+                  <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
+                  <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
+                </div>
+                <div className="space-y-4">
+                  <InfoItem label="Marca Pezonera" value={tambo.insumos?.nombre || "N/A"} />
+                  <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Sidebar Info */}
@@ -497,56 +605,90 @@ export default function TamboDetailPage() {
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-bold flex items-center gap-2">
                 <FileText className="text-emerald-400 w-6 h-6" />
-                Ficha Técnica (Cálculos Automáticos)
+                Ficha Técnica del Tambo
               </h3>
-              <Link 
-                to={`/tambos/editar/${tambo.id}`}
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
+              <button
+                onClick={() => setIsFichaModalOpen(true)}
+                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black px-6 py-2 rounded-xl font-bold transition-all"
               >
                 <Edit2 className="w-4 h-4" />
-                Editar Configuración
-              </Link>
+                Editar Ficha
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Bajadas</p>
-                <p className="text-3xl font-bold text-white">{tambo.bajadas}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Datos de Ordeñe</h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
+                  <InfoItem label="Vacas en Ordeñe" value={tambo.vacas_en_ordene.toString()} />
+                  <InfoItem label="Ordeñes por Día" value={tambo.ordenes_por_dia.toString()} />
+                  <InfoItem label="Brazos Extractores" value={tambo.tiene_brazos_extractores ? "SÍ" : "NO"} />
+                </div>
               </div>
-              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Pezonera</p>
-                <p className="text-3xl font-bold text-white">{tambo.pezoneras?.nombre || "No definida"}</p>
-              </div>
-              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Brazos Extractores</p>
-                <p className="text-3xl font-bold text-white">{tambo.tiene_brazos_extractores ? "SÍ" : "NO"}</p>
+
+              <div className="space-y-6">
+                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Equipamiento</h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <InfoItem label="Pezonera" value={tambo.insumos?.nombre || "N/A"} />
+                  <InfoItem label="Tipo Equipo" value={tambo.ficha_tecnica?.tipo_equipo || "N/A"} />
+                  <InfoItem label="Bomba Vacío" value={tambo.ficha_tecnica?.tipo_bomba_vacio || "N/A"} />
+                  <InfoItem label="Bomba Leche" value={tambo.ficha_tecnica?.tipo_bomba_leche || "N/A"} />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <h4 className="text-lg font-bold border-b border-white/5 pb-2">Componentes e Insumos Calculados</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {tambo.tambo_componentes?.map((tc: any) => {
-                  const qty = calculateComponentQuantity(tc.componentes, tambo, tc.cantidad_manual);
-                  return (
-                    <div key={tc.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                      <div>
-                        <p className="font-bold text-white">{tc.componentes.nombre}</p>
-                        <p className="text-xs text-zinc-500">{tc.componentes.tipo}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-emerald-400 font-mono">{qty}</p>
-                        <p className="text-[10px] text-zinc-600 uppercase font-bold">Unidades</p>
-                      </div>
-                    </div>
-                  );
-                })}
-                {(!tambo.tambo_componentes || tambo.tambo_componentes.length === 0) && (
-                  <div className="col-span-2 py-12 text-center border border-dashed border-white/10 rounded-3xl">
-                    <p className="text-zinc-500 italic">No hay componentes configurados para este tambo.</p>
+            {tambo.ficha_tecnica?.observaciones && (
+              <div className="mt-8 pt-8 border-t border-white/5">
+                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Observaciones Técnicas</h4>
+                <p className="text-zinc-400 leading-relaxed whitespace-pre-wrap">{tambo.ficha_tecnica.observaciones}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+            <h3 className="text-xl font-bold flex items-center gap-2 mb-6">
+              <Package className="text-emerald-400 w-5 h-5" />
+              Cálculo Automático de Insumos
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {calculatedInsumos.map((insumo, idx) => (
+                <div key={idx} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">{insumo.nombre}</p>
+                    <p className="text-2xl font-mono font-bold text-emerald-400">{insumo.cantidad}</p>
                   </div>
-                )}
-              </div>
+                  <div className="text-[10px] font-bold bg-white/5 px-2 py-1 rounded text-zinc-400 uppercase">
+                    {insumo.tipo}
+                  </div>
+                </div>
+              ))}
+              {calculatedInsumos.length === 0 && (
+                <p className="col-span-full text-center py-8 text-zinc-500 italic">No hay insumos configurados para este tambo.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+            <h3 className="text-xl font-bold flex items-center gap-2 mb-6">
+              <Wrench className="text-emerald-400 w-5 h-5" />
+              Otros Componentes
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {calculatedSupplies.map((insumo, idx) => (
+                <div key={idx} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">{insumo.nombre}</p>
+                    <p className="text-2xl font-mono font-bold text-emerald-400">{insumo.cantidad}</p>
+                  </div>
+                  <div className="text-[10px] font-bold bg-white/5 px-2 py-1 rounded text-zinc-400 uppercase">
+                    {insumo.tipo}
+                  </div>
+                </div>
+              ))}
+              {calculatedSupplies.length === 0 && (
+                <p className="col-span-full text-center py-8 text-zinc-500 italic">No hay otros componentes configurados.</p>
+              )}
             </div>
           </div>
         </div>
@@ -663,6 +805,17 @@ export default function TamboDetailPage() {
             )}
           </div>
         </div>
+      )}
+
+      {isFichaModalOpen && (
+        <FichaTecnicaModal 
+          tamboId={id!} 
+          onClose={() => setIsFichaModalOpen(false)} 
+          onSuccess={() => {
+            setIsFichaModalOpen(false);
+            loadData();
+          }} 
+        />
       )}
 
       {isModalOpen && (

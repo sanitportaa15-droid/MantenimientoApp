@@ -1,5 +1,5 @@
 import { addDays, addMonths, differenceInDays, parseISO, startOfDay } from "date-fns";
-import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
+import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento, TamboComponente, Componente, TamboInsumo, Insumo } from "../types/supabase";
 
 export type Status = "verde" | "amarillo" | "rojo" | "gris";
 
@@ -12,6 +12,71 @@ export interface MaintenanceStatus {
   frecuenciaLabel?: string;
   ordenosPorPezonera?: number;
   diasEstimados?: number;
+}
+
+export interface InsumoCalculado {
+  nombre: string;
+  cantidad: number;
+  tipo: string;
+}
+
+export function calculateInsumos(
+  tambo: Tambo,
+  tamboInsumos: (TamboInsumo & { insumos: Insumo })[]
+): InsumoCalculado[] {
+  const bajadas = tambo.bajadas || 0;
+  const tieneBrazos = tambo.tiene_brazos_extractores || false;
+
+  return tamboInsumos.map(ti => {
+    const insumo = ti.insumos;
+    let cantidad = 0;
+
+    if (insumo.usa_cantidad_manual) {
+      cantidad = ti.cantidad_manual || 0;
+    } else if (insumo.usa_brazos) {
+      // Lógica solicitada:
+      // Si tiene brazos extractores: bajadas * 2 * cantidad_por_brazo
+      // Si NO tiene: bajadas * 1 * cantidad_por_brazo
+      const multiplicadorBrazos = tieneBrazos ? 2 : 1;
+      cantidad = bajadas * multiplicadorBrazos * (insumo.cantidad_por_brazo || 0);
+    }
+
+    return {
+      nombre: insumo.nombre,
+      cantidad,
+      tipo: insumo.tipo
+    };
+  });
+}
+
+export function calculateSupplies(
+  tambo: Tambo,
+  tamboComponentes: (TamboComponente & { componentes: Componente })[]
+): InsumoCalculado[] {
+  const bajadas = tambo.bajadas || 0;
+  const tieneBrazos = tambo.tiene_brazos_extractores || false;
+
+  return tamboComponentes.map(tc => {
+    const comp = tc.componentes;
+    let cantidad = 0;
+
+    if (comp.usa_cantidad_manual) {
+      cantidad = tc.cantidad_manual || 0;
+    } else if (comp.usa_bajadas) {
+      cantidad = bajadas * (comp.cantidad_por_bajada || 1);
+    }
+
+    // Special logic for Pulsadores if not manual
+    if (comp.nombre.toLowerCase().includes("pulsador") && !comp.usa_cantidad_manual) {
+      cantidad = tieneBrazos ? bajadas * 2 : bajadas * 1;
+    }
+
+    return {
+      nombre: comp.nombre,
+      cantidad,
+      tipo: comp.tipo
+    };
+  });
 }
 
 export function calculateMaintenanceStatus(
@@ -157,32 +222,4 @@ export function getReliabilityStatus(score: number): { label: string, color: str
   if (score >= 85) return { label: "Excelente", color: "text-emerald-400" };
   if (score >= 70) return { label: "Atención", color: "text-amber-400" };
   return { label: "Crítico", color: "text-red-400" };
-}
-
-export function calculateComponentQuantity(
-  componente: any,
-  tambo: Tambo,
-  cantidadManual?: number
-): number {
-  if (!componente) return 0;
-
-  // Special case: Pulsadores
-  if (componente.nombre.toLowerCase().includes("pulsador")) {
-    return tambo.tiene_brazos_extractores ? tambo.bajadas * 2 : tambo.bajadas;
-  }
-
-  // Special case: Pezoneras (usually 4 per bajada)
-  if (componente.nombre.toLowerCase().includes("pezonera")) {
-    return tambo.bajadas * 4;
-  }
-
-  if (componente.usa_bajadas) {
-    return tambo.bajadas * (componente.cantidad_por_bajada || 0);
-  }
-
-  if (componente.usa_cantidad_manual) {
-    return cantidadManual || 0;
-  }
-
-  return 0;
 }

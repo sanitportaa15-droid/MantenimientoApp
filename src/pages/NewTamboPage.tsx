@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { db } from "../services/db";
-import { Cliente, TipoMantenimiento, Pezonera, Componente, TamboComponente } from "../types/supabase";
-import { ArrowLeft, Save, CheckCircle2, Settings, Package, Plus, Trash2 } from "lucide-react";
+import { Cliente, TipoMantenimiento, Insumo } from "../types/supabase";
+import { ArrowLeft, Save, CheckCircle2 } from "lucide-react";
 import { cn } from "../utils/ui";
-import { calculateComponentQuantity } from "../utils/calculations";
 
 export default function NewTamboPage() {
   const navigate = useNavigate();
@@ -14,12 +13,9 @@ export default function NewTamboPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [pezoneras, setPezoneras] = useState<Pezonera[]>([]);
-  const [catalogComponentes, setCatalogComponentes] = useState<Componente[]>([]);
+  const [pezoneras, setPezoneras] = useState<Insumo[]>([]);
   const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
   const [activeTypes, setActiveTypes] = useState<string[]>([]);
-  const [tamboComponentes, setTamboComponentes] = useState<{ componente_id: string, cantidad_manual: number }[]>([]);
-  
   const [formData, setFormData] = useState({
     cliente_id: searchParams.get("clienteId") || "",
     nombre: "",
@@ -34,22 +30,19 @@ export default function NewTamboPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [clientsData, maintTypesData, pezonerasData, componentsCatalog] = await Promise.all([
+        const [clientsData, maintTypesData, pezonerasData] = await Promise.all([
           db.clientes.getAll(),
           db.tipos_mantenimiento.getAll(),
-          db.pezoneras.getAll(),
-          db.componentes.getAll()
+          db.insumos.getPezoneras()
         ]);
         setClientes(clientsData);
         setAllMaintTypes(maintTypesData);
         setPezoneras(pezonerasData);
-        setCatalogComponentes(componentsCatalog);
 
         if (isEditing) {
-          const [tambo, active, tComps] = await Promise.all([
+          const [tambo, active] = await Promise.all([
             db.tambos.getById(id!),
-            db.tambos.getMantenimientosActivos(id!),
-            db.tambo_componentes.getByTambo(id!)
+            db.tambos.getMantenimientosActivos(id!)
           ]);
           
           setFormData({
@@ -60,13 +53,9 @@ export default function NewTamboPage() {
             ordenes_por_dia: tambo.ordenes_por_dia,
             pezonera_id: tambo.pezonera_id || "",
             tiene_brazos_extractores: tambo.tiene_brazos_extractores || false,
-            fecha_ultimo_cambio: tambo.fecha_ultimo_cambio
+            fecha_ultimo_cambio: tambo.fecha_ultimo_cambio || "1900-01-01"
           });
           setActiveTypes(active);
-          setTamboComponentes(tComps.map(tc => ({
-            componente_id: tc.componente_id,
-            cantidad_manual: tc.cantidad_manual || 0
-          })));
         } else {
           setActiveTypes(maintTypesData.map(t => t.nombre));
         }
@@ -95,15 +84,7 @@ export default function NewTamboPage() {
         tamboId = newTambo.id;
       }
       
-      await Promise.all([
-        db.tambos.setMantenimientosActivos(tamboId!, activeTypes),
-        db.tambo_componentes.deleteByTambo(tamboId!),
-        db.tambo_componentes.createMany(tamboComponentes.map(tc => ({
-          tambo_id: tamboId!,
-          componente_id: tc.componente_id,
-          cantidad_manual: tc.cantidad_manual
-        })))
-      ]);
+      await db.tambos.setMantenimientosActivos(tamboId!, activeTypes);
       
       alert(isEditing ? "Tambo actualizado correctamente." : "Tambo creado correctamente.");
       navigate(isEditing ? `/tambos/${id}` : "/tambos");
@@ -115,33 +96,10 @@ export default function NewTamboPage() {
     }
   }
 
-  const addComponente = () => {
-    setTamboComponentes([...tamboComponentes, { componente_id: "", cantidad_manual: 0 }]);
-  };
-
-  const removeComponente = (index: number) => {
-    setTamboComponentes(tamboComponentes.filter((_, i) => i !== index));
-  };
-
-  const updateTamboComponente = (index: number, field: string, value: any) => {
-    const newComps = [...tamboComponentes];
-    (newComps[index] as any)[field] = value;
-    setTamboComponentes(newComps);
-  };
-
-  const calculateQuantity = (compId: string, manualQty: number) => {
-    const comp = catalogComponentes.find(c => c.id === compId);
-    if (!comp) return 0;
-    
-    // We need a temporary tambo object for the calculation
-    const tempTambo = {
-      ...formData,
-      id: id || "temp",
-      created_at: "",
-      marca_pezonera: ""
-    } as any;
-
-    return calculateComponentQuantity(comp, tempTambo, manualQty);
+  const toggleType = (tipo: string) => {
+    setActiveTypes(prev => 
+      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
+    );
   };
 
   if (initialLoading) {
@@ -231,116 +189,36 @@ export default function NewTamboPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Modelo de Pezonera (Catálogo)</label>
+              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Pezonera (Catálogo) *</label>
               <select
+                required
                 value={formData.pezonera_id}
                 onChange={(e) => setFormData({ ...formData, pezonera_id: e.target.value })}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
               >
-                <option value="" className="bg-[#0f0f0f]">Seleccionar modelo...</option>
+                <option value="" disabled className="bg-[#0f0f0f]">Seleccionar pezonera...</option>
                 {pezoneras.map(p => (
-                  <option key={p.id} value={p.id} className="bg-[#0f0f0f]">{p.nombre} ({p.marca})</option>
+                  <option key={p.id} value={p.id} className="bg-[#0f0f0f]">{p.nombre}</option>
                 ))}
               </select>
             </div>
-
+            
             <div className="flex items-center gap-3 pt-8">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer"
-                  checked={formData.tiene_brazos_extractores}
-                  onChange={(e) => setFormData({ ...formData, tiene_brazos_extractores: e.target.checked })}
-                />
-                <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                <span className="ml-3 text-sm font-medium text-zinc-400 uppercase tracking-wider">Tiene brazos extractores</span>
-              </label>
+              <input
+                type="checkbox"
+                id="tiene_brazos"
+                checked={formData.tiene_brazos_extractores}
+                onChange={(e) => setFormData({ ...formData, tiene_brazos_extractores: e.target.checked })}
+                className="w-5 h-5 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+              />
+              <label htmlFor="tiene_brazos" className="text-sm font-semibold text-zinc-400 uppercase tracking-wider cursor-pointer">Tiene Brazos Extractores</label>
             </div>
           </div>
         </div>
 
         <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-6">
           <div className="flex items-center justify-between border-b border-white/5 pb-4">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-xl font-bold">Componentes e Insumos</h3>
-            </div>
-            <button
-              type="button"
-              onClick={addComponente}
-              className="flex items-center gap-2 text-xs font-bold bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-              Agregar Componente
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            {tamboComponentes.map((tc, index) => {
-              const comp = catalogComponentes.find(c => c.id === tc.componente_id);
-              const isManual = comp?.usa_cantidad_manual;
-              const calculatedQty = calculateQuantity(tc.componente_id, tc.cantidad_manual);
-
-              return (
-                <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Componente</label>
-                    <select
-                      value={tc.componente_id}
-                      onChange={(e) => updateTamboComponente(index, 'componente_id', e.target.value)}
-                      className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
-                    >
-                      <option value="" className="bg-[#0f0f0f]">Seleccionar...</option>
-                      {catalogComponentes.map(c => (
-                        <option key={c.id} value={c.id} className="bg-[#0f0f0f]">{c.nombre}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="w-full md:w-32 space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Cantidad</label>
-                    {isManual ? (
-                      <input
-                        type="number"
-                        value={tc.cantidad_manual}
-                        onChange={(e) => updateTamboComponente(index, 'cantidad_manual', parseInt(e.target.value) || 0)}
-                        className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-                      />
-                    ) : (
-                      <div className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 text-sm text-emerald-400 font-bold font-mono">
-                        {calculatedQty}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-end pb-1">
-                    <button
-                      type="button"
-                      onClick={() => removeComponente(index)}
-                      className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {tamboComponentes.length === 0 && (
-              <div className="text-center py-8 border border-dashed border-white/10 rounded-3xl">
-                <Package className="w-8 h-8 text-zinc-800 mx-auto mb-2" />
-                <p className="text-sm text-zinc-600">No hay componentes configurados para este tambo.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-6">
-          <div className="flex items-center justify-between border-b border-white/5 pb-4">
-            <div className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-xl font-bold">Mantenimientos Activos</h3>
-            </div>
+            <h3 className="text-xl font-bold">Mantenimientos Activos</h3>
             <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md">
               {activeTypes.length} SELECCIONADOS
             </span>
@@ -352,11 +230,7 @@ export default function NewTamboPage() {
               <button
                 key={tipo.id}
                 type="button"
-                onClick={() => {
-                  setActiveTypes(prev => 
-                    prev.includes(tipo.nombre) ? prev.filter(t => t !== tipo.nombre) : [...prev, tipo.nombre]
-                  );
-                }}
+                onClick={() => toggleType(tipo.nombre)}
                 className={cn(
                   "flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all",
                   activeTypes.includes(tipo.nombre)

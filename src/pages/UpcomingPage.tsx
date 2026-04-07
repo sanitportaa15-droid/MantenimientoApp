@@ -10,11 +10,12 @@ import {
   AlertCircle
 } from "lucide-react";
 import { db } from "../services/db";
-import { calculateMaintenanceStatus, MaintenanceStatus, calculateComponentQuantity } from "../utils/calculations";
+import { calculateMaintenanceStatus, MaintenanceStatus, calculateSupplies, calculateInsumos } from "../utils/calculations";
 import { format, addDays, isWithinInterval, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn, formatDate } from "../utils/ui";
 import { Insumo, Tambo } from "../types/supabase";
+import { supabase } from "../services/supabase";
 
 type Period = "30" | "60" | "next_month";
 
@@ -39,11 +40,13 @@ export default function UpcomingPage() {
     async function loadInitialData() {
       try {
         setLoading(true);
-        const [tambosData, configsData, maintTypesData, allMantenimientos] = await Promise.all([
+        const [tambosData, configsData, maintTypesData, allMantenimientos, allTamboComponentes, allTamboInsumos] = await Promise.all([
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
           db.tipos_mantenimiento.getAll(),
-          db.mantenimientos.getAll()
+          db.mantenimientos.getAll(),
+          db.tambo_componentes.getAll(),
+          supabase.from("tambo_insumos").select("*, insumos(*)").then(res => res.data || [])
         ]);
 
         const today = new Date();
@@ -62,7 +65,18 @@ export default function UpcomingPage() {
 
         for (const t of tambosData) {
           const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
+          const ficha = Array.isArray(t.ficha_tecnica) ? t.ficha_tecnica[0] : t.ficha_tecnica;
+          const tamboComponentes = allTamboComponentes.filter((tc: any) => tc.tambo_id === t.id);
+          const tamboInsumos = allTamboInsumos.filter((ti: any) => ti.tambo_id === t.id);
           
+          const technicalData = {
+            ...t,
+            vacas_en_ordene: ficha?.vacas_en_ordene || t.vacas_en_ordene || 0,
+            bajadas: ficha?.bajadas || t.bajadas || 1,
+            ordenes_por_dia: ficha?.ordenes_por_dia || t.ordenes_por_dia || 0,
+            tiene_brazos_extractores: t.tiene_brazos_extractores || false
+          };
+
           const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
           let activeTypesNames: string[] = maintTypesData.map(type => type.nombre);
           if (activeConfig) {
@@ -74,54 +88,47 @@ export default function UpcomingPage() {
           }
 
           const activeTypesObjects = maintTypesData.filter(type => activeTypesNames.includes(type.nombre));
-          const statuses = calculateMaintenanceStatus(t, mantenimientos, configsData, activeTypesObjects);
+          const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configsData, activeTypesObjects);
 
           statuses.forEach(s => {
             if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {
-              // Find components related to this maintenance type
-              // For now, we'll use a simple mapping or look into tambo_componentes
+              // Use calculateSupplies and calculateInsumos logic to find relevant supplies for this maintenance type
+              const supplies = calculateSupplies(technicalData, tamboComponentes);
+              const insumos = calculateInsumos(technicalData, tamboInsumos);
               
-              if (s.tipo === "Cambio de pezoneras") {
-                const pezoneraNombre = t.pezoneras?.nombre || "Sin definir";
-                results.push({
-                  tamboId: t.id,
-                  tamboNombre: t.nombre,
-                  clienteNombre: t.clientes?.nombre || "Sin cliente",
-                  cantidad: t.bajadas * 4,
-                  tipoInsumo: `Pezoneras ${pezoneraNombre}`,
-                  ...s
-                });
-              } else {
-                // Look for components that match the maintenance type name
-                const relatedComponents = t.tambo_componentes?.filter((tc: any) => 
-                  s.tipo.toLowerCase().includes(tc.componentes.nombre.toLowerCase()) ||
-                  tc.componentes.nombre.toLowerCase().includes(s.tipo.toLowerCase()) ||
-                  s.tipo.toLowerCase().includes(tc.componentes.tipo.toLowerCase())
-                );
+              const allPossibleSupplies = [...supplies, ...insumos];
+              
+              // Find supplies that match the maintenance type name
+              const matchingSupplies = allPossibleSupplies.filter(sup => {
+                const supName = sup.nombre.toLowerCase();
+                const typeName = s.tipo.toLowerCase();
+                
+                return typeName.includes(supName) || 
+                       supName.includes(typeName) ||
+                       (typeName.includes("pezonera") && supName.includes("pezonera"));
+              });
 
-                if (relatedComponents && relatedComponents.length > 0) {
-                  relatedComponents.forEach((tc: any) => {
-                    const qty = calculateComponentQuantity(tc.componentes, t, tc.cantidad_manual);
-                    results.push({
-                      tamboId: t.id,
-                      tamboNombre: t.nombre,
-                      clienteNombre: t.clientes?.nombre || "Sin cliente",
-                      cantidad: qty,
-                      tipoInsumo: tc.componentes.nombre,
-                      ...s
-                    });
-                  });
-                } else {
-                  // Fallback for types without explicit components in catalog
+              if (matchingSupplies.length > 0) {
+                matchingSupplies.forEach(sup => {
                   results.push({
                     tamboId: t.id,
                     tamboNombre: t.nombre,
                     clienteNombre: t.clientes?.nombre || "Sin cliente",
-                    cantidad: 1,
-                    tipoInsumo: s.tipo,
+                    cantidad: sup.cantidad,
+                    tipoInsumo: sup.nombre,
                     ...s
                   });
-                }
+                });
+              } else {
+                // Fallback for types without direct component match
+                results.push({
+                  tamboId: t.id,
+                  tamboNombre: t.nombre,
+                  clienteNombre: t.clientes?.nombre || "Sin cliente",
+                  cantidad: 1,
+                  tipoInsumo: s.tipo,
+                  ...s
+                });
               }
             }
           });

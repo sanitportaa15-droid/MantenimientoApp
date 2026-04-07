@@ -84,7 +84,7 @@ export default function UpcomingPlannerPage() {
                 tamboNombre: tambo.nombre,
                 clienteNombre: tambo.clientes?.nombre || "Sin cliente",
                 tipo: "Insumo",
-                insumo: `Pezoneras ${ficha?.marca_pezoneras || tambo.marca_pezonera || ""}`,
+                insumo: tambo.insumos?.nombre || "Pezoneras",
                 cantidad: bajadas * 4,
                 fechaEstimada: nextDate,
                 diasRestantes,

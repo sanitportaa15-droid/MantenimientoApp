@@ -8,13 +8,12 @@ import {
   Settings2,
   Info
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { db } from "../services/db";
 import { Tambo, Cliente, FichaTecnica } from "../types/supabase";
+import FichaTecnicaModal from "../components/FichaTecnicaModal";
 import { cn } from "../utils/ui";
 
 export default function TechnicalSheetsPage() {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [tambos, setTambos] = useState<(Tambo & { clienteNombre: string, ficha?: FichaTecnica | null })[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -54,7 +53,8 @@ export default function TechnicalSheetsPage() {
   );
 
   const handleEditFicha = (tamboId: string) => {
-    navigate(`/tambos/editar/${tamboId}`);
+    setSelectedTamboId(tamboId);
+    setIsModalOpen(true);
   };
 
   if (loading) {
@@ -126,9 +126,7 @@ export default function TechnicalSheetsPage() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-500">Pezoneras:</span>
-                    <span className="font-medium text-zinc-300 truncate max-w-[150px]">
-                      {(tambo.ficha as any)?.pezoneras?.nombre || tambo.ficha.tipo_pezoneras || "N/A"}
-                    </span>
+                    <span className="font-medium text-zinc-300 truncate max-w-[150px]">{tambo.insumos?.nombre || "N/A"}</span>
                   </div>
                 </div>
               ) : (
@@ -157,6 +155,20 @@ export default function TechnicalSheetsPage() {
         </div>
       )}
 
+      {isModalOpen && selectedTamboId && (
+        <FichaTecnicaModal
+          tamboId={selectedTamboId}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedTamboId(null);
+          }}
+          onSuccess={() => {
+            setIsModalOpen(false);
+            setSelectedTamboId(null);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

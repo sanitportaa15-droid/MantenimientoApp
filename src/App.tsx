@@ -15,14 +15,16 @@ import TechnicalAnalysisPage from "./pages/TechnicalAnalysisPage";
 import TamboTechnicalAnalysisPage from "./pages/TamboTechnicalAnalysisPage";
 import MaintenanceStatusPage from "./pages/MaintenanceStatusPage";
 import UpcomingPage from "./pages/UpcomingPage";
+import InsumosPage from "./pages/InsumosPage";
 import { db } from "./services/db";
 
 export default function App() {
   useEffect(() => {
     // Seed default configurations on app load
     db.configuracion.seed().catch(console.error);
-    db.pezoneras.seed().catch(console.error);
-    db.componentes.seed().catch(console.error);
+    db.insumos.seed().then(() => {
+      db.insumos.migratePezoneras().catch(console.error);
+    }).catch(console.error);
   }, []);
 
   return (
@@ -37,6 +39,7 @@ export default function App() {
           <Route path="/tambos/nuevo" element={<NewTamboPage />} />
           <Route path="/tambos/editar/:id" element={<NewTamboPage />} />
           <Route path="/tambos/:id" element={<TamboDetailPage />} />
+          <Route path="/insumos" element={<InsumosPage />} />
           <Route path="/reclamos" element={<ReclamosPage />} />
           <Route path="/reclamos/nuevo" element={<NewReclamoPage />} />
           <Route path="/reclamos/editar/:id" element={<NewReclamoPage />} />
