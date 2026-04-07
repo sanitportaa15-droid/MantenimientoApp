@@ -47,6 +47,8 @@ export interface Database {
           bajadas: number
           ordenes_por_dia: number
           marca_pezonera: string | null
+          pezonera_id: string | null
+          tiene_brazos_extractores: boolean
           fecha_ultimo_cambio: string | null
           created_at: string
         }
@@ -58,6 +60,8 @@ export interface Database {
           bajadas?: number
           ordenes_por_dia?: number
           marca_pezonera?: string | null
+          pezonera_id?: string | null
+          tiene_brazos_extractores?: boolean
           fecha_ultimo_cambio?: string | null
           created_at?: string
         }
@@ -69,6 +73,8 @@ export interface Database {
           bajadas?: number
           ordenes_por_dia?: number
           marca_pezonera?: string | null
+          pezonera_id?: string | null
+          tiene_brazos_extractores?: boolean
           fecha_ultimo_cambio?: string | null
           created_at?: string
         }
@@ -232,23 +238,52 @@ export interface Database {
       componentes: {
         Row: {
           id: string
+          nombre: string
+          tipo: string | null
+          usa_bajadas: boolean
+          cantidad_por_bajada: number
+          usa_cantidad_manual: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          tipo?: string | null
+          usa_bajadas?: boolean
+          cantidad_por_bajada?: number
+          usa_cantidad_manual?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          tipo?: string | null
+          usa_bajadas?: boolean
+          cantidad_por_bajada?: number
+          usa_cantidad_manual?: boolean
+          created_at?: string
+        }
+      }
+      tambo_componentes: {
+        Row: {
+          id: string
           tambo_id: string
-          tipo: string
-          cantidad: number
+          componente_id: string
+          cantidad_manual: number | null
           created_at: string
         }
         Insert: {
           id?: string
           tambo_id: string
-          tipo: string
-          cantidad: number
+          componente_id: string
+          cantidad_manual?: number | null
           created_at?: string
         }
         Update: {
           id?: string
           tambo_id?: string
-          tipo?: string
-          cantidad?: number
+          componente_id?: string
+          cantidad_manual?: number | null
           created_at?: string
         }
       }
@@ -264,6 +299,7 @@ export interface Database {
           tipo_bomba_vacio: string | null
           tipo_equipo: string | null
           observaciones: string | null
+          pezonera_id: string | null
           cantidad_pulsadores: number | null
           usa_sello: boolean | null
           usa_turbina: boolean | null
@@ -282,6 +318,7 @@ export interface Database {
           tipo_bomba_vacio?: string | null
           tipo_equipo?: string | null
           observaciones?: string | null
+          pezonera_id?: string | null
           cantidad_pulsadores?: number | null
           usa_sello?: boolean | null
           usa_turbina?: boolean | null
@@ -300,6 +337,7 @@ export interface Database {
           tipo_bomba_vacio?: string | null
           tipo_equipo?: string | null
           observaciones?: string | null
+          pezonera_id?: string | null
           cantidad_pulsadores?: number | null
           usa_sello?: boolean | null
           usa_turbina?: boolean | null
@@ -389,6 +427,26 @@ export interface Database {
           created_at?: string
         }
       }
+      pezoneras: {
+        Row: {
+          id: string
+          nombre: string
+          marca: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          marca?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          marca?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -405,6 +463,8 @@ export type EstadoReclamo = Database['public']['Tables']['estados_reclamo']['Row
 export type Insumo = Database['public']['Tables']['insumos']['Row'];
 export type FichaTecnica = Database['public']['Tables']['ficha_tecnica']['Row'];
 export type Componente = Database['public']['Tables']['componentes']['Row'];
+export type TamboComponente = Database['public']['Tables']['tambo_componentes']['Row'];
+export type Pezonera = Database['public']['Tables']['pezoneras']['Row'];
 
 export enum ReclamoEstado {
   PENDIENTE = "Pendiente",

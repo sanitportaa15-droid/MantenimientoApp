@@ -158,3 +158,31 @@ export function getReliabilityStatus(score: number): { label: string, color: str
   if (score >= 70) return { label: "Atención", color: "text-amber-400" };
   return { label: "Crítico", color: "text-red-400" };
 }
+
+export function calculateComponentQuantity(
+  componente: any,
+  tambo: Tambo,
+  cantidadManual?: number
+): number {
+  if (!componente) return 0;
+
+  // Special case: Pulsadores
+  if (componente.nombre.toLowerCase().includes("pulsador")) {
+    return tambo.tiene_brazos_extractores ? tambo.bajadas * 2 : tambo.bajadas;
+  }
+
+  // Special case: Pezoneras (usually 4 per bajada)
+  if (componente.nombre.toLowerCase().includes("pezonera")) {
+    return tambo.bajadas * 4;
+  }
+
+  if (componente.usa_bajadas) {
+    return tambo.bajadas * (componente.cantidad_por_bajada || 0);
+  }
+
+  if (componente.usa_cantidad_manual) {
+    return cantidadManual || 0;
+  }
+
+  return 0;
+}

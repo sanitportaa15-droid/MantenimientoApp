@@ -10,7 +10,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { db } from "../services/db";
-import { calculateMaintenanceStatus, MaintenanceStatus } from "../utils/calculations";
+import { calculateMaintenanceStatus, MaintenanceStatus, calculateComponentQuantity } from "../utils/calculations";
 import { format, addDays, isWithinInterval, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn, formatDate } from "../utils/ui";
@@ -39,12 +39,11 @@ export default function UpcomingPage() {
     async function loadInitialData() {
       try {
         setLoading(true);
-        const [tambosData, configsData, maintTypesData, allMantenimientos, allComponentes] = await Promise.all([
+        const [tambosData, configsData, maintTypesData, allMantenimientos] = await Promise.all([
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
           db.tipos_mantenimiento.getAll(),
-          db.mantenimientos.getAll(),
-          db.componentes.getAll ? db.componentes.getAll() : db.componentes.getByTambo("") // Fallback if getAll doesn't exist yet, but I should add it
+          db.mantenimientos.getAll()
         ]);
 
         const today = new Date();
@@ -63,17 +62,7 @@ export default function UpcomingPage() {
 
         for (const t of tambosData) {
           const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
-          const ficha = Array.isArray(t.ficha_tecnica) ? t.ficha_tecnica[0] : t.ficha_tecnica;
-          const tamboComponentes = allComponentes.filter((c: any) => c.tambo_id === t.id);
           
-          const technicalData = {
-            ...t,
-            vacas_en_ordene: ficha?.vacas_en_ordene || t.vacas_en_ordene || 0,
-            bajadas: ficha?.bajadas || t.bajadas || 1,
-            ordenes_por_dia: ficha?.ordenes_por_dia || t.ordenes_por_dia || 0,
-            marca_pezonera: ficha?.marca_pezoneras || t.marca_pezonera || "Sin definir"
-          };
-
           const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
           let activeTypesNames: string[] = maintTypesData.map(type => type.nombre);
           if (activeConfig) {
@@ -85,87 +74,54 @@ export default function UpcomingPage() {
           }
 
           const activeTypesObjects = maintTypesData.filter(type => activeTypesNames.includes(type.nombre));
-          const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configsData, activeTypesObjects);
+          const statuses = calculateMaintenanceStatus(t, mantenimientos, configsData, activeTypesObjects);
 
           statuses.forEach(s => {
             if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {
+              // Find components related to this maintenance type
+              // For now, we'll use a simple mapping or look into tambo_componentes
+              
               if (s.tipo === "Cambio de pezoneras") {
+                const pezoneraNombre = t.pezoneras?.nombre || "Sin definir";
                 results.push({
                   tamboId: t.id,
                   tamboNombre: t.nombre,
                   clienteNombre: t.clientes?.nombre || "Sin cliente",
-                  cantidad: (ficha?.bajadas || t.bajadas || 0) * 4,
-                  tipoInsumo: `Pezoneras ${ficha?.tipo_pezoneras || t.marca_pezonera || "Sin definir"}`,
+                  cantidad: t.bajadas * 4,
+                  tipoInsumo: `Pezoneras ${pezoneraNombre}`,
                   ...s
                 });
-              } else if (s.tipo.toLowerCase().includes("pulsador")) {
-                results.push({
-                  tamboId: t.id,
-                  tamboNombre: t.nombre,
-                  clienteNombre: t.clientes?.nombre || "Sin cliente",
-                  cantidad: ficha?.cantidad_pulsadores || 0,
-                  tipoInsumo: `Kit Pulsador ${ficha?.tipo_pulsadores || ""}`,
-                  ...s
-                });
-              } else if (s.tipo.toLowerCase().includes("bomba de leche")) {
-                let added = false;
-                if (ficha?.usa_sello) {
-                  results.push({
-                    tamboId: t.id,
-                    tamboNombre: t.nombre,
-                    clienteNombre: t.clientes?.nombre || "Sin cliente",
-                    cantidad: 1,
-                    tipoInsumo: `Sello Mecánico (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
-                    ...s
-                  });
-                  added = true;
-                }
-                if (ficha?.usa_turbina) {
-                  results.push({
-                    tamboId: t.id,
-                    tamboNombre: t.nombre,
-                    clienteNombre: t.clientes?.nombre || "Sin cliente",
-                    cantidad: 1,
-                    tipoInsumo: `Turbina (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
-                    ...s
-                  });
-                  added = true;
-                }
-                if (ficha?.usa_guarnicion) {
-                  results.push({
-                    tamboId: t.id,
-                    tamboNombre: t.nombre,
-                    clienteNombre: t.clientes?.nombre || "Sin cliente",
-                    cantidad: 1,
-                    tipoInsumo: `Guarnición (${ficha?.tipo_bomba_leche || "Bomba Leche"})`,
-                    ...s
-                  });
-                  added = true;
-                }
-                if (!added) {
-                  results.push({
-                    tamboId: t.id,
-                    tamboNombre: t.nombre,
-                    clienteNombre: t.clientes?.nombre || "Sin cliente",
-                    cantidad: 1,
-                    tipoInsumo: `Mantenimiento ${ficha?.tipo_bomba_leche || "Bomba Leche"}`,
-                    ...s
-                  });
-                }
               } else {
-                const matchingComp = tamboComponentes.find((c: any) => 
-                  s.tipo.toLowerCase().includes(c.tipo.toLowerCase()) || 
-                  c.tipo.toLowerCase().includes(s.tipo.toLowerCase())
+                // Look for components that match the maintenance type name
+                const relatedComponents = t.tambo_componentes?.filter((tc: any) => 
+                  s.tipo.toLowerCase().includes(tc.componentes.nombre.toLowerCase()) ||
+                  tc.componentes.nombre.toLowerCase().includes(s.tipo.toLowerCase()) ||
+                  s.tipo.toLowerCase().includes(tc.componentes.tipo.toLowerCase())
                 );
 
-                results.push({
-                  tamboId: t.id,
-                  tamboNombre: t.nombre,
-                  clienteNombre: t.clientes?.nombre || "Sin cliente",
-                  cantidad: matchingComp ? matchingComp.cantidad : 1,
-                  tipoInsumo: matchingComp ? `Kit/Repuesto ${matchingComp.tipo}` : s.tipo,
-                  ...s
-                });
+                if (relatedComponents && relatedComponents.length > 0) {
+                  relatedComponents.forEach((tc: any) => {
+                    const qty = calculateComponentQuantity(tc.componentes, t, tc.cantidad_manual);
+                    results.push({
+                      tamboId: t.id,
+                      tamboNombre: t.nombre,
+                      clienteNombre: t.clientes?.nombre || "Sin cliente",
+                      cantidad: qty,
+                      tipoInsumo: tc.componentes.nombre,
+                      ...s
+                    });
+                  });
+                } else {
+                  // Fallback for types without explicit components in catalog
+                  results.push({
+                    tamboId: t.id,
+                    tamboNombre: t.nombre,
+                    clienteNombre: t.clientes?.nombre || "Sin cliente",
+                    cantidad: 1,
+                    tipoInsumo: s.tipo,
+                    ...s
+                  });
+                }
               }
             }
           });

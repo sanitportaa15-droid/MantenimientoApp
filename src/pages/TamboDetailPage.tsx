@@ -21,8 +21,8 @@ import {
   Wrench
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente } from "../types/supabase";
-import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus } from "../utils/calculations";
+import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, Pezonera, TamboComponente } from "../types/supabase";
+import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus, calculateComponentQuantity } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -33,10 +33,11 @@ export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null }) | null>(null);
+  const [tambo, setTambo] = useState<any>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [reclamos, setReclamos] = useState<Reclamo[]>([]);
-  const [componentes, setComponentes] = useState<Componente[]>([]);
+  const [catalogComponentes, setCatalogComponentes] = useState<Componente[]>([]);
+  const [pezoneras, setPezoneras] = useState<Pezonera[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
   const [allMaintTypes, setAllMaintTypes] = useState<TipoMantenimiento[]>([]);
   const [activeTypes, setActiveTypes] = useState<string[]>([]);
@@ -48,12 +49,7 @@ export default function TamboDetailPage() {
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
 
   // Technical Sheet Form State
-  const [fichaForm, setFichaForm] = useState<Partial<FichaTecnica & { bajadas: number, vacas_en_ordene: number, ordenes_por_dia: number }>>({});
   const [isSavingFicha, setIsSavingFicha] = useState(false);
-  const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldValue, setNewFieldValue] = useState("");
-  const [newCompTipo, setNewCompTipo] = useState("");
-  const [newCompCantidad, setNewCompCantidad] = useState(0);
 
   useEffect(() => {
     if (id) loadData();
@@ -81,14 +77,15 @@ export default function TamboDetailPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, componentesData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, catalogComponentesData, pezonerasData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
         db.tambos.getMantenimientosActivos(id!),
         db.reclamos.getByTambo(id!, !showResolvedReclamos),
         db.tipos_mantenimiento.getAll(),
-        db.componentes.getByTambo(id!)
+        db.componentes.getAll(),
+        db.pezoneras.getAll()
       ]);
       
       setTambo(tamboData);
@@ -97,47 +94,8 @@ export default function TamboDetailPage() {
       setActiveTypes(activeTypesNames);
       setReclamos(reclamosData);
       setAllMaintTypes(allMaintTypesData);
-      setComponentes(componentesData);
-
-      // Handle ficha_tecnica as single object or first element of array
-      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
-
-      // Auto-create technical sheet if it doesn't exist
-      if (!ficha) {
-        try {
-          const newFicha = await db.ficha_tecnica.create({
-            tambo_id: id!,
-            marca_pezoneras: tamboData.marca_pezonera,
-            bajadas: tamboData.bajadas
-          });
-          setTambo({ ...tamboData, ficha_tecnica: newFicha });
-          setFichaForm({
-            ...newFicha,
-            bajadas: tamboData.bajadas,
-            vacas_en_ordene: tamboData.vacas_en_ordene,
-            ordenes_por_dia: tamboData.ordenes_por_dia
-          });
-        } catch (e) {
-          console.error("Error creating auto technical sheet:", e);
-          // Still set ficha form with tambo data even if creation fails
-          setFichaForm({
-            bajadas: tamboData.bajadas,
-            vacas_en_ordene: tamboData.vacas_en_ordene,
-            ordenes_por_dia: tamboData.ordenes_por_dia
-          });
-        }
-      } else {
-        setFichaForm({
-          ...ficha,
-          bajadas: ficha.bajadas || tamboData.bajadas,
-          vacas_en_ordene: ficha.vacas_en_ordene || tamboData.vacas_en_ordene,
-          ordenes_por_dia: ficha.ordenes_por_dia || tamboData.ordenes_por_dia,
-          usa_sello: ficha.usa_sello ?? true,
-          usa_turbina: ficha.usa_turbina ?? true,
-          usa_guarnicion: ficha.usa_guarnicion ?? true,
-        });
-        setTambo({ ...tamboData, ficha_tecnica: ficha });
-      }
+      setCatalogComponentes(catalogComponentesData);
+      setPezoneras(pezonerasData);
       
       const activeTypesObjects = allMaintTypesData.filter(t => activeTypesNames.includes(t.nombre));
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesObjects);
@@ -148,54 +106,6 @@ export default function TamboDetailPage() {
       setLoading(false);
     }
   }
-
-  const handleAddDynamicField = () => {
-    if (!newFieldName.trim()) return;
-    const currentExtra = (fichaForm.datos_extra as Record<string, any>) || {};
-    setFichaForm({
-      ...fichaForm,
-      datos_extra: {
-        ...currentExtra,
-        [newFieldName]: newFieldValue
-      }
-    });
-    setNewFieldName("");
-    setNewFieldValue("");
-  };
-
-  const handleRemoveDynamicField = (key: string) => {
-    const currentExtra = { ...(fichaForm.datos_extra as Record<string, any>) };
-    delete currentExtra[key];
-    setFichaForm({
-      ...fichaForm,
-      datos_extra: currentExtra
-    });
-  };
-
-  const handleAddComponente = async () => {
-    if (!newCompTipo.trim() || !id) return;
-    try {
-      await db.componentes.createMany([{
-        tambo_id: id,
-        tipo: newCompTipo,
-        cantidad: newCompCantidad
-      }]);
-      setNewCompTipo("");
-      setNewCompCantidad(0);
-      loadData();
-    } catch (error) {
-      console.error("Error adding component:", error);
-    }
-  };
-
-  const handleRemoveComponente = async (compId: string) => {
-    try {
-      await db.componentes.deleteById(compId);
-      loadData();
-    } catch (error) {
-      console.error("Error removing component:", error);
-    }
-  };
 
   const generatePDF = async () => {
     console.log("Iniciando generación de PDF para:", tambo?.nombre);
@@ -407,36 +317,6 @@ export default function TamboDetailPage() {
     { id: "reclamos", label: "Reclamos", icon: ClipboardList },
   ];
 
-  const handleSaveFicha = async () => {
-    if (!tambo?.ficha_tecnica?.id) return;
-    try {
-      setIsSavingFicha(true);
-      
-      // Split data for both tables
-      const { bajadas, vacas_en_ordene, ordenes_por_dia, ...fichaData } = fichaForm;
-      
-      // Update Ficha Técnica
-      const updatedFicha = await db.ficha_tecnica.update(tambo.ficha_tecnica.id, fichaData);
-      
-      // Update Tambo (if values changed)
-      const updatedTambo = await db.tambos.update(tambo.id, {
-        bajadas,
-        vacas_en_ordene,
-        ordenes_por_dia,
-        marca_pezonera: fichaData.marca_pezoneras || undefined
-      });
-
-      setTambo({ ...updatedTambo, clientes: tambo.clientes, ficha_tecnica: updatedFicha });
-      alert("Ficha técnica actualizada correctamente");
-      loadData(); // Reload to update statuses
-    } catch (error) {
-      console.error("Error saving ficha:", error);
-      alert("Error al guardar la ficha técnica");
-    } finally {
-      setIsSavingFicha(false);
-    }
-  };
-
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -570,23 +450,24 @@ export default function TamboDetailPage() {
               </div>
             </div>
 
-            <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
-              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <Info className="text-emerald-400 w-5 h-5" />
-                Detalles Adicionales
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
-                  <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
-                  <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
-                </div>
-                <div className="space-y-4">
-                  <InfoItem label="Marca Pezonera" value={tambo.marca_pezonera || "N/A"} />
-                  <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
-                </div>
-              </div>
-            </div>
+      <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+        <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <Info className="text-emerald-400 w-5 h-5" />
+          Detalles Adicionales
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <InfoItem label="Vacas en ordeñe" value={tambo.vacas_en_ordene.toString()} />
+            <InfoItem label="Bajadas" value={tambo.bajadas.toString()} />
+            <InfoItem label="Ordeñes por día" value={tambo.ordenes_por_dia.toString()} />
+          </div>
+          <div className="space-y-4">
+            <InfoItem label="Modelo Pezonera" value={tambo.pezoneras?.nombre || "N/A"} />
+            <InfoItem label="Brazos Extractores" value={tambo.tiene_brazos_extractores ? "SÍ" : "NO"} />
+            <InfoItem label="Fecha de Alta" value={formatDate(tambo.created_at)} />
+          </div>
+        </div>
+      </div>
           </div>
 
           {/* Sidebar Info */}
@@ -611,288 +492,60 @@ export default function TamboDetailPage() {
       )}
 
       {activeTab === "technical" && (
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-2xl font-bold flex items-center gap-2">
-              <FileText className="text-emerald-400 w-6 h-6" />
-              Ficha Técnica del Tambo
-            </h3>
-            <button
-              onClick={handleSaveFicha}
-              disabled={isSavingFicha}
-              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black px-6 py-2 rounded-xl font-bold transition-all"
-            >
-              <Save className="w-4 h-4" />
-              {isSavingFicha ? "Guardando..." : "Guardar cambios"}
-            </button>
-          </div>
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <FileText className="text-emerald-400 w-6 h-6" />
+                Ficha Técnica (Cálculos Automáticos)
+              </h3>
+              <Link 
+                to={`/tambos/editar/${tambo.id}`}
+                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+                Editar Configuración
+              </Link>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Basic Info (Auto-completed) */}
-            <div className="space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Datos de Ordeñe</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bajadas</label>
-                  <input 
-                    type="number"
-                    value={fichaForm.bajadas || 0}
-                    onChange={(e) => setFichaForm({ ...fichaForm, bajadas: parseInt(e.target.value) })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Vacas en Ordeñe</label>
-                  <input 
-                    type="number"
-                    value={fichaForm.vacas_en_ordene || 0}
-                    onChange={(e) => setFichaForm({ ...fichaForm, vacas_en_ordene: parseInt(e.target.value) })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Ordeñes por Día</label>
-                  <input 
-                    type="number"
-                    value={fichaForm.ordenes_por_dia || 0}
-                    onChange={(e) => setFichaForm({ ...fichaForm, ordenes_por_dia: parseInt(e.target.value) })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Bajadas</p>
+                <p className="text-3xl font-bold text-white">{tambo.bajadas}</p>
+              </div>
+              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Pezonera</p>
+                <p className="text-3xl font-bold text-white">{tambo.pezoneras?.nombre || "No definida"}</p>
+              </div>
+              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Brazos Extractores</p>
+                <p className="text-3xl font-bold text-white">{tambo.tiene_brazos_extractores ? "SÍ" : "NO"}</p>
               </div>
             </div>
 
-            {/* Technical Details */}
             <div className="space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Pezoneras</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Pezoneras</label>
-                  <input 
-                    type="text"
-                    value={fichaForm.tipo_pezoneras || ""}
-                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_pezoneras: e.target.value })}
-                    placeholder="Ej: Irlanda, Millennium..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Cantidad (Automática)</label>
-                  <input 
-                    type="number"
-                    value={(fichaForm.bajadas || 0) * 4}
-                    readOnly
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-zinc-500 outline-none cursor-not-allowed"
-                  />
-                  <p className="text-[10px] text-zinc-600 mt-1 italic">Calculado como Bajadas x 4</p>
-                </div>
-              </div>
-
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2 mt-8">Pulsadores</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Pulsadores</label>
-                  <input 
-                    type="text"
-                    value={fichaForm.tipo_pulsadores || ""}
-                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_pulsadores: e.target.value })}
-                    placeholder="Ej: Electrónicos, Neumáticos..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Cantidad de Pulsadores</label>
-                  <input 
-                    type="number"
-                    value={fichaForm.cantidad_pulsadores || 0}
-                    onChange={(e) => setFichaForm({ ...fichaForm, cantidad_pulsadores: parseInt(e.target.value) })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Pumps & Equipment */}
-            <div className="space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Bomba de Leche</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Bomba</label>
-                  <input 
-                    type="text"
-                    value={fichaForm.tipo_bomba_leche || ""}
-                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_bomba_leche: e.target.value })}
-                    placeholder="Ej: Centrífuga 1HP..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Insumos Asociados</p>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input 
-                      type="checkbox"
-                      checked={fichaForm.usa_sello ?? true}
-                      onChange={(e) => setFichaForm({ ...fichaForm, usa_sello: e.target.checked })}
-                      className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/50"
-                    />
-                    <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">Sello mecánico</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input 
-                      type="checkbox"
-                      checked={fichaForm.usa_turbina ?? true}
-                      onChange={(e) => setFichaForm({ ...fichaForm, usa_turbina: e.target.checked })}
-                      className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/50"
-                    />
-                    <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">Turbina</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input 
-                      type="checkbox"
-                      checked={fichaForm.usa_guarnicion ?? true}
-                      onChange={(e) => setFichaForm({ ...fichaForm, usa_guarnicion: e.target.checked })}
-                      className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500/50"
-                    />
-                    <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">Guarnición</span>
-                  </label>
-                </div>
-              </div>
-
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2 mt-8">Otros Equipos</h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bomba de Vacío</label>
-                  <input 
-                    type="text"
-                    value={fichaForm.tipo_bomba_vacio || ""}
-                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_bomba_vacio: e.target.value })}
-                    placeholder="Ej: 1500 lts/min..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Equipo</label>
-                  <input 
-                    type="text"
-                    value={fichaForm.tipo_equipo || ""}
-                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_equipo: e.target.value })}
-                    placeholder="Ej: Línea Media, Espina de Pescado..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Observations */}
-            <div className="space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Observaciones Técnicas</h4>
-              <div>
-                <textarea 
-                  value={fichaForm.observaciones || ""}
-                  onChange={(e) => setFichaForm({ ...fichaForm, observaciones: e.target.value })}
-                  placeholder="Detalles técnicos adicionales, estado general, recomendaciones..."
-                  rows={8}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Dynamic Fields (JSONB) */}
-            <div className="md:col-span-2 space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Otros Componentes del Equipo</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-white/5 p-6 rounded-2xl border border-white/5">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Componente</label>
-                  <input 
-                    type="text"
-                    value={newCompTipo}
-                    onChange={(e) => setNewCompTipo(e.target.value)}
-                    placeholder="Ej: Motores, Sensores..."
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Cantidad</label>
-                  <input 
-                    type="number"
-                    value={newCompCantidad}
-                    onChange={(e) => setNewCompCantidad(parseInt(e.target.value))}
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <button 
-                  onClick={handleAddComponente}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-black px-4 py-2 rounded-xl font-bold transition-all h-[42px]"
-                >
-                  Agregar Componente
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {componentes.map((comp) => (
-                  <div key={comp.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex justify-between items-center group">
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">{comp.tipo}</p>
-                      <p className="font-semibold">{comp.cantidad} unidades</p>
+              <h4 className="text-lg font-bold border-b border-white/5 pb-2">Componentes e Insumos Calculados</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tambo.tambo_componentes?.map((tc: any) => {
+                  const qty = calculateComponentQuantity(tc.componentes, tambo, tc.cantidad_manual);
+                  return (
+                    <div key={tc.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <div>
+                        <p className="font-bold text-white">{tc.componentes.nombre}</p>
+                        <p className="text-xs text-zinc-500">{tc.componentes.tipo}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-emerald-400 font-mono">{qty}</p>
+                        <p className="text-[10px] text-zinc-600 uppercase font-bold">Unidades</p>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => handleRemoveComponente(comp.id)}
-                      className="p-2 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
+                  );
+                })}
+                {(!tambo.tambo_componentes || tambo.tambo_componentes.length === 0) && (
+                  <div className="col-span-2 py-12 text-center border border-dashed border-white/10 rounded-3xl">
+                    <p className="text-zinc-500 italic">No hay componentes configurados para este tambo.</p>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Dynamic Fields (JSONB) */}
-            <div className="md:col-span-2 space-y-6">
-              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Campos Personalizados</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-white/5 p-6 rounded-2xl border border-white/5">
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Nombre del Campo</label>
-                  <input 
-                    type="text"
-                    value={newFieldName}
-                    onChange={(e) => setNewFieldName(e.target.value)}
-                    placeholder="Ej: Año de instalación"
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Valor</label>
-                  <input 
-                    type="text"
-                    value={newFieldValue}
-                    onChange={(e) => setNewFieldValue(e.target.value)}
-                    placeholder="Ej: 2022"
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
-                  />
-                </div>
-                <button 
-                  onClick={handleAddDynamicField}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-black px-4 py-2 rounded-xl font-bold transition-all h-[42px]"
-                >
-                  Agregar Campo
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {fichaForm.datos_extra && Object.entries(fichaForm.datos_extra as Record<string, any>).map(([key, value]) => (
-                  <div key={key} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex justify-between items-center group">
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">{key}</p>
-                      <p className="font-semibold">{value}</p>
-                    </div>
-                    <button 
-                      onClick={() => handleRemoveDynamicField(key)}
-                      className="p-2 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                )}
               </div>
             </div>
           </div>

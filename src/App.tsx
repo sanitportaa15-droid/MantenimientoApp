@@ -21,6 +21,8 @@ export default function App() {
   useEffect(() => {
     // Seed default configurations on app load
     db.configuracion.seed().catch(console.error);
+    db.pezoneras.seed().catch(console.error);
+    db.componentes.seed().catch(console.error);
   }, []);
 
   return (

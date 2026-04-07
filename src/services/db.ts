@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, Pezonera, TamboComponente } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -54,7 +54,7 @@ export const db = {
   },
   tambos: {
     async getAll() {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(nombre), ficha_tecnica(*)").order("nombre");
+      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(nombre), pezoneras(nombre), tambo_componentes(id, cantidad_manual, componentes(*))").order("nombre");
       if (error) {
         console.error("Error al obtener tambos:", error);
         throw error;
@@ -62,7 +62,7 @@ export const db = {
       return data as any[];
     },
     async getByCliente(clienteId: string) {
-      const { data, error } = await (supabase.from("tambos") as any).select("*").eq("cliente_id", clienteId);
+      const { data, error } = await (supabase.from("tambos") as any).select("*, pezoneras(nombre)").eq("cliente_id", clienteId);
       if (error) {
         console.error("Error al obtener tambos por cliente:", error);
         throw error;
@@ -70,12 +70,12 @@ export const db = {
       return data as Tambo[];
     },
     async getById(id: string) {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(*), ficha_tecnica(*)").eq("id", id).single();
+      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(*), pezoneras(nombre), tambo_componentes(id, cantidad_manual, componentes(*))").eq("id", id).single();
       if (error) {
         console.error("Error al obtener tambo por ID:", error);
         throw error;
       }
-      return data as (Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null });
+      return data as any;
     },
     async create(tambo: Database['public']['Tables']['tambos']['Insert']) {
       const { data, error } = await (supabase.from("tambos") as any).insert(tambo).select().single();
@@ -624,14 +624,14 @@ export const db = {
   ficha_tecnica: {
     async getByTambo(tamboId: string) {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
-        .select("*")
+        .select("*, pezoneras(nombre)")
         .eq("tambo_id", tamboId)
         .maybeSingle();
       if (error) {
         console.error("Error al obtener ficha técnica:", error);
         throw error;
       }
-      return data as FichaTecnica | null;
+      return data as (FichaTecnica & { pezoneras: { nombre: string } | null }) | null;
     },
     async create(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
@@ -668,52 +668,142 @@ export const db = {
       return data as FichaTecnica;
     },
     async getAll() {
-      const { data, error } = await supabase.from("ficha_tecnica").select("*");
+      const { data, error } = await supabase.from("ficha_tecnica").select("*, pezoneras(nombre)");
       if (error) {
         console.error("Error al obtener todas las fichas técnicas:", error);
         throw error;
       }
-      return data as FichaTecnica[];
+      return data as any[];
+    }
+  },
+  pezoneras: {
+    async getAll() {
+      const { data, error } = await supabase.from("pezoneras").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener pezoneras:", error);
+        throw error;
+      }
+      return data as Pezonera[];
+    },
+    async create(pezonera: Database['public']['Tables']['pezoneras']['Insert']) {
+      const { data, error } = await (supabase.from("pezoneras") as any).insert(pezonera).select().single();
+      if (error) {
+        console.error("Error guardando pezonera:", error);
+        throw error;
+      }
+      return data as Pezonera;
+    },
+    async update(id: string, pezonera: Partial<Database['public']['Tables']['pezoneras']['Update']>) {
+      const { data, error } = await (supabase.from("pezoneras") as any).update(pezonera).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando pezonera:", error);
+        throw error;
+      }
+      return data as Pezonera;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("pezoneras").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando pezonera:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaultPezoneras = [
+        { nombre: "Irlanda", marca: "Milkrite" },
+        { nombre: "Millennium", marca: "Milkrite" },
+        { nombre: "PZ3", marca: "Generic" },
+        { nombre: "DeLaval Clover", marca: "DeLaval" },
+        { nombre: "Westfalia", marca: "GEA" }
+      ];
+      const { data: existing } = await supabase.from("pezoneras").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("pezoneras") as any).insert(defaultPezoneras);
+        if (error) console.error("Error al sembrar pezoneras por defecto:", error);
+      }
     }
   },
   componentes: {
-    async getByTambo(tamboId: string) {
-      const { data, error } = await supabase.from("componentes").select("*").eq("tambo_id", tamboId);
+    async getAll() {
+      const { data, error } = await supabase.from("componentes").select("*").order("nombre");
       if (error) {
         console.error("Error al obtener componentes:", error);
         throw error;
       }
       return data as Componente[];
     },
-    async createMany(componentes: Database['public']['Tables']['componentes']['Insert'][]) {
-      const { data, error } = await (supabase.from("componentes") as any).insert(componentes).select();
+    async create(componente: Database['public']['Tables']['componentes']['Insert']) {
+      const { data, error } = await (supabase.from("componentes") as any).insert(componente).select().single();
       if (error) {
-        console.error("Error guardando componentes:", error);
+        console.error("Error guardando componente:", error);
         throw error;
       }
-      return data as Componente[];
+      return data as Componente;
     },
-    async deleteByTambo(tamboId: string) {
-      const { error } = await supabase.from("componentes").delete().eq("tambo_id", tamboId);
+    async update(id: string, componente: Partial<Database['public']['Tables']['componentes']['Update']>) {
+      const { data, error } = await (supabase.from("componentes") as any).update(componente).eq("id", id).select().single();
       if (error) {
-        console.error("Error eliminando componentes:", error);
+        console.error("Error actualizando componente:", error);
         throw error;
       }
+      return data as Componente;
     },
-    async deleteById(id: string) {
+    async delete(id: string) {
       const { error } = await supabase.from("componentes").delete().eq("id", id);
       if (error) {
         console.error("Error eliminando componente:", error);
         throw error;
       }
     },
-    async getAll() {
-      const { data, error } = await supabase.from("componentes").select("*");
+    async seed() {
+      const defaultComponents = [
+        { nombre: "Pezoneras", tipo: "Insumo", usa_bajadas: true, cantidad_por_bajada: 4, usa_cantidad_manual: false },
+        { nombre: "Kit colector", tipo: "Repuesto", usa_bajadas: true, cantidad_por_bajada: 1, usa_cantidad_manual: false },
+        { nombre: "Mangueras de leche", tipo: "Insumo", usa_bajadas: true, cantidad_por_bajada: 1, usa_cantidad_manual: false },
+        { nombre: "Mangueras de pulsado", tipo: "Insumo", usa_bajadas: true, cantidad_por_bajada: 2, usa_cantidad_manual: false },
+        { nombre: "Sogas", tipo: "Insumo", usa_bajadas: true, cantidad_por_bajada: 1, usa_cantidad_manual: false },
+        { nombre: "Bujes", tipo: "Repuesto", usa_bajadas: true, cantidad_por_bajada: 2, usa_cantidad_manual: false },
+        { nombre: "Diafragma", tipo: "Repuesto", usa_bajadas: true, cantidad_por_bajada: 1, usa_cantidad_manual: false },
+        { nombre: "Pulsadores", tipo: "Equipo", usa_bajadas: false, cantidad_por_bajada: 0, usa_cantidad_manual: true },
+        { nombre: "Bomba de vacío", tipo: "Equipo", usa_bajadas: false, cantidad_por_bajada: 0, usa_cantidad_manual: true },
+        { nombre: "Bomba de leche", tipo: "Equipo", usa_bajadas: false, cantidad_por_bajada: 0, usa_cantidad_manual: true },
+      ];
+      
+      const { data: existing } = await supabase.from("componentes").select("nombre");
+      const existingNames = new Set((existing as any[])?.map(c => c.nombre) || []);
+      
+      const toInsert = defaultComponents.filter(c => !existingNames.has(c.nombre));
+      if (toInsert.length > 0) {
+        const { error } = await (supabase.from("componentes") as any).insert(toInsert);
+        if (error) console.error("Error al sembrar componentes por defecto:", error);
+      }
+    }
+  },
+  tambo_componentes: {
+    async getByTambo(tamboId: string) {
+      const { data, error } = await (supabase.from("tambo_componentes") as any)
+        .select("*, componentes(*)")
+        .eq("tambo_id", tamboId);
       if (error) {
-        console.error("Error al obtener todos los componentes:", error);
+        console.error("Error al obtener componentes del tambo:", error);
         throw error;
       }
-      return data as Componente[];
+      return data as any[];
+    },
+    async createMany(items: Database['public']['Tables']['tambo_componentes']['Insert'][]) {
+      const { data, error } = await (supabase.from("tambo_componentes") as any).insert(items).select();
+      if (error) {
+        console.error("Error guardando componentes del tambo:", error);
+        throw error;
+      }
+      return data as TamboComponente[];
+    },
+    async deleteByTambo(tamboId: string) {
+      const { error } = await supabase.from("tambo_componentes").delete().eq("tambo_id", tamboId);
+      if (error) {
+        console.error("Error eliminando componentes del tambo:", error);
+        throw error;
+      }
     }
   }
 };
