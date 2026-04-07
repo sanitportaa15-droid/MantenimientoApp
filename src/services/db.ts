@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Relevo, Insumo, FichaTecnica } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -54,7 +54,7 @@ export const db = {
   },
   tambos: {
     async getAll() {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(nombre)").order("nombre");
+      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(nombre), ficha_tecnica(*)").order("nombre");
       if (error) {
         console.error("Error al obtener tambos:", error);
         throw error;
@@ -70,12 +70,12 @@ export const db = {
       return data as Tambo[];
     },
     async getById(id: string) {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(*)").eq("id", id).single();
+      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(*), ficha_tecnica(*)").eq("id", id).single();
       if (error) {
         console.error("Error al obtener tambo por ID:", error);
         throw error;
       }
-      return data as (Tambo & { clientes: Cliente });
+      return data as (Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null });
     },
     async create(tambo: Database['public']['Tables']['tambos']['Insert']) {
       const { data, error } = await (supabase.from("tambos") as any).insert(tambo).select().single();
@@ -574,6 +574,168 @@ export const db = {
         const { error } = await (supabase.from("estados_reclamo") as any).insert(defaults);
         if (error) console.error("Error al sembrar estados por defecto:", error);
       }
+    }
+  },
+  relevos: {
+    async getByTambo(tamboId: string) {
+      const { data, error } = await (supabase.from("relevos") as any)
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .order("fecha_relevo", { ascending: false });
+      if (error) {
+        console.error("Error al obtener relevos por tambo:", error);
+        throw error;
+      }
+      return data as Relevo[];
+    },
+    async getAllWithDetails() {
+      const { data, error } = await (supabase.from("relevos") as any)
+        .select(`
+          *,
+          tambo:tambos (
+            *,
+            clientes (
+              nombre
+            )
+          )
+        `)
+        .order("fecha_relevo", { ascending: false });
+      if (error) {
+        console.error("Error al obtener todos los relevos con detalles:", error);
+        throw error;
+      }
+      return data as any[];
+    },
+    async getLatestByTambo(tamboId: string) {
+      const { data, error } = await (supabase.from("relevos") as any)
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .order("fecha_relevo", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.error("Error al obtener el último relevo:", error);
+        throw error;
+      }
+      return data as Relevo | null;
+    },
+    async create(relevo: Database['public']['Tables']['relevos']['Insert']) {
+      const { data, error } = await (supabase.from("relevos") as any)
+        .insert(relevo)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error guardando relevo:", error);
+        throw error;
+      }
+      return data as Relevo;
+    },
+    async update(id: string, relevo: Partial<Database['public']['Tables']['relevos']['Update']>) {
+      const { data, error } = await (supabase.from("relevos") as any)
+        .update(relevo)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error actualizando relevo:", error);
+        throw error;
+      }
+      return data as Relevo;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("relevos").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando relevo:", error);
+        throw error;
+      }
+    },
+    subscribeToChanges(callback: () => void) {
+      const subscription = supabase
+        .channel('relevos-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'relevos' }, callback)
+        .subscribe();
+      return subscription;
+    }
+  },
+  insumos: {
+    async getAll() {
+      const { data, error } = await supabase.from("insumos").select("*").order("nombre");
+      if (error) {
+        console.error("Error al obtener insumos:", error);
+        throw error;
+      }
+      return data as Insumo[];
+    },
+    async create(insumo: Database['public']['Tables']['insumos']['Insert']) {
+      const { data, error } = await (supabase.from("insumos") as any).insert(insumo).select().single();
+      if (error) {
+        console.error("Error guardando insumo:", error);
+        throw error;
+      }
+      return data as Insumo;
+    },
+    async update(id: string, insumo: Partial<Database['public']['Tables']['insumos']['Update']>) {
+      const { data, error } = await (supabase.from("insumos") as any).update(insumo).eq("id", id).select().single();
+      if (error) {
+        console.error("Error actualizando insumo:", error);
+        throw error;
+      }
+      return data as Insumo;
+    },
+    async delete(id: string) {
+      const { error } = await supabase.from("insumos").delete().eq("id", id);
+      if (error) {
+        console.error("Error eliminando insumo:", error);
+        throw error;
+      }
+    },
+    async seed() {
+      const defaultInsumos = [
+        { nombre: "Pezonera Irlanda", tipo: "Pezonera", precio_unitario: 1200 },
+        { nombre: "Pezonera PZ3", tipo: "Pezonera", precio_unitario: 1000 },
+        { nombre: "Pezonera Millennium", tipo: "Pezonera", precio_unitario: 1100 },
+      ];
+      const { data: existing } = await supabase.from("insumos").select("nombre");
+      if (existing && existing.length === 0) {
+        const { error } = await (supabase.from("insumos") as any).insert(defaultInsumos);
+        if (error) console.error("Error al sembrar insumos por defecto:", error);
+      }
+    }
+  },
+  ficha_tecnica: {
+    async getByTambo(tamboId: string) {
+      const { data, error } = await (supabase.from("ficha_tecnica") as any)
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .maybeSingle();
+      if (error) {
+        console.error("Error al obtener ficha técnica:", error);
+        throw error;
+      }
+      return data as FichaTecnica | null;
+    },
+    async create(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
+      const { data, error } = await (supabase.from("ficha_tecnica") as any)
+        .insert(ficha)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error guardando ficha técnica:", error);
+        throw error;
+      }
+      return data as FichaTecnica;
+    },
+    async update(id: string, ficha: Partial<Database['public']['Tables']['ficha_tecnica']['Update']>) {
+      const { data, error } = await (supabase.from("ficha_tecnica") as any)
+        .update(ficha)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error actualizando ficha técnica:", error);
+        throw error;
+      }
+      return data as FichaTecnica;
     }
   }
 };

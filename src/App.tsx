@@ -14,6 +14,8 @@ import ConvertReclamoPage from "./pages/ConvertReclamoPage";
 import TechnicalAnalysisPage from "./pages/TechnicalAnalysisPage";
 import TamboTechnicalAnalysisPage from "./pages/TamboTechnicalAnalysisPage";
 import MaintenanceStatusPage from "./pages/MaintenanceStatusPage";
+import UpcomingPage from "./pages/UpcomingPage";
+import RelevosPage from "./pages/RelevosPage";
 import { db } from "./services/db";
 
 export default function App() {
@@ -41,6 +43,8 @@ export default function App() {
           <Route path="/analisis-tecnico" element={<TechnicalAnalysisPage />} />
           <Route path="/analisis-tecnico/:id" element={<TamboTechnicalAnalysisPage />} />
           <Route path="/mantenimientos-estado" element={<MaintenanceStatusPage />} />
+          <Route path="/proximos" element={<UpcomingPage />} />
+          <Route path="/relevos" element={<RelevosPage />} />
           <Route path="/config/tecnica" element={<TechnicalConfigPage />} />
         </Routes>
       </Layout>

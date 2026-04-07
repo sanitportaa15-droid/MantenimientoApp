@@ -10,7 +10,9 @@ import {
   Droplets,
   MessageSquare,
   Terminal,
-  Settings2
+  Settings2,
+  Wrench,
+  Calendar
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -26,7 +28,9 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
     { name: "Clientes", path: "/clientes", icon: Users },
     { name: "Tambos", path: "/tambos", icon: Droplets },
+    { name: "Próximos", path: "/proximos", icon: Calendar },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
+    { name: "Relevos Técnicos", path: "/relevos", icon: Wrench },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 },
   ];

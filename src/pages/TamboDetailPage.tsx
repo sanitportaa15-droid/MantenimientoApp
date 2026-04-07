@@ -17,22 +17,24 @@ import {
   HelpCircle,
   Settings2,
   Info,
-  Activity
+  Activity,
+  Wrench
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento } from "../types/supabase";
+import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, Relevo, FichaTecnica } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import RelevoModal from "../components/RelevoModal";
 
-type TabType = "info" | "history" | "reclamos";
+type TabType = "info" | "history" | "reclamos" | "relevos" | "technical";
 
 export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente }) | null>(null);
+  const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null }) | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
   const [reclamos, setReclamos] = useState<Reclamo[]>([]);
   const [configs, setConfigs] = useState<Configuracion[]>([]);
@@ -42,8 +44,18 @@ export default function TamboDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>("info");
   const [showResolvedReclamos, setShowResolvedReclamos] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRelevoModalOpen, setIsRelevoModalOpen] = useState(false);
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
+  const [relevos, setRelevos] = useState<Relevo[]>([]);
+  const [latestRelevo, setLatestRelevo] = useState<Relevo | null>(null);
+  const [editingRelevo, setEditingRelevo] = useState<Relevo | null>(null);
+
+  // Technical Sheet Form State
+  const [fichaForm, setFichaForm] = useState<Partial<FichaTecnica & { bajadas: number, vacas_en_ordene: number, ordenes_por_dia: number }>>({});
+  const [isSavingFicha, setIsSavingFicha] = useState(false);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldValue, setNewFieldValue] = useState("");
 
   useEffect(() => {
     if (id) loadData();
@@ -61,23 +73,30 @@ export default function TamboDetailPage() {
       if (id) loadData();
     });
 
+    const relevosSubscription = db.relevos.subscribeToChanges(() => {
+      if (id) loadData();
+    });
+
     return () => {
       mantenimientosSubscription.unsubscribe();
       configSubscription.unsubscribe();
       maintTypesSubscription.unsubscribe();
+      relevosSubscription.unsubscribe();
     };
   }, [id, showResolvedReclamos]);
 
   async function loadData() {
     try {
       setLoading(true);
-      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData] = await Promise.all([
+      const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, relevosData, latestRelevoData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
         db.configuracion.getAll(),
         db.tambos.getMantenimientosActivos(id!),
         db.reclamos.getByTambo(id!, !showResolvedReclamos),
-        db.tipos_mantenimiento.getAll()
+        db.tipos_mantenimiento.getAll(),
+        db.relevos.getByTambo(id!),
+        db.relevos.getLatestByTambo(id!)
       ]);
       
       setTambo(tamboData);
@@ -86,6 +105,34 @@ export default function TamboDetailPage() {
       setActiveTypes(activeTypesNames);
       setReclamos(reclamosData);
       setAllMaintTypes(allMaintTypesData);
+      setRelevos(relevosData);
+      setLatestRelevo(latestRelevoData);
+
+      // Auto-create technical sheet if it doesn't exist
+      if (!tamboData.ficha_tecnica) {
+        try {
+          const newFicha = await db.ficha_tecnica.create({
+            tambo_id: id!,
+            marca_pezoneras: tamboData.marca_pezonera
+          });
+          setTambo({ ...tamboData, ficha_tecnica: newFicha });
+          setFichaForm({
+            ...newFicha,
+            bajadas: tamboData.bajadas,
+            vacas_en_ordene: tamboData.vacas_en_ordene,
+            ordenes_por_dia: tamboData.ordenes_por_dia
+          });
+        } catch (e) {
+          console.error("Error creating auto technical sheet:", e);
+        }
+      } else {
+        setFichaForm({
+          ...tamboData.ficha_tecnica,
+          bajadas: tamboData.bajadas,
+          vacas_en_ordene: tamboData.vacas_en_ordene,
+          ordenes_por_dia: tamboData.ordenes_por_dia
+        });
+      }
       
       const activeTypesObjects = allMaintTypesData.filter(t => activeTypesNames.includes(t.nombre));
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesObjects);
@@ -96,6 +143,29 @@ export default function TamboDetailPage() {
       setLoading(false);
     }
   }
+
+  const handleAddDynamicField = () => {
+    if (!newFieldName.trim()) return;
+    const currentExtra = (fichaForm.datos_extra as Record<string, any>) || {};
+    setFichaForm({
+      ...fichaForm,
+      datos_extra: {
+        ...currentExtra,
+        [newFieldName]: newFieldValue
+      }
+    });
+    setNewFieldName("");
+    setNewFieldValue("");
+  };
+
+  const handleRemoveDynamicField = (key: string) => {
+    const currentExtra = { ...(fichaForm.datos_extra as Record<string, any>) };
+    delete currentExtra[key];
+    setFichaForm({
+      ...fichaForm,
+      datos_extra: currentExtra
+    });
+  };
 
   const generatePDF = async () => {
     console.log("Iniciando generación de PDF para:", tambo?.nombre);
@@ -302,9 +372,41 @@ export default function TamboDetailPage() {
 
   const tabs = [
     { id: "info", label: "Información", icon: Info },
+    { id: "technical", label: "Ficha Técnica", icon: FileText },
     { id: "history", label: "Historial", icon: History },
     { id: "reclamos", label: "Reclamos", icon: ClipboardList },
+    { id: "relevos", label: "Relevos Técnicos", icon: Wrench },
   ];
+
+  const handleSaveFicha = async () => {
+    if (!tambo?.ficha_tecnica?.id) return;
+    try {
+      setIsSavingFicha(true);
+      
+      // Split data for both tables
+      const { bajadas, vacas_en_ordene, ordenes_por_dia, ...fichaData } = fichaForm;
+      
+      // Update Ficha Técnica
+      const updatedFicha = await db.ficha_tecnica.update(tambo.ficha_tecnica.id, fichaData);
+      
+      // Update Tambo (if values changed)
+      const updatedTambo = await db.tambos.update(tambo.id, {
+        bajadas,
+        vacas_en_ordene,
+        ordenes_por_dia,
+        marca_pezonera: fichaData.marca_pezoneras || undefined
+      });
+
+      setTambo({ ...updatedTambo, clientes: tambo.clientes, ficha_tecnica: updatedFicha });
+      alert("Ficha técnica actualizada correctamente");
+      loadData(); // Reload to update statuses
+    } catch (error) {
+      console.error("Error saving ficha:", error);
+      alert("Error al guardar la ficha técnica");
+    } finally {
+      setIsSavingFicha(false);
+    }
+  };
 
   return (
     <div className="space-y-8 pb-20">
@@ -350,6 +452,16 @@ export default function TamboDetailPage() {
             <Plus className="w-4 h-4" />
             Registrar Mantenimiento
           </button>
+          <button 
+            onClick={() => {
+              setEditingRelevo(null);
+              setIsRelevoModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-semibold border border-white/10 transition-colors"
+          >
+            <Wrench className="w-4 h-4" />
+            Nuevo Relevo Técnico
+          </button>
         </div>
       </div>
 
@@ -379,6 +491,47 @@ export default function TamboDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           {/* Technical Status Panel */}
           <div className="lg:col-span-2 space-y-6">
+            {latestRelevo && (
+              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-3xl p-6 md:p-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    <Wrench className="text-emerald-400 w-5 h-5" />
+                    Último Relevo Técnico
+                  </h3>
+                  <span className="text-xs font-bold text-emerald-500/60 uppercase tracking-widest">
+                    {formatDate(latestRelevo.fecha_relevo)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">Equipo</p>
+                    <p className="text-sm font-semibold">{latestRelevo.tipo_equipo || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">Marca</p>
+                    <p className="text-sm font-semibold">{latestRelevo.marca_equipo || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">Pezoneras</p>
+                    <p className="text-sm font-semibold">{latestRelevo.tipo_pezoneras || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">Pulsadores</p>
+                    <p className="text-sm font-semibold">{latestRelevo.tipo_pulsadores || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">Bajadas</p>
+                    <p className="text-sm font-semibold">{latestRelevo.bajadas || "N/A"}</p>
+                  </div>
+                </div>
+                {latestRelevo.observaciones && (
+                  <div className="mt-4 pt-4 border-t border-emerald-500/10">
+                    <p className="text-xs text-zinc-400 italic">"{latestRelevo.observaciones}"</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold flex items-center gap-2">
@@ -474,6 +627,199 @@ export default function TamboDetailPage() {
                   <p className="text-sm text-zinc-400 leading-relaxed">{tambo.clientes.observaciones}</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "technical" && (
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-2xl font-bold flex items-center gap-2">
+              <FileText className="text-emerald-400 w-6 h-6" />
+              Ficha Técnica del Tambo
+            </h3>
+            <button
+              onClick={handleSaveFicha}
+              disabled={isSavingFicha}
+              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black px-6 py-2 rounded-xl font-bold transition-all"
+            >
+              <Save className="w-4 h-4" />
+              {isSavingFicha ? "Guardando..." : "Guardar cambios"}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Basic Info (Auto-completed) */}
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Datos de Ordeñe</h4>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bajadas</label>
+                  <input 
+                    type="number"
+                    value={fichaForm.bajadas || 0}
+                    onChange={(e) => setFichaForm({ ...fichaForm, bajadas: parseInt(e.target.value) })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Vacas en Ordeñe</label>
+                  <input 
+                    type="number"
+                    value={fichaForm.vacas_en_ordene || 0}
+                    onChange={(e) => setFichaForm({ ...fichaForm, vacas_en_ordene: parseInt(e.target.value) })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Ordeñes por Día</label>
+                  <input 
+                    type="number"
+                    value={fichaForm.ordenes_por_dia || 0}
+                    onChange={(e) => setFichaForm({ ...fichaForm, ordenes_por_dia: parseInt(e.target.value) })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Details */}
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Especificaciones Técnicas</h4>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Pezoneras</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.tipo_pezoneras || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_pezoneras: e.target.value })}
+                    placeholder="Ej: Irlanda, Millennium..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Marca de Pezoneras</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.marca_pezoneras || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, marca_pezoneras: e.target.value })}
+                    placeholder="Ej: Milkrite, DeLaval..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Pulsadores</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.tipo_pulsadores || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_pulsadores: e.target.value })}
+                    placeholder="Ej: Electrónicos, Neumáticos..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Pumps & Equipment */}
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Bombas y Equipo</h4>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bomba de Leche</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.tipo_bomba_leche || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_bomba_leche: e.target.value })}
+                    placeholder="Ej: Centrífuga 1HP..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bomba de Vacío</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.tipo_bomba_vacio || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_bomba_vacio: e.target.value })}
+                    placeholder="Ej: 1500 lts/min..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Tipo de Equipo</label>
+                  <input 
+                    type="text"
+                    value={fichaForm.tipo_equipo || ""}
+                    onChange={(e) => setFichaForm({ ...fichaForm, tipo_equipo: e.target.value })}
+                    placeholder="Ej: Línea Media, Espina de Pescado..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Observations */}
+            <div className="space-y-6">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Observaciones Técnicas</h4>
+              <div>
+                <textarea 
+                  value={fichaForm.observaciones || ""}
+                  onChange={(e) => setFichaForm({ ...fichaForm, observaciones: e.target.value })}
+                  placeholder="Detalles técnicos adicionales, estado general, recomendaciones..."
+                  rows={8}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-emerald-500/50 outline-none transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Dynamic Fields (JSONB) */}
+            <div className="md:col-span-2 space-y-6">
+              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-2">Campos Personalizados</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-white/5 p-6 rounded-2xl border border-white/5">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Nombre del Campo</label>
+                  <input 
+                    type="text"
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                    placeholder="Ej: Año de instalación"
+                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Valor</label>
+                  <input 
+                    type="text"
+                    value={newFieldValue}
+                    onChange={(e) => setNewFieldValue(e.target.value)}
+                    placeholder="Ej: 2022"
+                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-2 focus:border-emerald-500/50 outline-none transition-all"
+                  />
+                </div>
+                <button 
+                  onClick={handleAddDynamicField}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-black px-4 py-2 rounded-xl font-bold transition-all h-[42px]"
+                >
+                  Agregar Campo
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {fichaForm.datos_extra && Object.entries(fichaForm.datos_extra as Record<string, any>).map(([key, value]) => (
+                  <div key={key} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex justify-between items-center group">
+                    <div>
+                      <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">{key}</p>
+                      <p className="font-semibold">{value}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleRemoveDynamicField(key)}
+                      className="p-2 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -592,6 +938,90 @@ export default function TamboDetailPage() {
         </div>
       )}
 
+      {activeTab === "relevos" && (
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <Wrench className="text-emerald-400 w-5 h-5" />
+              Historial de Relevos Técnicos
+            </h3>
+            <button 
+              onClick={() => {
+                setEditingRelevo(null);
+                setIsRelevoModalOpen(true);
+              }}
+              className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Relevo Técnico
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Fecha</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pezoneras</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pulsadores</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Bajadas</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Equipo</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Observaciones</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {relevos.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-zinc-500 italic">No hay relevos técnicos registrados.</td>
+                  </tr>
+                ) : (
+                  relevos.map((r) => (
+                    <tr key={r.id} className="group hover:bg-white/5 transition-colors">
+                      <td className="py-4 text-sm font-mono">{formatDate(r.fecha_relevo)}</td>
+                      <td className="py-4 text-sm">{r.tipo_pezoneras || "-"}</td>
+                      <td className="py-4 text-sm">{r.tipo_pulsadores || "-"}</td>
+                      <td className="py-4 text-sm font-mono">{r.bajadas || "-"}</td>
+                      <td className="py-4 text-sm">
+                        <div className="flex flex-col">
+                          <span className="font-medium">{r.tipo_equipo || "-"}</span>
+                          <span className="text-[10px] text-zinc-500">{r.marca_equipo}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 text-sm text-zinc-400 max-w-xs">
+                        <div className="space-y-1">
+                          {r.observaciones && <p className="truncate">{r.observaciones}</p>}
+                          {r.datos_extra && Array.isArray(r.datos_extra) && r.datos_extra.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {r.datos_extra.map((f: any, i: number) => (
+                                <span key={i} className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                  {f.label}: {f.value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 text-right">
+                        <button 
+                          onClick={() => {
+                            setEditingRelevo(r);
+                            setIsRelevoModalOpen(true);
+                          }}
+                          className="p-2 hover:bg-white/10 rounded-lg transition-colors text-zinc-500 hover:text-white"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {isModalOpen && (
         <MaintenanceModal 
           tamboId={tambo.id} 
@@ -601,6 +1031,22 @@ export default function TamboDetailPage() {
             setIsModalOpen(false);
             loadData();
           }} 
+        />
+      )}
+
+      {isRelevoModalOpen && (
+        <RelevoModal
+          tamboId={tambo.id}
+          relevo={editingRelevo}
+          onClose={() => {
+            setIsRelevoModalOpen(false);
+            setEditingRelevo(null);
+          }}
+          onSuccess={() => {
+            setIsRelevoModalOpen(false);
+            setEditingRelevo(null);
+            loadData();
+          }}
         />
       )}
 

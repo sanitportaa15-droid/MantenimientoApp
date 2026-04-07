@@ -206,6 +206,120 @@ export interface Database {
           created_at?: string
         }
       }
+      insumos: {
+        Row: {
+          id: string
+          nombre: string
+          tipo: string
+          precio_unitario: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          tipo: string
+          precio_unitario: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          tipo?: string
+          precio_unitario?: number
+          created_at?: string
+        }
+      }
+      ficha_tecnica: {
+        Row: {
+          id: string
+          tambo_id: string
+          bajadas: number | null
+          tipo_pezoneras: string | null
+          marca_pezoneras: string | null
+          tipo_pulsadores: string | null
+          tipo_bomba_leche: string | null
+          tipo_bomba_vacio: string | null
+          tipo_equipo: string | null
+          observaciones: string | null
+          datos_extra: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id: string
+          bajadas?: number | null
+          tipo_pezoneras?: string | null
+          marca_pezoneras?: string | null
+          tipo_pulsadores?: string | null
+          tipo_bomba_leche?: string | null
+          tipo_bomba_vacio?: string | null
+          tipo_equipo?: string | null
+          observaciones?: string | null
+          datos_extra?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string
+          bajadas?: number | null
+          tipo_pezoneras?: string | null
+          marca_pezoneras?: string | null
+          tipo_pulsadores?: string | null
+          tipo_bomba_leche?: string | null
+          tipo_bomba_vacio?: string | null
+          tipo_equipo?: string | null
+          observaciones?: string | null
+          datos_extra?: Json | null
+          created_at?: string
+        }
+      }
+      relevos: {
+        Row: {
+          id: string
+          tambo_id: string
+          tipo_pezoneras: string | null
+          tipo_pulsadores: string | null
+          tipo_equipo: string | null
+          marca_equipo: string | null
+          bajadas: number | null
+          vacas_en_ordene: number | null
+          ordenes_por_dia: number | null
+          observaciones: string | null
+          fecha_relevo: string
+          datos_extra: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id: string
+          tipo_pezoneras?: string | null
+          tipo_pulsadores?: string | null
+          tipo_equipo?: string | null
+          marca_equipo?: string | null
+          bajadas?: number | null
+          vacas_en_ordene?: number | null
+          ordenes_por_dia?: number | null
+          observaciones?: string | null
+          fecha_relevo?: string
+          datos_extra?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string
+          tipo_pezoneras?: string | null
+          tipo_pulsadores?: string | null
+          tipo_equipo?: string | null
+          marca_equipo?: string | null
+          bajadas?: number | null
+          vacas_en_ordene?: number | null
+          ordenes_por_dia?: number | null
+          observaciones?: string | null
+          fecha_relevo?: string
+          datos_extra?: Json | null
+          created_at?: string
+        }
+      }
       prioridades_reclamo: {
         Row: {
           id: string
@@ -253,6 +367,9 @@ export type TipoReparacion = Database['public']['Tables']['tipos_reparacion']['R
 export type TipoMantenimiento = Database['public']['Tables']['tipos_mantenimiento']['Row'];
 export type PrioridadReclamo = Database['public']['Tables']['prioridades_reclamo']['Row'];
 export type EstadoReclamo = Database['public']['Tables']['estados_reclamo']['Row'];
+export type Relevo = Database['public']['Tables']['relevos']['Row'];
+export type Insumo = Database['public']['Tables']['insumos']['Row'];
+export type FichaTecnica = Database['public']['Tables']['ficha_tecnica']['Row'];
 
 export enum ReclamoEstado {
   PENDIENTE = "Pendiente",
