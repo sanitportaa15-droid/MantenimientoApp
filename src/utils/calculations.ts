@@ -25,7 +25,11 @@ export function calculateInsumos(
     insumos?: Insumo | null,
     bomba_leche_tiene_sello?: boolean | null,
     bomba_leche_tiene_diafragma?: boolean | null,
-    bomba_leche_tiene_turbina?: boolean | null
+    bomba_leche_tiene_turbina?: boolean | null,
+    usa_sogas?: boolean | null,
+    usa_diafragmas_brazos?: boolean | null,
+    usa_bujes?: boolean | null,
+    usa_colector_leche?: boolean | null
   },
   tamboInsumos: (TamboInsumo & { insumos: Insumo })[]
 ): InsumoCalculado[] {
@@ -77,6 +81,16 @@ export function calculateInsumos(
     };
   });
 
+  // Asegurar que Pulsadores estén en la lista si no fueron agregados manualmente
+  const hasPulsadores = results.some(r => r.nombre.toLowerCase().includes("pulsador"));
+  if (!hasPulsadores) {
+    results.push({
+      nombre: 'Pulsadores',
+      cantidad: tieneBrazos ? bajadas * 2 : bajadas,
+      tipo: 'equipo'
+    });
+  }
+
   // Agregar componentes de bomba de leche si aplica
   if (tambo.bomba_leche_tiene_sello) {
     results.push({ nombre: 'Sello bomba de leche', cantidad: 1, tipo: 'repuesto' });
@@ -86,6 +100,20 @@ export function calculateInsumos(
   }
   if (tambo.bomba_leche_tiene_turbina) {
     results.push({ nombre: 'Turbina bomba de leche', cantidad: 1, tipo: 'repuesto' });
+  }
+
+  // Agregar nuevos insumos automáticos por bajada
+  if (tambo.usa_sogas) {
+    results.push({ nombre: 'Sogas', cantidad: bajadas, tipo: 'repuesto' });
+  }
+  if (tambo.usa_diafragmas_brazos) {
+    results.push({ nombre: 'Diafragma de brazos', cantidad: bajadas, tipo: 'repuesto' });
+  }
+  if (tambo.usa_bujes) {
+    results.push({ nombre: 'Bujes', cantidad: bajadas, tipo: 'repuesto' });
+  }
+  if (tambo.usa_colector_leche) {
+    results.push({ nombre: 'Kit colector de leche', cantidad: bajadas, tipo: 'repuesto' });
   }
 
   return results;

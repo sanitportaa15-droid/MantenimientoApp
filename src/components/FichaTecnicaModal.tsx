@@ -30,6 +30,10 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
     bomba_vacio_marca: "",
     bomba_vacio_polea: "",
     bomba_vacio_vueltas: "",
+    usa_sogas: false,
+    usa_diafragmas_brazos: false,
+    usa_bujes: false,
+    usa_colector_leche: false,
     tipo_equipo: "",
     observaciones: "",
     datos_extra: {}
@@ -376,17 +380,59 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
               <div className="p-1.5 bg-emerald-500/10 rounded-lg">
                 <Settings className="w-4 h-4 text-emerald-400" />
               </div>
-              <h4 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Pulsadores</h4>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Pulsadores e Insumos por Bajada</h4>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Tipo de Pulsadores</label>
-              <input
-                type="text"
-                value={ficha.tipo_pulsadores || ""}
-                onChange={(e) => setFicha({ ...ficha, tipo_pulsadores: e.target.value })}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors text-sm"
-                placeholder="Ej: Electrónicos"
-              />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Tipo de Pulsadores</label>
+                <input
+                  type="text"
+                  value={ficha.tipo_pulsadores || ""}
+                  onChange={(e) => setFicha({ ...ficha, tipo_pulsadores: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors text-sm"
+                  placeholder="Ej: Electrónicos"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.usa_sogas || false}
+                    onChange={(e) => setFicha({ ...ficha, usa_sogas: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Sogas</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.usa_diafragmas_brazos || false}
+                    onChange={(e) => setFicha({ ...ficha, usa_diafragmas_brazos: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Diaf. Brazos</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.usa_bujes || false}
+                    onChange={(e) => setFicha({ ...ficha, usa_bujes: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Bujes</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.usa_colector_leche || false}
+                    onChange={(e) => setFicha({ ...ficha, usa_colector_leche: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Colector</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -451,71 +497,6 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
               })}
               {tamboComponentes.length === 0 && (
                 <p className="text-center py-4 text-zinc-600 text-sm italic border border-dashed border-white/5 rounded-2xl">No hay componentes registrados.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Insumos Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-emerald-400" />
-                <h4 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Insumos del Tambo</h4>
-              </div>
-              <button
-                type="button"
-                onClick={addInsumo}
-                className="flex items-center gap-2 text-xs font-bold bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                Agregar insumo
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {tamboInsumos.map((ti, index) => {
-                const catalogInsumo = catalogInsumos.find(i => i.id === ti.insumo_id);
-                return (
-                  <div key={index} className="flex gap-3 items-start animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex-1 space-y-1">
-                      <select
-                        value={ti.insumo_id}
-                        onChange={(e) => updateTamboInsumo(index, 'insumo_id', e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500/50 transition-colors appearance-none"
-                      >
-                        {catalogInsumos.map(i => (
-                          <option key={i.id} value={i.id} className="bg-[#0f0f0f]">{i.nombre}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {catalogInsumo?.usa_cantidad_manual && (
-                      <div className="w-24 space-y-1">
-                        <input
-                          type="number"
-                          value={ti.cantidad_manual}
-                          onChange={(e) => updateTamboInsumo(index, 'cantidad_manual', parseInt(e.target.value) || 0)}
-                          placeholder="Cant."
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
-                        />
-                      </div>
-                    )}
-                    {!catalogInsumo?.usa_cantidad_manual && (
-                      <div className="w-24 flex items-center justify-center h-10 text-xs text-zinc-500 font-mono">
-                        Auto
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeTamboInsumo(index)}
-                      className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
-              {tamboInsumos.length === 0 && (
-                <p className="text-center py-4 text-zinc-600 text-sm italic border border-dashed border-white/5 rounded-2xl">No hay insumos registrados.</p>
               )}
             </div>
           </div>

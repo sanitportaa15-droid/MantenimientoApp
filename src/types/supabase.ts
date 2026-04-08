@@ -334,6 +334,10 @@ export interface Database {
           bomba_vacio_marca: string | null
           bomba_vacio_polea: string | null
           bomba_vacio_vueltas: string | null
+          usa_sogas: boolean | null
+          usa_diafragmas_brazos: boolean | null
+          usa_bujes: boolean | null
+          usa_colector_leche: boolean | null
           datos_extra: Json | null
           created_at: string
         }
@@ -357,6 +361,10 @@ export interface Database {
           bomba_vacio_marca?: string | null
           bomba_vacio_polea?: string | null
           bomba_vacio_vueltas?: string | null
+          usa_sogas?: boolean | null
+          usa_diafragmas_brazos?: boolean | null
+          usa_bujes?: boolean | null
+          usa_colector_leche?: boolean | null
           datos_extra?: Json | null
           created_at?: string
         }
@@ -380,6 +388,10 @@ export interface Database {
           bomba_vacio_marca?: string | null
           bomba_vacio_polea?: string | null
           bomba_vacio_vueltas?: string | null
+          usa_sogas?: boolean | null
+          usa_diafragmas_brazos?: boolean | null
+          usa_bujes?: boolean | null
+          usa_colector_leche?: boolean | null
           datos_extra?: Json | null
           created_at?: string
         }

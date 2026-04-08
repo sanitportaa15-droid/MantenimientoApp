@@ -115,7 +115,11 @@ export default function TamboDetailPage() {
         bajadas: ficha?.bajadas || tamboData.bajadas || 1,
         bomba_leche_tiene_sello: ficha?.bomba_leche_tiene_sello || false,
         bomba_leche_tiene_diafragma: ficha?.bomba_leche_tiene_diafragma || false,
-        bomba_leche_tiene_turbina: ficha?.bomba_leche_tiene_turbina || false
+        bomba_leche_tiene_turbina: ficha?.bomba_leche_tiene_turbina || false,
+        usa_sogas: ficha?.usa_sogas || false,
+        usa_diafragmas_brazos: ficha?.usa_diafragmas_brazos || false,
+        usa_bujes: ficha?.usa_bujes || false,
+        usa_colector_leche: ficha?.usa_colector_leche || false
       };
 
       const supplies = calculateSupplies(technicalData, tamboCompsData);

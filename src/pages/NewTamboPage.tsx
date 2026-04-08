@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { db } from "../services/db";
 import { Cliente, TipoMantenimiento, Insumo } from "../types/supabase";
-import { ArrowLeft, Save, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, Plus } from "lucide-react";
 import { cn } from "../utils/ui";
 
 export default function NewTamboPage() {
@@ -93,6 +93,25 @@ export default function NewTamboPage() {
       alert("Error al guardar el tambo.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddPezonera() {
+    const nombre = prompt("Ingrese el nombre de la nueva pezonera:");
+    if (!nombre) return;
+
+    try {
+      const newPezonera = await db.insumos.create({
+        nombre,
+        tipo: 'consumible',
+        usa_brazos: true,
+        cantidad_por_bajada: 4
+      });
+      setPezoneras(prev => [...prev, newPezonera]);
+      setFormData(prev => ({ ...prev, pezonera_id: newPezonera.id }));
+    } catch (error) {
+      console.error("Error creating pezonera:", error);
+      alert("Error al crear la pezonera. Asegúrese de que el nombre no esté duplicado.");
     }
   }
 
@@ -189,7 +208,17 @@ export default function NewTamboPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Pezonera (Catálogo) *</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Pezonera (Catálogo) *</label>
+                <button
+                  type="button"
+                  onClick={handleAddPezonera}
+                  className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  NUEVA
+                </button>
+              </div>
               <select
                 required
                 value={formData.pezonera_id}

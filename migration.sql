@@ -133,15 +133,28 @@ ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_marca TEXT;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_polea TEXT;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_vueltas TEXT;
 
--- 11) Seed data para componentes de bomba de leche
+-- 11) Campos para Insumos Automáticos por Bajada
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_sogas BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_diafragmas_brazos BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_bujes BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_colector_leche BOOLEAN DEFAULT FALSE;
+
+-- 12) Seed data para componentes y nuevos insumos
 INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_bajada) VALUES
 ('Sello bomba de leche', 'repuesto', false, 0),
 ('Diafragma bomba de leche', 'repuesto', false, 0),
-('Turbina bomba de leche', 'repuesto', false, 0)
-ON CONFLICT (nombre) DO NOTHING;
+('Turbina bomba de leche', 'repuesto', false, 0),
+('Sogas', 'repuesto', false, 1),
+('Diafragma de brazos', 'repuesto', true, 1),
+('Bujes', 'repuesto', false, 1),
+('Kit colector de leche', 'repuesto', false, 1)
+ON CONFLICT (nombre) DO UPDATE SET 
+  cantidad_por_bajada = EXCLUDED.cantidad_por_bajada,
+  usa_brazos = EXCLUDED.usa_brazos;
 
 INSERT INTO tipos_mantenimiento (nombre, frecuencia_meses, descripcion) VALUES 
 ('Cambio de Pezoneras', 6, 'Reemplazo preventivo de pezoneras'),
 ('Service Pulsadores', 12, 'Mantenimiento anual de pulsadores'),
-('Cambio de Aceite Bomba', 3, 'Mantenimiento de bomba de vacío')
+('Cambio de Aceite Bomba', 3, 'Mantenimiento de bomba de vacío'),
+('Service Bomba de Leche', 12, 'Mantenimiento anual de bomba de leche')
 ON CONFLICT (nombre) DO NOTHING;
