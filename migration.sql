@@ -138,6 +138,7 @@ ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_sogas BOOLEAN DEFAULT FAL
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_diafragmas_brazos BOOLEAN DEFAULT FALSE;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_bujes BOOLEAN DEFAULT FALSE;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS usa_colector_leche BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS colector_marca TEXT;
 
 -- 12) Seed data para componentes y nuevos insumos
 INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_bajada) VALUES

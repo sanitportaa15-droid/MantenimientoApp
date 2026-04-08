@@ -81,7 +81,10 @@ export default function UpcomingPage() {
             usa_sogas: ficha?.usa_sogas || false,
             usa_diafragmas_brazos: ficha?.usa_diafragmas_brazos || false,
             usa_bujes: ficha?.usa_bujes || false,
-            usa_colector_leche: ficha?.usa_colector_leche || false
+            usa_colector_leche: ficha?.usa_colector_leche || false,
+            colector_marca: ficha?.colector_marca || "",
+            tipo_pulsadores: ficha?.tipo_pulsadores || "",
+            bomba_leche_marca: ficha?.bomba_leche_marca || ""
           };
 
           const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
@@ -113,8 +116,8 @@ export default function UpcomingPage() {
                 // Reglas de coincidencia mejoradas
                 if (typeName.includes("pezonera") && supName.includes("pezonera")) return true;
                 if (typeName.includes("pulsador") && (supName.includes("pulsador") || supName.includes("soga") || supName.includes("diafragma") || supName.includes("buje"))) return true;
-                if (typeName.includes("bomba") && (supName.includes("bomba") || supName.includes("aceite"))) return true;
-                if (typeName.includes("equipo") && (supName.includes("colector") || supName.includes("buje"))) return true;
+                if (typeName.includes("bomba") && (supName.includes("bomba") || supName.includes("aceite") || supName.includes("sello") || supName.includes("diafragma") || supName.includes("turbina"))) return true;
+                if (typeName.includes("equipo") && (supName.includes("colector") || supName.includes("buje") || supName.includes("soga") || supName.includes("diafragma"))) return true;
                 
                 return typeName.includes(supName) || supName.includes(typeName);
               });

@@ -29,7 +29,10 @@ export function calculateInsumos(
     usa_sogas?: boolean | null,
     usa_diafragmas_brazos?: boolean | null,
     usa_bujes?: boolean | null,
-    usa_colector_leche?: boolean | null
+    usa_colector_leche?: boolean | null,
+    colector_marca?: string | null,
+    tipo_pulsadores?: string | null,
+    bomba_leche_marca?: string | null
   },
   tamboInsumos: (TamboInsumo & { insumos: Insumo })[]
 ): InsumoCalculado[] {
@@ -85,7 +88,7 @@ export function calculateInsumos(
   const hasPulsadores = results.some(r => r.nombre.toLowerCase().includes("pulsador"));
   if (!hasPulsadores) {
     results.push({
-      nombre: 'Pulsadores',
+      nombre: `Pulsadores ${tambo.tipo_pulsadores || ''}`.trim(),
       cantidad: tieneBrazos ? bajadas * 2 : bajadas,
       tipo: 'equipo'
     });
@@ -93,13 +96,13 @@ export function calculateInsumos(
 
   // Agregar componentes de bomba de leche si aplica
   if (tambo.bomba_leche_tiene_sello) {
-    results.push({ nombre: 'Sello bomba de leche', cantidad: 1, tipo: 'repuesto' });
+    results.push({ nombre: `Sello bomba de leche ${tambo.bomba_leche_marca || ''}`.trim(), cantidad: 1, tipo: 'repuesto' });
   }
   if (tambo.bomba_leche_tiene_diafragma) {
-    results.push({ nombre: 'Diafragma bomba de leche', cantidad: 1, tipo: 'repuesto' });
+    results.push({ nombre: `Diafragma bomba de leche ${tambo.bomba_leche_marca || ''}`.trim(), cantidad: 1, tipo: 'repuesto' });
   }
   if (tambo.bomba_leche_tiene_turbina) {
-    results.push({ nombre: 'Turbina bomba de leche', cantidad: 1, tipo: 'repuesto' });
+    results.push({ nombre: `Turbina bomba de leche ${tambo.bomba_leche_marca || ''}`.trim(), cantidad: 1, tipo: 'repuesto' });
   }
 
   // Agregar nuevos insumos automáticos por bajada
@@ -113,7 +116,8 @@ export function calculateInsumos(
     results.push({ nombre: 'Bujes', cantidad: bajadas, tipo: 'repuesto' });
   }
   if (tambo.usa_colector_leche) {
-    results.push({ nombre: 'Kit colector de leche', cantidad: bajadas, tipo: 'repuesto' });
+    const colectorName = tambo.colector_marca ? `Kit colector de leche ${tambo.colector_marca}` : 'Kit colector de leche';
+    results.push({ nombre: colectorName, cantidad: bajadas, tipo: 'repuesto' });
   }
 
   return results;

@@ -338,6 +338,7 @@ export interface Database {
           usa_diafragmas_brazos: boolean | null
           usa_bujes: boolean | null
           usa_colector_leche: boolean | null
+          colector_marca: string | null
           datos_extra: Json | null
           created_at: string
         }
@@ -365,6 +366,7 @@ export interface Database {
           usa_diafragmas_brazos?: boolean | null
           usa_bujes?: boolean | null
           usa_colector_leche?: boolean | null
+          colector_marca?: string | null
           datos_extra?: Json | null
           created_at?: string
         }
@@ -392,6 +394,7 @@ export interface Database {
           usa_diafragmas_brazos?: boolean | null
           usa_bujes?: boolean | null
           usa_colector_leche?: boolean | null
+          colector_marca?: string | null
           datos_extra?: Json | null
           created_at?: string
         }

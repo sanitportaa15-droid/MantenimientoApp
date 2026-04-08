@@ -119,7 +119,10 @@ export default function TamboDetailPage() {
         usa_sogas: ficha?.usa_sogas || false,
         usa_diafragmas_brazos: ficha?.usa_diafragmas_brazos || false,
         usa_bujes: ficha?.usa_bujes || false,
-        usa_colector_leche: ficha?.usa_colector_leche || false
+        usa_colector_leche: ficha?.usa_colector_leche || false,
+        colector_marca: ficha?.colector_marca || "",
+        tipo_pulsadores: ficha?.tipo_pulsadores || "",
+        bomba_leche_marca: ficha?.bomba_leche_marca || ""
       };
 
       const supplies = calculateSupplies(technicalData, tamboCompsData);
@@ -160,6 +163,9 @@ export default function TamboDetailPage() {
           usa_sello: ficha.usa_sello ?? true,
           usa_turbina: ficha.usa_turbina ?? true,
           usa_guarnicion: ficha.usa_guarnicion ?? true,
+          colector_marca: ficha.colector_marca || "",
+          tipo_pulsadores: ficha.tipo_pulsadores || "",
+          bomba_leche_marca: ficha.bomba_leche_marca || ""
         });
         setTambo({ ...tamboData, ficha_tecnica: ficha });
       }

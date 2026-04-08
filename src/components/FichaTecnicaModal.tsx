@@ -34,6 +34,7 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
     usa_diafragmas_brazos: false,
     usa_bujes: false,
     usa_colector_leche: false,
+    colector_marca: "",
     tipo_equipo: "",
     observaciones: "",
     datos_extra: {}
@@ -423,16 +424,40 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
                   />
                   <span className="text-[10px] font-bold uppercase">Bujes</span>
                 </label>
-                <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={ficha.usa_colector_leche || false}
-                    onChange={(e) => setFicha({ ...ficha, usa_colector_leche: e.target.checked })}
-                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <span className="text-[10px] font-bold uppercase">Colector</span>
-                </label>
               </div>
+            </div>
+          </div>
+
+          {/* Colector Section */}
+          <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-purple-500/10 rounded-lg">
+                <Package className="w-4 h-4 text-purple-400" />
+              </div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-purple-400">Colector de Leche</h4>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Marca/Modelo Colector</label>
+                <input
+                  type="text"
+                  value={ficha.colector_marca || ""}
+                  onChange={(e) => setFicha({ ...ficha, colector_marca: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/50 transition-colors text-sm"
+                  placeholder="Ej: Westfalia 300cc"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors self-end">
+                <input
+                  type="checkbox"
+                  checked={ficha.usa_colector_leche || false}
+                  onChange={(e) => setFicha({ ...ficha, usa_colector_leche: e.target.checked })}
+                  className="w-4 h-4 rounded border-white/10 bg-white/5 text-purple-500 focus:ring-purple-500"
+                />
+                <span className="text-[10px] font-bold uppercase">Incluir en cálculo automático</span>
+              </label>
             </div>
           </div>
 
