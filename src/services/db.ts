@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, Pezonera, TamboComponente, TamboInsumo } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -237,7 +237,7 @@ export const db = {
     },
     async seed() {
       const defaultConfigs = [
-        { clave: "pezonera_max_ordenes", valor: "2500", descripcion: "Máximo de ordeñes para pezoneras" },
+        { clave: "pezonera_max_ordenes", valor: "3200", descripcion: "Máximo de ordeñes para pezoneras" },
         { clave: "mangueras_leche_meses", valor: "12", descripcion: "Meses para mangueras de leche" },
         { clave: "mangueras_pulsado_meses", valor: "12", descripcion: "Meses para mangueras de pulsado" },
         { clave: "pulsadores_meses", valor: "6", descripcion: "Meses para pulsadores" },
@@ -651,6 +651,13 @@ export const db = {
     },
     async migratePezoneras() {
       try {
+        // Check if pezoneras table exists first
+        const { error: tableCheckError } = await supabase.from("pezoneras").select("id").limit(1);
+        if (tableCheckError && tableCheckError.message.includes("does not exist")) {
+          console.log("Tabla pezoneras no existe, saltando migración");
+          return;
+        }
+
         // 1. Get all from pezoneras table
         const { data: oldPezoneras } = await supabase.from("pezoneras").select("*");
         if (!oldPezoneras || oldPezoneras.length === 0) return;

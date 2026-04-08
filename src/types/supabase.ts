@@ -290,26 +290,6 @@ export interface Database {
           created_at?: string
         }
       }
-      pezoneras: {
-        Row: {
-          id: string
-          nombre: string
-          marca: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          nombre: string
-          marca?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          nombre?: string
-          marca?: string | null
-          created_at?: string
-        }
-      }
       tambo_componentes: {
         Row: {
           id: string
@@ -338,8 +318,6 @@ export interface Database {
           id: string
           tambo_id: string
           bajadas: number | null
-          tipo_pezoneras: string | null
-          marca_pezoneras: string | null
           tipo_pulsadores: string | null
           tipo_bomba_leche: string | null
           tipo_bomba_vacio: string | null
@@ -356,8 +334,6 @@ export interface Database {
           id?: string
           tambo_id: string
           bajadas?: number | null
-          tipo_pezoneras?: string | null
-          marca_pezoneras?: string | null
           tipo_pulsadores?: string | null
           tipo_bomba_leche?: string | null
           tipo_bomba_vacio?: string | null
@@ -374,8 +350,6 @@ export interface Database {
           id?: string
           tambo_id?: string
           bajadas?: number | null
-          tipo_pezoneras?: string | null
-          marca_pezoneras?: string | null
           tipo_pulsadores?: string | null
           tipo_bomba_leche?: string | null
           tipo_bomba_vacio?: string | null
@@ -393,7 +367,6 @@ export interface Database {
         Row: {
           id: string
           tambo_id: string
-          tipo_pezoneras: string | null
           tipo_pulsadores: string | null
           tipo_equipo: string | null
           marca_equipo: string | null
@@ -408,7 +381,6 @@ export interface Database {
         Insert: {
           id?: string
           tambo_id: string
-          tipo_pezoneras?: string | null
           tipo_pulsadores?: string | null
           tipo_equipo?: string | null
           marca_equipo?: string | null
@@ -423,7 +395,6 @@ export interface Database {
         Update: {
           id?: string
           tambo_id?: string
-          tipo_pezoneras?: string | null
           tipo_pulsadores?: string | null
           tipo_equipo?: string | null
           marca_equipo?: string | null
@@ -487,7 +458,6 @@ export type Insumo = Database['public']['Tables']['insumos']['Row'];
 export type TamboInsumo = Database['public']['Tables']['tambo_insumos']['Row'];
 export type FichaTecnica = Database['public']['Tables']['ficha_tecnica']['Row'];
 export type Componente = Database['public']['Tables']['componentes']['Row'];
-export type Pezonera = Database['public']['Tables']['pezoneras']['Row'];
 export type TamboComponente = Database['public']['Tables']['tambo_componentes']['Row'];
 
 export enum ReclamoEstado {

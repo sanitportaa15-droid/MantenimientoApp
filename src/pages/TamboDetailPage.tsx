@@ -22,7 +22,7 @@ import {
   Package
 } from "lucide-react";
 import { db } from "../services/db";
-import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, Pezonera, TamboComponente, TamboInsumo, Insumo } from "../types/supabase";
+import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, TamboComponente, TamboInsumo, Insumo } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus, calculateSupplies, calculateInsumos, InsumoCalculado } from "../utils/calculations";
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
@@ -122,7 +122,6 @@ export default function TamboDetailPage() {
         try {
           const newFicha = await db.ficha_tecnica.create({
             tambo_id: id!,
-            marca_pezoneras: tamboData.insumos?.nombre || "",
             bajadas: tamboData.bajadas
           });
           setTambo({ ...tamboData, ficha_tecnica: newFicha });

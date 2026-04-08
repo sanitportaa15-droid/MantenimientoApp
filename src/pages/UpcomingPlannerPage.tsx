@@ -33,7 +33,7 @@ interface UpcomingNeed {
 
 export default function UpcomingPlannerPage() {
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<30 | 60 | 90>(30);
+  const [period, setPeriod] = useState<"30" | "60" | "next_month">("30");
   const [needs, setNeeds] = useState<UpcomingNeed[]>([]);
   const [groupedNeeds, setGroupedNeeds] = useState<{ insumo: string, total: number }[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,11 +51,20 @@ export default function UpcomingPlannerPage() {
       ]);
 
       const fichasMap = new Map(fichas.map(f => [f.tambo_id, f]));
-      const pezoneraMaxOrdenes = parseInt(configs.find(c => c.clave === "pezonera_max_ordenes")?.valor || "2500");
+      const pezoneraMaxOrdenes = parseInt(configs.find(c => c.clave === "pezonera_max_ordenes")?.valor || "3200");
       
       const upcomingNeeds: UpcomingNeed[] = [];
       const now = new Date();
-      const limitDate = addDays(now, period);
+      
+      let interval: { start: Date; end: Date };
+      if (period === "30") {
+        interval = { start: now, end: addDays(now, 30) };
+      } else if (period === "60") {
+        interval = { start: now, end: addDays(now, 60) };
+      } else {
+        const nextMonth = addMonths(now, 1);
+        interval = { start: startOfMonth(nextMonth), end: endOfMonth(nextMonth) };
+      }
 
       for (const tambo of tambos) {
         const ficha = fichasMap.get(tambo.id);
@@ -77,7 +86,7 @@ export default function UpcomingPlannerPage() {
             const diasDuracion = pezoneraMaxOrdenes / ordenesDiarias;
             const nextDate = addDays(lastDate, Math.floor(diasDuracion));
 
-            if (isBefore(nextDate, limitDate)) {
+            if (isAfter(nextDate, interval.start) && isBefore(nextDate, interval.end)) {
               const diasRestantes = differenceInDays(nextDate, now);
               upcomingNeeds.push({
                 tamboId: tambo.id,
@@ -107,7 +116,7 @@ export default function UpcomingPlannerPage() {
             const lastDate = parseISO(lastMaint.fecha);
             const nextDate = addMonths(lastDate, tipo.frecuencia_meses);
 
-            if (isBefore(nextDate, limitDate)) {
+            if (isAfter(nextDate, interval.start) && isBefore(nextDate, interval.end)) {
               const diasRestantes = differenceInDays(nextDate, now);
               upcomingNeeds.push({
                 tamboId: tambo.id,
@@ -211,12 +220,12 @@ export default function UpcomingPlannerPage() {
         <div className="flex gap-2">
           <select
             value={period}
-            onChange={(e) => setPeriod(parseInt(e.target.value) as any)}
+            onChange={(e) => setPeriod(e.target.value as any)}
             className="bg-[#0f0f0f] border border-white/5 rounded-2xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-emerald-500/50 transition-all appearance-none min-w-[160px]"
           >
-            <option value={30}>Próximos 30 días</option>
-            <option value={60}>Próximos 60 días</option>
-            <option value={90}>Próximos 90 días</option>
+            <option value="30">Próximos 30 días</option>
+            <option value="60">Próximos 60 días</option>
+            <option value="next_month">Próximo mes</option>
           </select>
 
           <select
@@ -301,7 +310,7 @@ export default function UpcomingPlannerPage() {
             </div>
             <h4 className="text-xl font-bold text-zinc-400 mb-2">No hay necesidades detectadas</h4>
             <p className="text-zinc-600 max-w-md mx-auto">
-              No se encontraron insumos o mantenimientos que requieran atención en los próximos {period} días.
+              No se encontraron insumos o mantenimientos que requieran atención en el período seleccionado.
             </p>
           </div>
         )}
