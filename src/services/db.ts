@@ -633,15 +633,15 @@ export const db = {
     },
     async seed() {
       const defaultInsumos = [
-        { nombre: "Pezoneras Irlanda", tipo: "consumible", usa_brazos: true, cantidad_por_brazo: 2 },
-        { nombre: "Pezoneras PZ3", tipo: "consumible", usa_brazos: true, cantidad_por_brazo: 2 },
-        { nombre: "Pezoneras Millennium", tipo: "consumible", usa_brazos: true, cantidad_por_brazo: 2 },
-        { nombre: "Pulsadores", tipo: "equipo", usa_brazos: true, cantidad_por_brazo: 1 },
-        { nombre: "Kit colector de leche", tipo: "repuesto", usa_brazos: true, cantidad_por_brazo: 1 },
-        { nombre: "Mangueras de leche", tipo: "repuesto", usa_brazos: true, cantidad_por_brazo: 1 },
-        { nombre: "Sogas", tipo: "repuesto", usa_brazos: true, cantidad_por_brazo: 1 },
-        { nombre: "Bujes", tipo: "repuesto", usa_brazos: true, cantidad_por_brazo: 1 },
-        { nombre: "Diafragma de brazos", tipo: "repuesto", usa_brazos: true, cantidad_por_brazo: 1 }
+        { nombre: "Pezoneras Irlanda", tipo: "consumible", usa_brazos: true, cantidad_por_bajada: 4 },
+        { nombre: "Pezoneras PZ3", tipo: "consumible", usa_brazos: true, cantidad_por_bajada: 4 },
+        { nombre: "Pezoneras Millennium", tipo: "consumible", usa_brazos: true, cantidad_por_bajada: 4 },
+        { nombre: "Pulsadores", tipo: "equipo", usa_brazos: true, cantidad_por_bajada: 1 },
+        { nombre: "Kit colector de leche", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 },
+        { nombre: "Mangueras de leche", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 },
+        { nombre: "Sogas", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 },
+        { nombre: "Bujes", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 },
+        { nombre: "Diafragma de brazos", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 }
       ];
       const { data: existing } = await supabase.from("insumos").select("nombre");
       if (existing && existing.length === 0) {
@@ -675,7 +675,7 @@ export const db = {
               nombre,
               tipo: "consumible",
               usa_brazos: true,
-              cantidad_por_brazo: 2
+              cantidad_por_bajada: 4
             });
           }
         }

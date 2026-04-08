@@ -15,9 +15,11 @@ import {
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, FichaTecnica, TipoMantenimiento, Configuracion } from "../types/supabase";
-import { format, addDays, isBefore, isAfter, differenceInDays, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
+import { format, addDays, isBefore, isAfter, differenceInDays, parseISO, startOfMonth, endOfMonth, addMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "../utils/ui";
+import { calculateMaintenanceStatus, calculateSupplies, calculateInsumos } from "../utils/calculations";
+import { supabase } from "../services/supabase";
 
 interface UpcomingNeed {
   tamboId: string;
@@ -42,12 +44,14 @@ export default function UpcomingPlannerPage() {
   async function calculateUpcoming() {
     setLoading(true);
     try {
-      const [tambos, fichas, mantenimientos, tiposMantenimiento, configs] = await Promise.all([
+      const [tambos, fichas, mantenimientos, tiposMantenimiento, configs, allTamboComponentes, allTamboInsumos] = await Promise.all([
         db.tambos.getAll(),
         db.ficha_tecnica.getAll(),
         db.mantenimientos.getAll(),
         db.tipos_mantenimiento.getAll(),
-        db.configuracion.getAllWithHidden()
+        db.configuracion.getAllWithHidden(),
+        db.tambo_componentes.getAll(),
+        supabase.from("tambo_insumos").select("*, insumos(*)").then(res => res.data || [])
       ]);
 
       const fichasMap = new Map(fichas.map(f => [f.tambo_id, f]));
@@ -67,71 +71,77 @@ export default function UpcomingPlannerPage() {
       }
 
       for (const tambo of tambos) {
-        const ficha = fichasMap.get(tambo.id);
         const tamboMantenimientos = mantenimientos.filter(m => m.tambo_id === tambo.id);
+        const tamboComps = allTamboComponentes.filter((tc: any) => tc.tambo_id === tambo.id);
+        const tamboIns = allTamboInsumos.filter((ti: any) => ti.tambo_id === tambo.id);
 
-        // 1. Calculate Pezoneras
-        const lastPezoneraChange = tamboMantenimientos
-          .filter(m => m.tipo.toLowerCase().includes("pezonera"))
-          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+        const ficha = fichasMap.get(tambo.id);
+        const technicalData = {
+          ...tambo,
+          vacas_en_ordene: tambo.vacas_en_ordene || 0,
+          bajadas: ficha?.bajadas || tambo.bajadas || 1,
+          ordenes_por_dia: tambo.ordenes_por_dia || 2,
+          tiene_brazos_extractores: tambo.tiene_brazos_extractores || false
+        };
 
-        if (lastPezoneraChange) {
-          const lastDate = parseISO(lastPezoneraChange.fecha);
-          const vacas = tambo.vacas_en_ordene || 0;
-          const ordenes = tambo.ordenes_por_dia || 2;
-          const bajadas = tambo.bajadas || 1;
-
-          if (vacas > 0 && bajadas > 0) {
-            const ordenesDiarias = (vacas * ordenes) / bajadas;
-            const diasDuracion = pezoneraMaxOrdenes / ordenesDiarias;
-            const nextDate = addDays(lastDate, Math.floor(diasDuracion));
-
-            if (isAfter(nextDate, interval.start) && isBefore(nextDate, interval.end)) {
-              const diasRestantes = differenceInDays(nextDate, now);
-              upcomingNeeds.push({
-                tamboId: tambo.id,
-                tamboNombre: tambo.nombre,
-                clienteNombre: tambo.clientes?.nombre || "Sin cliente",
-                tipo: "Insumo",
-                insumo: tambo.insumos?.nombre || "Pezoneras",
-                cantidad: bajadas * 4,
-                fechaEstimada: nextDate,
-                diasRestantes,
-                prioridad: diasRestantes < 7 ? "alta" : diasRestantes < 15 ? "media" : "baja"
-              });
-            }
+        const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${tambo.id}`);
+        let activeTypesNames: string[] = tiposMantenimiento.map(type => type.nombre);
+        if (activeConfig) {
+          try {
+            activeTypesNames = JSON.parse(activeConfig.valor);
+          } catch (e) {
+            console.error("Error parsing active types for tambo", tambo.id);
           }
         }
 
-        // 2. Calculate Other Maintenances
-        for (const tipo of tiposMantenimiento) {
-          if (tipo.nombre.toLowerCase().includes("pezonera")) continue;
-          if (!tipo.frecuencia_meses) continue;
+        const activeTypesObjects = tiposMantenimiento.filter(type => activeTypesNames.includes(type.nombre));
+        const statuses = calculateMaintenanceStatus(technicalData, tamboMantenimientos, configs, activeTypesObjects);
 
-          const lastMaint = tamboMantenimientos
-            .filter(m => m.tipo === tipo.nombre)
-            .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+        statuses.forEach(s => {
+          if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {
+            const supplies = calculateSupplies(technicalData, tamboComps);
+            const insumos = calculateInsumos(technicalData, tamboIns);
+            
+            const allPossibleSupplies = [...supplies, ...insumos];
+            
+            const matchingSupplies = allPossibleSupplies.filter(sup => {
+              const supName = sup.nombre.toLowerCase();
+              const typeName = s.tipo.toLowerCase();
+              
+              return typeName.includes(supName) || 
+                     supName.includes(typeName) ||
+                     (typeName.includes("pezonera") && supName.includes("pezonera"));
+            });
 
-          if (lastMaint) {
-            const lastDate = parseISO(lastMaint.fecha);
-            const nextDate = addMonths(lastDate, tipo.frecuencia_meses);
-
-            if (isAfter(nextDate, interval.start) && isBefore(nextDate, interval.end)) {
-              const diasRestantes = differenceInDays(nextDate, now);
+            if (matchingSupplies.length > 0) {
+              matchingSupplies.forEach(sup => {
+                upcomingNeeds.push({
+                  tamboId: tambo.id,
+                  tamboNombre: tambo.nombre,
+                  clienteNombre: tambo.clientes?.nombre || "Sin cliente",
+                  tipo: "Insumo",
+                  insumo: sup.nombre,
+                  cantidad: sup.cantidad,
+                  fechaEstimada: s.proximaFecha!,
+                  diasRestantes: s.diasRestantes || 0,
+                  prioridad: (s.diasRestantes || 0) < 7 ? "alta" : (s.diasRestantes || 0) < 15 ? "media" : "baja"
+                });
+              });
+            } else {
               upcomingNeeds.push({
                 tamboId: tambo.id,
                 tamboNombre: tambo.nombre,
                 clienteNombre: tambo.clientes?.nombre || "Sin cliente",
                 tipo: "Mantenimiento",
-                insumo: tipo.nombre,
+                insumo: s.tipo,
                 cantidad: 1,
-                fechaEstimada: nextDate,
-                diasRestantes,
-                prioridad: diasRestantes < 7 ? "alta" : diasRestantes < 15 ? "media" : "baja"
+                fechaEstimada: s.proximaFecha!,
+                diasRestantes: s.diasRestantes || 0,
+                prioridad: (s.diasRestantes || 0) < 7 ? "alta" : (s.diasRestantes || 0) < 15 ? "media" : "baja"
               });
             }
           }
-        }
+        });
       }
 
       // Sort by date

@@ -21,24 +21,48 @@ export interface InsumoCalculado {
 }
 
 export function calculateInsumos(
-  tambo: Tambo,
+  tambo: Tambo & { insumos?: Insumo | null },
   tamboInsumos: (TamboInsumo & { insumos: Insumo })[]
 ): InsumoCalculado[] {
   const bajadas = tambo.bajadas || 0;
   const tieneBrazos = tambo.tiene_brazos_extractores || false;
 
-  return tamboInsumos.map(ti => {
+  // Combinar insumos de la tabla relacional y la pezonera principal del tambo
+  const allInsumos = [...tamboInsumos];
+  
+  if (tambo.insumos) {
+    const isAlreadyInList = tamboInsumos.some(ti => ti.insumo_id === tambo.insumos?.id);
+    if (!isAlreadyInList) {
+      allInsumos.push({
+        id: 'primary-pezonera',
+        tambo_id: tambo.id,
+        insumo_id: tambo.insumos.id,
+        cantidad_manual: 0,
+        created_at: new Date().toISOString(),
+        insumos: tambo.insumos
+      });
+    }
+  }
+
+  return allInsumos.map(ti => {
     const insumo = ti.insumos;
     let cantidad = 0;
 
     if (insumo.usa_cantidad_manual) {
       cantidad = ti.cantidad_manual || 0;
-    } else if (insumo.usa_brazos) {
-      // Lógica solicitada:
-      // Si tiene brazos extractores: bajadas * 2 * cantidad_por_brazo
-      // Si NO tiene: bajadas * 1 * cantidad_por_brazo
-      const multiplicadorBrazos = tieneBrazos ? 2 : 1;
-      cantidad = bajadas * multiplicadorBrazos * (insumo.cantidad_por_brazo || 0);
+    } else {
+      const nombre = insumo.nombre.toLowerCase();
+      
+      if (nombre.includes("pezonera")) {
+        // REGLA: pezoneras = bajadas * 4
+        cantidad = bajadas * 4;
+      } else if (nombre.includes("pulsador")) {
+        // REGLA: pulsadores = bajadas * (2 si brazos, 1 si no)
+        cantidad = tieneBrazos ? bajadas * 2 : bajadas * 1;
+      } else {
+        // REGLA: otros = bajadas * cantidad_por_bajada
+        cantidad = bajadas * (insumo.cantidad_por_bajada || 0);
+      }
     }
 
     return {
@@ -62,13 +86,16 @@ export function calculateSupplies(
 
     if (comp.usa_cantidad_manual) {
       cantidad = tc.cantidad_manual || 0;
-    } else if (comp.usa_bajadas) {
-      cantidad = bajadas * (comp.cantidad_por_bajada || 1);
-    }
+    } else {
+      const nombre = comp.nombre.toLowerCase();
 
-    // Special logic for Pulsadores if not manual
-    if (comp.nombre.toLowerCase().includes("pulsador") && !comp.usa_cantidad_manual) {
-      cantidad = tieneBrazos ? bajadas * 2 : bajadas * 1;
+      if (nombre.includes("pezonera")) {
+        cantidad = bajadas * 4;
+      } else if (nombre.includes("pulsador")) {
+        cantidad = tieneBrazos ? bajadas * 2 : bajadas * 1;
+      } else {
+        cantidad = bajadas * (comp.cantidad_por_bajada || 0);
+      }
     }
 
     return {

@@ -4,10 +4,26 @@ CREATE TABLE IF NOT EXISTS insumos (
   nombre TEXT UNIQUE NOT NULL,
   tipo TEXT NOT NULL,
   usa_brazos BOOLEAN DEFAULT false,
-  cantidad_por_brazo INTEGER DEFAULT 0,
+  cantidad_por_bajada INTEGER DEFAULT 0,
   usa_cantidad_manual BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Asegurar que las columnas existen si la tabla ya fue creada previamente
+ALTER TABLE insumos ADD COLUMN IF NOT EXISTS usa_brazos BOOLEAN DEFAULT false;
+ALTER TABLE insumos ADD COLUMN IF NOT EXISTS cantidad_por_bajada INTEGER DEFAULT 0;
+ALTER TABLE insumos ADD COLUMN IF NOT EXISTS usa_cantidad_manual BOOLEAN DEFAULT false;
+
+-- Si existía la columna vieja, migramos los datos y la eliminamos
+DO $$ 
+BEGIN 
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='insumos' AND column_name='cantidad_por_brazo') THEN
+    -- Migrar datos si la nueva columna está en 0 y la vieja tiene valores
+    UPDATE insumos SET cantidad_por_bajada = cantidad_por_brazo WHERE cantidad_por_bajada = 0;
+    -- Eliminar la columna vieja
+    ALTER TABLE insumos DROP COLUMN cantidad_por_brazo;
+  END IF;
+END $$;
 
 -- 2) TABLA TAMBOS (MEJORADA)
 ALTER TABLE tambos ADD COLUMN IF NOT EXISTS pezonera_id UUID REFERENCES insumos(id);
@@ -24,6 +40,20 @@ CREATE TABLE IF NOT EXISTS componentes (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE componentes ADD COLUMN IF NOT EXISTS usa_bajadas BOOLEAN DEFAULT false;
+ALTER TABLE componentes ADD COLUMN IF NOT EXISTS cantidad_por_bajada INTEGER DEFAULT 0;
+ALTER TABLE componentes ADD COLUMN IF NOT EXISTS usa_cantidad_manual BOOLEAN DEFAULT false;
+
+DO $$ 
+BEGIN 
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='componentes' AND column_name='cantidad_por_brazo') THEN
+    -- Migrar datos
+    UPDATE componentes SET cantidad_por_bajada = cantidad_por_brazo WHERE cantidad_por_bajada = 0;
+    -- Eliminar la vieja
+    ALTER TABLE componentes DROP COLUMN cantidad_por_brazo;
+  END IF;
+END $$;
+
 -- 4) RELACIÓN TAMBO - COMPONENTES
 CREATE TABLE IF NOT EXISTS tambo_componentes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -33,18 +63,7 @@ CREATE TABLE IF NOT EXISTS tambo_componentes (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5) TABLA INSUMOS (CATÁLOGO)
-CREATE TABLE IF NOT EXISTS insumos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nombre TEXT UNIQUE NOT NULL,
-  tipo TEXT NOT NULL,
-  usa_brazos BOOLEAN DEFAULT false,
-  cantidad_por_brazo INTEGER DEFAULT 0,
-  usa_cantidad_manual BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 6) RELACIÓN TAMBO - INSUMOS
+-- 5) RELACIÓN TAMBO - INSUMOS
 CREATE TABLE IF NOT EXISTS tambo_insumos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tambo_id UUID REFERENCES tambos(id) ON DELETE CASCADE,
@@ -53,7 +72,7 @@ CREATE TABLE IF NOT EXISTS tambo_insumos (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 7) FICHA TÉCNICA (MEJORADA)
+-- 6) FICHA TÉCNICA (MEJORADA)
 ALTER TABLE ficha_tecnica DROP COLUMN IF EXISTS tipo_pezoneras;
 ALTER TABLE ficha_tecnica DROP COLUMN IF EXISTS marca_pezoneras;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS tipo_equipo TEXT;
@@ -62,7 +81,7 @@ ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS tipo_bomba_leche TEXT;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS observaciones TEXT;
 ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS datos_extra JSONB DEFAULT '{}';
 
--- 8) RLS (PERMISIVO)
+-- 7) RLS (PERMISIVO)
 ALTER TABLE componentes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tambo_componentes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insumos ENABLE ROW LEVEL SECURITY;
@@ -84,11 +103,11 @@ BEGIN
     END IF;
 END $$;
 
--- 9) SEED DATA
-INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_brazo) VALUES
-('Pezoneras Irlanda', 'consumible', true, 2),
-('Pezoneras PZ3', 'consumible', true, 2),
-('Pezoneras Millennium', 'consumible', true, 2),
+-- 8) SEED DATA
+INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_bajada) VALUES
+('Pezoneras Irlanda', 'consumible', true, 4),
+('Pezoneras PZ3', 'consumible', true, 4),
+('Pezoneras Millennium', 'consumible', true, 4),
 ('Pulsadores', 'equipo', true, 1),
 ('Kit colector de leche', 'repuesto', true, 1),
 ('Mangueras de leche', 'repuesto', true, 1),

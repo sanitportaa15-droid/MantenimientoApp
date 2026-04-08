@@ -71,9 +71,9 @@ export default function UpcomingPage() {
           
           const technicalData = {
             ...t,
-            vacas_en_ordene: ficha?.vacas_en_ordene || t.vacas_en_ordene || 0,
+            vacas_en_ordene: t.vacas_en_ordene || 0,
             bajadas: ficha?.bajadas || t.bajadas || 1,
-            ordenes_por_dia: ficha?.ordenes_por_dia || t.ordenes_por_dia || 0,
+            ordenes_por_dia: t.ordenes_por_dia || 0,
             tiene_brazos_extractores: t.tiene_brazos_extractores || false
           };
 

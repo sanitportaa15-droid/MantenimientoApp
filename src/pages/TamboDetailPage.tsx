@@ -290,6 +290,31 @@ export default function TamboDetailPage() {
 
       finalY = (doc as any).lastAutoTable.finalY + 15;
 
+      // Calculated Insumos & Supplies
+      if (finalY > 220) {
+        doc.addPage();
+        finalY = 20;
+      }
+
+      doc.setFontSize(16);
+      doc.text("Cálculo Automático de Insumos y Componentes", 20, finalY);
+
+      const insumosData = [
+        ...calculatedInsumos.map(i => [i.nombre, i.cantidad.toString(), i.tipo]),
+        ...calculatedSupplies.map(s => [s.nombre, s.cantidad.toString(), s.tipo])
+      ];
+
+      autoTable(doc, {
+        startY: finalY + 5,
+        head: [['Nombre', 'Cantidad', 'Tipo'],],
+        body: insumosData,
+        headStyles: { fillColor: [16, 185, 129] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { left: 20, right: 20 }
+      });
+
+      finalY = (doc as any).lastAutoTable.finalY + 15;
+
       // Reclamos Section
       if (finalY > 240) {
         doc.addPage();

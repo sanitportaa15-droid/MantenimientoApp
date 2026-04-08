@@ -16,9 +16,10 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
   const [tambo, setTambo] = useState<Tambo | null>(null);
   const [catalogComponentes, setCatalogComponentes] = useState<Componente[]>([]);
   const [catalogInsumos, setCatalogInsumos] = useState<Insumo[]>([]);
-  const [ficha, setFicha] = useState<Partial<FichaTecnica>>({
+  const [ficha, setFicha] = useState<Partial<FichaTecnica & { tiene_brazos_extractores: boolean }>>({
     tambo_id: tamboId,
     bajadas: 0,
+    tiene_brazos_extractores: false,
     tipo_pulsadores: "",
     tipo_bomba_leche: "",
     tipo_bomba_vacio: "",
@@ -58,7 +59,10 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
         })));
 
         if (fichaData) {
-          setFicha(fichaData);
+          setFicha({
+            ...fichaData,
+            tiene_brazos_extractores: tamboData.tiene_brazos_extractores
+          });
           if (fichaData.datos_extra && typeof fichaData.datos_extra === 'object' && !Array.isArray(fichaData.datos_extra)) {
             const fields = Object.entries(fichaData.datos_extra).map(([label, value]) => ({
               label,
@@ -69,7 +73,8 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
         } else {
           setFicha(prev => ({
             ...prev,
-            bajadas: tamboData.bajadas
+            bajadas: tamboData.bajadas,
+            tiene_brazos_extractores: tamboData.tiene_brazos_extractores
           }));
         }
       } catch (error) {
@@ -141,14 +146,22 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
         }
       });
 
+      const { tiene_brazos_extractores, ...fichaDataOnly } = ficha;
+
       const dataToSave = {
-        ...ficha,
+        ...fichaDataOnly,
         tambo_id: tamboId,
         datos_extra: datosExtra
       };
 
       // Save ficha técnica
       await db.ficha_tecnica.upsert(dataToSave as any);
+
+      // Update Tambo basic info
+      await db.tambos.update(tamboId, {
+        bajadas: ficha.bajadas,
+        tiene_brazos_extractores: ficha.tiene_brazos_extractores
+      });
 
       // Save components
       await db.tambo_componentes.deleteByTambo(tamboId);
@@ -258,6 +271,21 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors"
                 placeholder="Ej: Centrífuga"
               />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:border-white/20 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={ficha.tiene_brazos_extractores || false}
+                  onChange={(e) => setFicha({ ...ficha, tiene_brazos_extractores: e.target.checked })}
+                  className="w-5 h-5 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold">Tiene Brazos Extractores</span>
+                  <span className="text-[10px] text-zinc-500 uppercase">Afecta el cálculo de pulsadores (Bajadas x 2)</span>
+                </div>
+              </label>
             </div>
           </div>
 

@@ -215,7 +215,7 @@ export interface Database {
           nombre: string
           tipo: string
           usa_brazos: boolean
-          cantidad_por_brazo: number
+          cantidad_por_bajada: number
           usa_cantidad_manual: boolean
           created_at: string
         }
@@ -224,7 +224,7 @@ export interface Database {
           nombre: string
           tipo: string
           usa_brazos?: boolean
-          cantidad_por_brazo?: number
+          cantidad_por_bajada?: number
           usa_cantidad_manual?: boolean
           created_at?: string
         }
@@ -233,7 +233,7 @@ export interface Database {
           nombre?: string
           tipo?: string
           usa_brazos?: boolean
-          cantidad_por_brazo?: number
+          cantidad_por_bajada?: number
           usa_cantidad_manual?: boolean
           created_at?: string
         }

@@ -13,7 +13,7 @@ export default function InsumosPage() {
     nombre: "",
     tipo: "consumible",
     usa_brazos: false,
-    cantidad_por_brazo: 0,
+    cantidad_por_bajada: 0,
     usa_cantidad_manual: false
   });
 
@@ -39,7 +39,7 @@ export default function InsumosPage() {
       nombre: insumo.nombre,
       tipo: insumo.tipo,
       usa_brazos: insumo.usa_brazos,
-      cantidad_por_brazo: insumo.cantidad_por_brazo,
+      cantidad_por_bajada: insumo.cantidad_por_bajada,
       usa_cantidad_manual: insumo.usa_cantidad_manual
     });
     setIsModalOpen(true);
@@ -69,7 +69,7 @@ export default function InsumosPage() {
         nombre: "",
         tipo: "consumible",
         usa_brazos: false,
-        cantidad_por_brazo: 0,
+        cantidad_por_bajada: 0,
         usa_cantidad_manual: false
       });
       loadInsumos();
@@ -92,7 +92,7 @@ export default function InsumosPage() {
               nombre: "",
               tipo: "consumible",
               usa_brazos: false,
-              cantidad_por_brazo: 0,
+              cantidad_por_bajada: 0,
               usa_cantidad_manual: false
             });
             setIsModalOpen(true);
@@ -117,7 +117,7 @@ export default function InsumosPage() {
                   <th className="px-8 py-5 font-bold">Nombre</th>
                   <th className="px-8 py-5 font-bold">Tipo</th>
                   <th className="px-8 py-5 font-bold">Usa Brazos</th>
-                  <th className="px-8 py-5 font-bold">Cant. por Brazo</th>
+                  <th className="px-8 py-5 font-bold">Cant. por Bajada</th>
                   <th className="px-8 py-5 font-bold">Cant. Manual</th>
                   <th className="px-8 py-5 font-bold text-right">Acciones</th>
                 </tr>
@@ -148,7 +148,7 @@ export default function InsumosPage() {
                     </td>
                     <td className="px-8 py-5">
                       <span className="font-mono text-sm text-zinc-300">
-                        {insumo.usa_brazos ? insumo.cantidad_por_brazo : "-"}
+                        {insumo.usa_brazos ? insumo.cantidad_por_bajada : "-"}
                       </span>
                     </td>
                     <td className="px-8 py-5">
@@ -241,18 +241,18 @@ export default function InsumosPage() {
                     )}>
                       {formData.usa_brazos && <Save className="w-3 h-3 text-black" />}
                     </div>
-                    <span className="text-sm font-bold">Cálculo por brazos extractores</span>
+                    <span className="text-sm font-bold">Cálculo por bajadas (o brazos)</span>
                   </div>
                 </div>
 
                 {formData.usa_brazos && (
                   <div className="pl-8 animate-in slide-in-from-top-2 duration-300">
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Cantidad por brazo</label>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Cantidad por bajada</label>
                     <input
                       type="number"
                       min="0"
-                      value={formData.cantidad_por_brazo}
-                      onChange={(e) => setFormData({ ...formData, cantidad_por_brazo: parseInt(e.target.value) || 0 })}
+                      value={formData.cantidad_por_bajada}
+                      onChange={(e) => setFormData({ ...formData, cantidad_por_bajada: parseInt(e.target.value) || 0 })}
                       className="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
                     />
                   </div>
