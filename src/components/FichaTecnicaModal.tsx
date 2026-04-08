@@ -23,6 +23,13 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
     tipo_pulsadores: "",
     tipo_bomba_leche: "",
     tipo_bomba_vacio: "",
+    bomba_leche_marca: "",
+    bomba_leche_tiene_sello: false,
+    bomba_leche_tiene_diafragma: false,
+    bomba_leche_tiene_turbina: false,
+    bomba_vacio_marca: "",
+    bomba_vacio_polea: "",
+    bomba_vacio_vueltas: "",
     tipo_equipo: "",
     observaciones: "",
     datos_extra: {}
@@ -221,7 +228,7 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-8">
-          {/* Basic Info */}
+          {/* Basic Info & Brazos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cantidad de Bajadas</label>
@@ -251,28 +258,6 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Bomba de Vacío</label>
-              <input
-                type="text"
-                value={ficha.tipo_bomba_vacio || ""}
-                onChange={(e) => setFicha({ ...ficha, tipo_bomba_vacio: e.target.value })}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                placeholder="Ej: 1000 L/min"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Bomba de Leche</label>
-              <input
-                type="text"
-                value={ficha.tipo_bomba_leche || ""}
-                onChange={(e) => setFicha({ ...ficha, tipo_bomba_leche: e.target.value })}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                placeholder="Ej: Centrífuga"
-              />
-            </div>
-
             <div className="md:col-span-2">
               <label className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:border-white/20 transition-colors">
                 <input
@@ -282,10 +267,126 @@ export default function FichaTecnicaModal({ tamboId, onClose, onSuccess }: Ficha
                   className="w-5 h-5 rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500"
                 />
                 <div className="flex flex-col">
-                  <span className="text-sm font-bold">Tiene Brazos Extractores</span>
+                  <span className="text-sm font-bold">¿Tiene Brazos Extractores?</span>
                   <span className="text-[10px] text-zinc-500 uppercase">Afecta el cálculo de pulsadores (Bajadas x 2)</span>
                 </div>
               </label>
+            </div>
+          </div>
+
+          {/* Bomba de Leche Section */}
+          <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-blue-500/10 rounded-lg">
+                <Settings className="w-4 h-4 text-blue-400" />
+              </div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-blue-400">Bomba de Leche</h4>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Marca</label>
+                <input
+                  type="text"
+                  value={ficha.bomba_leche_marca || ""}
+                  onChange={(e) => setFicha({ ...ficha, bomba_leche_marca: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 transition-colors text-sm"
+                  placeholder="Marca de la bomba"
+                />
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <label className="flex flex-col items-center gap-2 p-2 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.bomba_leche_tiene_sello || false}
+                    onChange={(e) => setFicha({ ...ficha, bomba_leche_tiene_sello: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Sello</span>
+                </label>
+                <label className="flex flex-col items-center gap-2 p-2 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.bomba_leche_tiene_diafragma || false}
+                    onChange={(e) => setFicha({ ...ficha, bomba_leche_tiene_diafragma: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Diafragma</span>
+                </label>
+                <label className="flex flex-col items-center gap-2 p-2 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={ficha.bomba_leche_tiene_turbina || false}
+                    onChange={(e) => setFicha({ ...ficha, bomba_leche_tiene_turbina: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/10 bg-white/5 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-[10px] font-bold uppercase">Turbina</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Bomba de Vacío Section */}
+          <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-amber-500/10 rounded-lg">
+                <Settings className="w-4 h-4 text-amber-400" />
+              </div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-amber-400">Bomba de Vacío</h4>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Marca</label>
+                <input
+                  type="text"
+                  value={ficha.bomba_vacio_marca || ""}
+                  onChange={(e) => setFicha({ ...ficha, bomba_vacio_marca: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 transition-colors text-sm"
+                  placeholder="Marca"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Tamaño Polea</label>
+                <input
+                  type="text"
+                  value={ficha.bomba_vacio_polea || ""}
+                  onChange={(e) => setFicha({ ...ficha, bomba_vacio_polea: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 transition-colors text-sm"
+                  placeholder="Ej: 150mm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Vueltas</label>
+                <input
+                  type="text"
+                  value={ficha.bomba_vacio_vueltas || ""}
+                  onChange={(e) => setFicha({ ...ficha, bomba_vacio_vueltas: e.target.value })}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-amber-500/50 transition-colors text-sm"
+                  placeholder="RPM"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Pulsadores Section */}
+          <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-emerald-500/10 rounded-lg">
+                <Settings className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-emerald-400">Pulsadores</h4>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Tipo de Pulsadores</label>
+              <input
+                type="text"
+                value={ficha.tipo_pulsadores || ""}
+                onChange={(e) => setFicha({ ...ficha, tipo_pulsadores: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors text-sm"
+                placeholder="Ej: Electrónicos"
+              />
             </div>
           </div>
 

@@ -327,6 +327,13 @@ export interface Database {
           usa_sello: boolean | null
           usa_turbina: boolean | null
           usa_guarnicion: boolean | null
+          bomba_leche_marca: string | null
+          bomba_leche_tiene_sello: boolean | null
+          bomba_leche_tiene_diafragma: boolean | null
+          bomba_leche_tiene_turbina: boolean | null
+          bomba_vacio_marca: string | null
+          bomba_vacio_polea: string | null
+          bomba_vacio_vueltas: string | null
           datos_extra: Json | null
           created_at: string
         }
@@ -343,6 +350,13 @@ export interface Database {
           usa_sello?: boolean | null
           usa_turbina?: boolean | null
           usa_guarnicion?: boolean | null
+          bomba_leche_marca?: string | null
+          bomba_leche_tiene_sello?: boolean | null
+          bomba_leche_tiene_diafragma?: boolean | null
+          bomba_leche_tiene_turbina?: boolean | null
+          bomba_vacio_marca?: string | null
+          bomba_vacio_polea?: string | null
+          bomba_vacio_vueltas?: string | null
           datos_extra?: Json | null
           created_at?: string
         }
@@ -359,6 +373,13 @@ export interface Database {
           usa_sello?: boolean | null
           usa_turbina?: boolean | null
           usa_guarnicion?: boolean | null
+          bomba_leche_marca?: string | null
+          bomba_leche_tiene_sello?: boolean | null
+          bomba_leche_tiene_diafragma?: boolean | null
+          bomba_leche_tiene_turbina?: boolean | null
+          bomba_vacio_marca?: string | null
+          bomba_vacio_polea?: string | null
+          bomba_vacio_vueltas?: string | null
           datos_extra?: Json | null
           created_at?: string
         }

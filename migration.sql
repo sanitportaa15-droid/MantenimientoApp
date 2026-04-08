@@ -116,6 +116,30 @@ INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_bajada) VALUES
 ('Diafragma de brazos', 'repuesto', true, 1)
 ON CONFLICT (nombre) DO NOTHING;
 
+-- 9) Asegurar que ficha_tecnica tenga un índice único por tambo_id para el upsert
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ficha_tecnica_tambo_id_key') THEN
+        ALTER TABLE ficha_tecnica ADD CONSTRAINT ficha_tecnica_tambo_id_key UNIQUE (tambo_id);
+    END IF;
+END $$;
+
+-- 10) Campos adicionales para Ficha Técnica (Bomba de Leche y Vacío)
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_leche_marca TEXT;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_leche_tiene_sello BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_leche_tiene_diafragma BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_leche_tiene_turbina BOOLEAN DEFAULT FALSE;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_marca TEXT;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_polea TEXT;
+ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS bomba_vacio_vueltas TEXT;
+
+-- 11) Seed data para componentes de bomba de leche
+INSERT INTO insumos (nombre, tipo, usa_brazos, cantidad_por_bajada) VALUES
+('Sello bomba de leche', 'repuesto', false, 0),
+('Diafragma bomba de leche', 'repuesto', false, 0),
+('Turbina bomba de leche', 'repuesto', false, 0)
+ON CONFLICT (nombre) DO NOTHING;
+
 INSERT INTO tipos_mantenimiento (nombre, frecuencia_meses, descripcion) VALUES 
 ('Cambio de Pezoneras', 6, 'Reemplazo preventivo de pezoneras'),
 ('Service Pulsadores', 12, 'Mantenimiento anual de pulsadores'),

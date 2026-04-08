@@ -108,14 +108,21 @@ export default function TamboDetailPage() {
       setTamboComponentes(tamboCompsData);
       setTamboInsumos(tamboInsumosData);
 
-      const supplies = calculateSupplies(tamboData, tamboCompsData);
+      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
+      
+      const technicalData = {
+        ...tamboData,
+        bajadas: ficha?.bajadas || tamboData.bajadas || 1,
+        bomba_leche_tiene_sello: ficha?.bomba_leche_tiene_sello || false,
+        bomba_leche_tiene_diafragma: ficha?.bomba_leche_tiene_diafragma || false,
+        bomba_leche_tiene_turbina: ficha?.bomba_leche_tiene_turbina || false
+      };
+
+      const supplies = calculateSupplies(technicalData, tamboCompsData);
       setCalculatedSupplies(supplies);
 
-      const insumos = calculateInsumos(tamboData, tamboInsumosData);
+      const insumos = calculateInsumos(technicalData, tamboInsumosData);
       setCalculatedInsumos(insumos);
-
-      // Handle ficha_tecnica as single object or first element of array
-      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
 
       // Auto-create technical sheet if it doesn't exist
       if (!ficha) {

@@ -74,7 +74,10 @@ export default function UpcomingPage() {
             vacas_en_ordene: t.vacas_en_ordene || 0,
             bajadas: ficha?.bajadas || t.bajadas || 1,
             ordenes_por_dia: t.ordenes_por_dia || 0,
-            tiene_brazos_extractores: t.tiene_brazos_extractores || false
+            tiene_brazos_extractores: t.tiene_brazos_extractores || false,
+            bomba_leche_tiene_sello: ficha?.bomba_leche_tiene_sello || false,
+            bomba_leche_tiene_diafragma: ficha?.bomba_leche_tiene_diafragma || false,
+            bomba_leche_tiene_turbina: ficha?.bomba_leche_tiene_turbina || false
           };
 
           const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);

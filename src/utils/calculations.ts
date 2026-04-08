@@ -21,7 +21,12 @@ export interface InsumoCalculado {
 }
 
 export function calculateInsumos(
-  tambo: Tambo & { insumos?: Insumo | null },
+  tambo: Tambo & { 
+    insumos?: Insumo | null,
+    bomba_leche_tiene_sello?: boolean | null,
+    bomba_leche_tiene_diafragma?: boolean | null,
+    bomba_leche_tiene_turbina?: boolean | null
+  },
   tamboInsumos: (TamboInsumo & { insumos: Insumo })[]
 ): InsumoCalculado[] {
   const bajadas = tambo.bajadas || 0;
@@ -44,7 +49,7 @@ export function calculateInsumos(
     }
   }
 
-  return allInsumos.map(ti => {
+  const results = allInsumos.map(ti => {
     const insumo = ti.insumos;
     let cantidad = 0;
 
@@ -71,6 +76,19 @@ export function calculateInsumos(
       tipo: insumo.tipo
     };
   });
+
+  // Agregar componentes de bomba de leche si aplica
+  if (tambo.bomba_leche_tiene_sello) {
+    results.push({ nombre: 'Sello bomba de leche', cantidad: 1, tipo: 'repuesto' });
+  }
+  if (tambo.bomba_leche_tiene_diafragma) {
+    results.push({ nombre: 'Diafragma bomba de leche', cantidad: 1, tipo: 'repuesto' });
+  }
+  if (tambo.bomba_leche_tiene_turbina) {
+    results.push({ nombre: 'Turbina bomba de leche', cantidad: 1, tipo: 'repuesto' });
+  }
+
+  return results;
 }
 
 export function calculateSupplies(
