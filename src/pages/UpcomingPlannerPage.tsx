@@ -80,7 +80,7 @@ export default function UpcomingPlannerPage() {
           ...tambo,
           vacas_en_ordene: tambo.vacas_en_ordene || 0,
           bajadas: ficha?.bajadas || tambo.bajadas || 1,
-          ordenes_por_dia: tambo.ordenes_por_dia || 2,
+          ordenes_por_dia: tambo.ordenes_por_dia || 0,
           tiene_brazos_extractores: tambo.tiene_brazos_extractores || false,
           bomba_leche_tiene_sello: ficha?.bomba_leche_tiene_sello || false,
           bomba_leche_tiene_diafragma: ficha?.bomba_leche_tiene_diafragma || false,
@@ -115,15 +115,36 @@ export default function UpcomingPlannerPage() {
             const allPossibleSupplies = [...supplies, ...insumos];
             
             const matchingSupplies = allPossibleSupplies.filter(sup => {
-              const supName = sup.nombre.toLowerCase();
-              const typeName = s.tipo.toLowerCase();
+              const supName = sup.nombre.toLowerCase().trim();
+              const typeName = s.tipo.toLowerCase().trim();
               
-              // Reglas de coincidencia mejoradas
+              // Reglas de coincidencia mejoradas y específicas
+              
+              // 1. Pezoneras
               if (typeName.includes("pezonera") && supName.includes("pezonera")) return true;
-              if (typeName.includes("pulsador") && (supName.includes("pulsador") || supName.includes("soga") || supName.includes("diafragma") || supName.includes("buje"))) return true;
-              if (typeName.includes("bomba") && (supName.includes("bomba") || supName.includes("aceite") || supName.includes("sello") || supName.includes("diafragma") || supName.includes("turbina"))) return true;
-              if (typeName.includes("equipo") && (supName.includes("colector") || supName.includes("buje") || supName.includes("soga") || supName.includes("diafragma"))) return true;
               
+              // 2. Pulsadores y accesorios relacionados
+              if (typeName.includes("pulsador")) {
+                if (supName.includes("pulsador") || supName.includes("soga") || supName.includes("diafragma") || supName.includes("buje")) return true;
+              }
+              
+              // 3. Bomba de Leche (específico)
+              if (typeName.includes("bomba") && typeName.includes("leche")) {
+                if (supName.includes("sello") || supName.includes("turbina") || (supName.includes("diafragma") && !supName.includes("brazo"))) return true;
+                if (supName.includes("bomba") && supName.includes("leche")) return true;
+              }
+              
+              // 4. Bomba de Vacío / Aceite
+              if (typeName.includes("aceite") || (typeName.includes("bomba") && (typeName.includes("vacío") || typeName.includes("vacio")))) {
+                if (supName.includes("aceite") || (supName.includes("bomba") && (supName.includes("vacío") || supName.includes("vacio")))) return true;
+              }
+              
+              // 5. Equipo / General / Colectores
+              if (typeName.includes("equipo") || typeName.includes("general") || typeName.includes("mantenimiento")) {
+                if (supName.includes("colector") || supName.includes("buje") || supName.includes("soga") || supName.includes("diafragma")) return true;
+              }
+
+              // 6. Coincidencia por nombre directo
               return typeName.includes(supName) || supName.includes(typeName);
             });
 
@@ -134,7 +155,7 @@ export default function UpcomingPlannerPage() {
                   tamboNombre: tambo.nombre,
                   clienteNombre: tambo.clientes?.nombre || "Sin cliente",
                   tipo: "Insumo",
-                  insumo: sup.nombre,
+                  insumo: sup.nombre.trim(),
                   cantidad: sup.cantidad,
                   fechaEstimada: s.proximaFecha!,
                   diasRestantes: s.diasRestantes || 0,

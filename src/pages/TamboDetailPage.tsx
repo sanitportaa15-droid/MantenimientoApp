@@ -99,7 +99,10 @@ export default function TamboDetailPage() {
         db.tambo_insumos.getByTambo(id!)
       ]);
       
-      setTambo(tamboData);
+      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
+      const normalizedTambo = { ...tamboData, ficha_tecnica: ficha };
+      
+      setTambo(normalizedTambo);
       setMantenimientos(mantData);
       setConfigs(configData);
       setActiveTypes(activeTypesNames);
@@ -107,8 +110,6 @@ export default function TamboDetailPage() {
       setAllMaintTypes(allMaintTypesData);
       setTamboComponentes(tamboCompsData);
       setTamboInsumos(tamboInsumosData);
-
-      const ficha = Array.isArray(tamboData.ficha_tecnica) ? tamboData.ficha_tecnica[0] : tamboData.ficha_tecnica;
       
       const technicalData = {
         ...tamboData,
@@ -255,10 +256,25 @@ export default function TamboDetailPage() {
       doc.text(tambo.ordenes_por_dia.toString(), 90, 89);
       doc.text(tambo.insumos?.nombre || "N/A", 120, 89);
       doc.text(new Date().toLocaleDateString(), 165, 89);
+
+      // Equipment Info
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("BOMBA VACÍO", 20, 99);
+      doc.text("BOMBA LECHE", 70, 99);
+      doc.text("PULSADORES", 120, 99);
+      doc.text("COLECTOR", 165, 99);
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      doc.text(tambo.ficha_tecnica?.bomba_vacio_marca || tambo.ficha_tecnica?.tipo_bomba_vacio || "N/A", 20, 106);
+      doc.text(tambo.ficha_tecnica?.bomba_leche_marca || tambo.ficha_tecnica?.tipo_bomba_leche || "N/A", 70, 106);
+      doc.text(tambo.ficha_tecnica?.tipo_pulsadores || "N/A", 120, 106);
+      doc.text(tambo.ficha_tecnica?.colector_marca || "N/A", 165, 106);
       
       // Technical Status Table
       doc.setFontSize(16);
-      doc.text("Estado Técnico del Equipo", 20, 105);
+      doc.text("Estado Técnico del Equipo", 20, 122);
       
       const statusData = statuses.map(s => [
         s.tipo,
@@ -269,7 +285,7 @@ export default function TamboDetailPage() {
       ]);
 
       autoTable(doc, {
-        startY: 110,
+        startY: 127,
         head: [['Tipo de Mantenimiento', 'Estado', 'Último', 'Próximo', 'Días Rest.'],],
         body: statusData,
         headStyles: { fillColor: [16, 185, 129] },
@@ -673,8 +689,11 @@ export default function TamboDetailPage() {
                 <div className="grid grid-cols-1 gap-4">
                   <InfoItem label="Pezonera" value={tambo.insumos?.nombre || "N/A"} />
                   <InfoItem label="Tipo Equipo" value={tambo.ficha_tecnica?.tipo_equipo || "N/A"} />
-                  <InfoItem label="Bomba Vacío" value={tambo.ficha_tecnica?.tipo_bomba_vacio || "N/A"} />
-                  <InfoItem label="Bomba Leche" value={tambo.ficha_tecnica?.tipo_bomba_leche || "N/A"} />
+                  <InfoItem label="Bomba Vacío" value={tambo.ficha_tecnica?.bomba_vacio_marca || tambo.ficha_tecnica?.tipo_bomba_vacio || "N/A"} />
+                  <InfoItem label="Bomba Leche" value={tambo.ficha_tecnica?.bomba_leche_marca || tambo.ficha_tecnica?.tipo_bomba_leche || "N/A"} />
+                  {tambo.ficha_tecnica?.colector_marca && (
+                    <InfoItem label="Colector" value={tambo.ficha_tecnica.colector_marca} />
+                  )}
                 </div>
               </div>
             </div>
