@@ -159,3 +159,54 @@ INSERT INTO tipos_mantenimiento (nombre, frecuencia_meses, descripcion) VALUES
 ('Cambio de Aceite Bomba', 3, 'Mantenimiento de bomba de vacío'),
 ('Service Bomba de Leche', 12, 'Mantenimiento anual de bomba de leche')
 ON CONFLICT (nombre) DO NOTHING;
+
+-- 13) TABLAS PARA EL MÓDULO DE LAVADO
+CREATE TABLE IF NOT EXISTS lavado_configuraciones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tambo_id UUID REFERENCES tambos(id) ON DELETE CASCADE UNIQUE,
+  nombre_establecimiento TEXT NOT NULL,
+  observaciones TEXT,
+  ord_puestos INTEGER NOT NULL DEFAULT 0,
+  ord_litros_por_puesto NUMERIC NOT NULL DEFAULT 0,
+  ord_ordenes_diarios INTEGER NOT NULL DEFAULT 2,
+  ord_alcalino_porcentaje NUMERIC NOT NULL DEFAULT 0,
+  ord_acido_porcentaje NUMERIC NOT NULL DEFAULT 0,
+  ord_lavados_acidos_semana INTEGER NOT NULL DEFAULT 0,
+  tan_capacidad NUMERIC NOT NULL DEFAULT 0,
+  tan_agua_porcentaje NUMERIC NOT NULL DEFAULT 0,
+  tan_alcalino_porcentaje NUMERIC NOT NULL DEFAULT 0,
+  tan_acido_porcentaje NUMERIC NOT NULL DEFAULT 0,
+  tan_frecuencia TEXT NOT NULL DEFAULT 'Diario', -- 'Diario', 'Cada 2 días', 'Personalizado'
+  tan_lavados_acidos_semana INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS lavado_historial (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tambo_id UUID REFERENCES tambos(id) ON DELETE SET NULL,
+  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+  hora TIME NOT NULL DEFAULT CURRENT_TIME,
+  establecimiento_nombre TEXT NOT NULL,
+  equipo TEXT NOT NULL, -- 'Ordeñadora' o 'Tanque de Frío'
+  agua_utilizada NUMERIC NOT NULL,
+  alcalino_utilizado NUMERIC NOT NULL,
+  acido_utilizado NUMERIC NOT NULL,
+  tipo_lavado TEXT NOT NULL, -- 'Normal' o 'Con ácido'
+  observaciones TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS policies for washing module
+ALTER TABLE lavado_configuraciones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lavado_historial ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Permitir todo lavado_configuraciones') THEN
+        CREATE POLICY "Permitir todo lavado_configuraciones" ON lavado_configuraciones FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Permitir todo lavado_historial') THEN
+        CREATE POLICY "Permitir todo lavado_historial" ON lavado_historial FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+

@@ -16,6 +16,7 @@ import TamboTechnicalAnalysisPage from "./pages/TamboTechnicalAnalysisPage";
 import MaintenanceStatusPage from "./pages/MaintenanceStatusPage";
 import UpcomingPage from "./pages/UpcomingPage";
 import InsumosPage from "./pages/InsumosPage";
+import LavadoPage from "./pages/LavadoPage";
 import { db } from "./services/db";
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/analisis-tecnico/:id" element={<TamboTechnicalAnalysisPage />} />
           <Route path="/mantenimientos-estado" element={<MaintenanceStatusPage />} />
           <Route path="/proximos" element={<UpcomingPage />} />
+          <Route path="/lavado" element={<LavadoPage />} />
           <Route path="/config/tecnica" element={<TechnicalConfigPage />} />
         </Routes>
       </Layout>

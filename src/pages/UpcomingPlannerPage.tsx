@@ -55,7 +55,7 @@ export default function UpcomingPlannerPage() {
       ]);
 
       const fichasMap = new Map(fichas.map(f => [f.tambo_id, f]));
-      const pezoneraMaxOrdenes = parseInt(configs.find(c => c.clave === "pezonera_max_ordenes")?.valor || "3200");
+      const pezoneraMaxOrdenes = parseInt(configs.find(c => c.clave === "pezonera_max_ordenes")?.valor || "1200");
       
       const upcomingNeeds: UpcomingNeed[] = [];
       const now = new Date();
@@ -370,7 +370,7 @@ export default function UpcomingPlannerPage() {
           <h4 className="font-bold text-blue-400">¿Cómo se calculan estas fechas?</h4>
           <p className="text-sm text-zinc-400 leading-relaxed">
             Para las <strong>pezoneras</strong>, utilizamos la fórmula técnica basada en el uso real: 
-            <code className="mx-2 bg-white/5 px-2 py-1 rounded text-blue-300 font-mono">3200 / ((vacas × ordeños) / bajadas)</code>.
+            <code className="mx-2 bg-white/5 px-2 py-1 rounded text-blue-300 font-mono">1200 / ((vacas × ordeños) / bajadas)</code>.
             Para otros componentes, se utiliza la frecuencia en meses configurada en el sistema desde el último mantenimiento realizado.
           </p>
         </div>

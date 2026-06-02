@@ -477,9 +477,116 @@ export interface Database {
           created_at?: string
         }
       }
+      lavado_configuraciones: {
+        Row: {
+          id: string
+          tambo_id: string
+          nombre_establecimiento: string
+          observaciones: string | null
+          ord_puestos: number
+          ord_litros_por_puesto: number
+          ord_ordenes_diarios: number
+          ord_alcalino_porcentaje: number
+          ord_acido_porcentaje: number
+          ord_lavados_acidos_semana: number
+          tan_capacidad: number
+          tan_agua_porcentaje: number
+          tan_alcalino_porcentaje: number
+          tan_acido_porcentaje: number
+          tan_frecuencia: string
+          tan_lavados_acidos_semana: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id: string
+          nombre_establecimiento: string
+          observaciones?: string | null
+          ord_puestos?: number
+          ord_litros_por_puesto?: number
+          ord_ordenes_diarios?: number
+          ord_alcalino_porcentaje?: number
+          ord_acido_porcentaje?: number
+          ord_lavados_acidos_semana?: number
+          tan_capacidad?: number
+          tan_agua_porcentaje?: number
+          tan_alcalino_porcentaje?: number
+          tan_acido_porcentaje?: number
+          tan_frecuencia?: string
+          tan_lavados_acidos_semana?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string
+          nombre_establecimiento?: string
+          observaciones?: string | null
+          ord_puestos?: number
+          ord_litros_por_puesto?: number
+          ord_ordenes_diarios?: number
+          ord_alcalino_porcentaje?: number
+          ord_acido_porcentaje?: number
+          ord_lavados_acidos_semana?: number
+          tan_capacidad?: number
+          tan_agua_porcentaje?: number
+          tan_alcalino_porcentaje?: number
+          tan_acido_porcentaje?: number
+          tan_frecuencia?: string
+          tan_lavados_acidos_semana?: number
+          created_at?: string
+        }
+      }
+      lavado_historial: {
+        Row: {
+          id: string
+          tambo_id: string | null
+          fecha: string
+          hora: string
+          establecimiento_nombre: string
+          equipo: string
+          agua_utilizada: number
+          alcalino_utilizado: number
+          acido_utilizado: number
+          tipo_lavado: string
+          observaciones: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tambo_id?: string | null
+          fecha?: string
+          hora?: string
+          establecimiento_nombre: string
+          equipo: string
+          agua_utilizada: number
+          alcalino_utilizado: number
+          acido_utilizado: number
+          tipo_lavado: string
+          observaciones?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tambo_id?: string | null
+          fecha?: string
+          hora?: string
+          establecimiento_nombre?: string
+          equipo?: string
+          agua_utilizada?: number
+          alcalino_utilizado?: number
+          acido_utilizado?: number
+          tipo_lavado?: string
+          observaciones?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }
+
+export type LavadoConfiguracion = Database['public']['Tables']['lavado_configuraciones']['Row'];
+export type LavadoHistorial = Database['public']['Tables']['lavado_historial']['Row'];
+
 
 export type Cliente = Database['public']['Tables']['clientes']['Row'];
 export type Tambo = Database['public']['Tables']['tambos']['Row'];

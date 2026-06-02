@@ -197,7 +197,7 @@ export function calculateMaintenanceStatus(
         proximaFecha: null,
         diasRestantes: null,
         status: "gris",
-        frecuenciaLabel: tipo === "Cambio de pezoneras" ? "Cada 3200 ordeños" : `Cada ${tipoObj.frecuencia_meses || 12} meses`
+        frecuenciaLabel: tipo.toLowerCase().includes("pezonera") ? `Cada ${getConfig("pezonera_max_ordenes", 1200)} ordeños` : `Cada ${tipoObj.frecuencia_meses || 12} meses`
       };
     }
 
@@ -206,10 +206,13 @@ export function calculateMaintenanceStatus(
     let ordenosPorPezonera: number | undefined;
     let diasEstimados: number | undefined;
 
-    if (tipo === "Cambio de pezoneras") {
+    const pezoneraMaxOrdenes = getConfig("pezonera_max_ordenes", 1200);
+    const isPezoneraType = tipo.toLowerCase().includes("pezonera");
+
+    if (isPezoneraType) {
       // FÓRMULA OFICIAL:
       // 1. ordeños_por_pezonera = (vacas_en_ordeñe × ordeños_por_día) / bajadas
-      // 2. dias_hasta_cambio = 3200 / ordeños_por_pezonera
+      // 2. dias_hasta_cambio = pezoneraMaxOrdenes / ordeños_por_pezonera
       
       const vacas = tambo.vacas_en_ordene || 0;
       const ordenes = tambo.ordenes_por_dia || 0;
@@ -218,10 +221,10 @@ export function calculateMaintenanceStatus(
       ordenosPorPezonera = (vacas * ordenes) / bajadas;
       
       // Evitar división por cero si ordenosPorPezonera es 0
-      diasEstimados = ordenosPorPezonera > 0 ? Math.floor(3200 / ordenosPorPezonera) : 365;
+      diasEstimados = ordenosPorPezonera > 0 ? Math.floor(pezoneraMaxOrdenes / ordenosPorPezonera) : 365;
       
       proximaFecha = addDays(ultimaFecha, diasEstimados);
-      frecuenciaLabel = "Frecuencia calculada: 3200 ordeños";
+      frecuenciaLabel = `Frecuencia calculada: ${pezoneraMaxOrdenes} ordeños`;
     } else {
       // Cálculo por meses (resto de mantenimientos)
       const meses = tipoObj.frecuencia_meses || 12;

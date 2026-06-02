@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial } from "../types/supabase";
 
 export const db = {
   clientes: {
@@ -237,7 +237,7 @@ export const db = {
     },
     async seed() {
       const defaultConfigs = [
-        { clave: "pezonera_max_ordenes", valor: "3200", descripcion: "Máximo de ordeñes para pezoneras" },
+        { clave: "pezonera_max_ordenes", valor: "1200", descripcion: "Máximo de ordeñes para pezoneras" },
         { clave: "mangueras_leche_meses", valor: "12", descripcion: "Meses para mangueras de leche" },
         { clave: "mangueras_pulsado_meses", valor: "12", descripcion: "Meses para mangueras de pulsado" },
         { clave: "pulsadores_meses", valor: "6", descripcion: "Meses para pulsadores" },
@@ -881,5 +881,143 @@ export const db = {
       }
       return data as any[];
     }
+  },
+  lavado_configuraciones: {
+    async getAll() {
+      try {
+        const { data, error } = await supabase.from("lavado_configuraciones").select("*");
+        if (error) throw error;
+        return data as LavadoConfiguracion[];
+      } catch (err) {
+        console.warn("Error o Tabla de lavado_configuraciones ausente en Supabase. Usando Local Storage como respaldo.", err);
+        return getLocalConfigs();
+      }
+    },
+    async getByTambo(tamboId: string) {
+      try {
+        const { data, error } = await supabase.from("lavado_configuraciones").select("*").eq("tambo_id", tamboId).maybeSingle();
+        if (error) throw error;
+        if (data) return data as LavadoConfiguracion;
+        
+        const locals = getLocalConfigs();
+        return locals.find(c => c.tambo_id === tamboId) || null;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para búsqueda por tambo.", err);
+        const locals = getLocalConfigs();
+        return locals.find(c => c.tambo_id === tamboId) || null;
+      }
+    },
+    async create(config: Omit<LavadoConfiguracion, 'id' | 'created_at'>) {
+      const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
+      const createdAt = new Date().toISOString();
+      const newConfigRecord = { id: newId, created_at: createdAt, ...config };
+      try {
+        const { data, error } = await (supabase.from("lavado_configuraciones") as any).insert(newConfigRecord).select().single();
+        if (error) throw error;
+        return data as LavadoConfiguracion;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para inserción de lavado_configuraciones.", err);
+        const locals = getLocalConfigs();
+        locals.push(newConfigRecord);
+        saveLocalConfigs(locals);
+        return newConfigRecord as LavadoConfiguracion;
+      }
+    },
+    async update(id: string, config: Partial<Omit<LavadoConfiguracion, 'id' | 'created_at'>>) {
+      try {
+        const { data, error } = await (supabase.from("lavado_configuraciones") as any).update(config).eq("id", id).select().single();
+        if (error) throw error;
+        return data as LavadoConfiguracion;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para actualización de lavado_configuraciones.", err);
+        const locals = getLocalConfigs();
+        const index = locals.findIndex(c => c.id === id);
+        if (index !== -1) {
+          locals[index] = { ...locals[index], ...config };
+          saveLocalConfigs(locals);
+          return locals[index] as LavadoConfiguracion;
+        }
+        throw new Error("Configuración no encontrada para actualizar.");
+      }
+    },
+    async delete(id: string) {
+      try {
+        const { error } = await supabase.from("lavado_configuraciones").delete().eq("id", id);
+        if (error) throw error;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para eliminación de lavado_configuraciones.", err);
+        const locals = getLocalConfigs();
+        const filtered = locals.filter(c => c.id !== id);
+        saveLocalConfigs(filtered);
+      }
+    }
+  },
+  lavado_historial: {
+    async getAll() {
+      try {
+        const { data, error } = await supabase.from("lavado_historial").select("*").order("fecha", { ascending: false });
+        if (error) throw error;
+        return data as LavadoHistorial[];
+      } catch (err) {
+        console.warn("Error o Tabla de lavado_historial ausente en Supabase. Usando Local Storage como respaldo.", err);
+        const locals = getLocalHistorial();
+        return locals.sort((a,b) => b.fecha.localeCompare(a.fecha) || b.hora.localeCompare(a.hora));
+      }
+    },
+    async create(hist: Omit<LavadoHistorial, 'id' | 'created_at'>) {
+      const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
+      const createdAt = new Date().toISOString();
+      const newHistRecord = { id: newId, created_at: createdAt, ...hist };
+      try {
+        const { data, error } = await (supabase.from("lavado_historial") as any).insert(newHistRecord).select().single();
+        if (error) throw error;
+        return data as LavadoHistorial;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para inserción de lavado_historial.", err);
+        const locals = getLocalHistorial();
+        locals.push(newHistRecord);
+        saveLocalHistorial(locals);
+        return newHistRecord as LavadoHistorial;
+      }
+    },
+    async delete(id: string) {
+      try {
+        const { error } = await supabase.from("lavado_historial").delete().eq("id", id);
+        if (error) throw error;
+      } catch (err) {
+        console.warn("Utilizando Local Storage para eliminación en historial.", err);
+        const locals = getLocalHistorial();
+        const filtered = locals.filter(h => h.id !== id);
+        saveLocalHistorial(filtered);
+      }
+    }
   }
 };
+
+const LOCAL_STORAGE_CONFIG_KEY = "ganpor_lavado_configuraciones";
+const LOCAL_STORAGE_HISTORIAL_KEY = "ganpor_lavado_historial";
+
+function getLocalConfigs(): any[] {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_CONFIG_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalConfigs(configs: any[]) {
+  localStorage.setItem(LOCAL_STORAGE_CONFIG_KEY, JSON.stringify(configs));
+}
+
+function getLocalHistorial(): any[] {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_HISTORIAL_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalHistorial(historial: any[]) {
+  localStorage.setItem(LOCAL_STORAGE_HISTORIAL_KEY, JSON.stringify(historial));
+}
+

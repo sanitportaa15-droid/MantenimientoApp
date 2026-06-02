@@ -13,7 +13,8 @@ import {
   Settings2,
   Wrench,
   Calendar,
-  Package
+  Package,
+  Sparkles
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
@@ -32,6 +33,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Próximos", path: "/proximos", icon: Calendar },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
+    { name: "Lavado", path: "/lavado", icon: Sparkles },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 },
   ];
 
