@@ -709,76 +709,126 @@ export default function LavadoPage() {
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(16, 185, 129);
-    doc.text("Protocolo A: Lavado Diario Convencional (Normal)", 14, y);
+    doc.text("LAVADO SIMPLE", 14, y);
     y += 6;
-    doc.setTextColor(60, 60, 60);
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
 
     const normalSteps = [
-      "1. Enjuague inicial con abundante agua fría para remover completamente toda la lactosa y biofilm de leche.",
-      `2. Preparar el volumen de agua de lavado caliente calculada por el sistema:`,
-      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L de agua.`,
-      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L de agua.`,
-      `3. Agregar la cantidad calculada de detergente alcalino:`,
-      `   * Ordeñadora: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc (Concentración del ${selectedConfig.ord_alcalino_porcentaje}%).`,
-      `   * Tanque de Frío: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc (Concentración del ${selectedConfig.tan_alcalino_porcentaje}%).`,
-      `4. Recircular la solución alcalina durante el lapso de 8 a 10 minutos (tiempo óptimo sugerido).`,
-      "5. Enjuagar con abundante agua fría limpia para remover residuos alcalinos.",
-      `6. Preparar de nuevo el volumen de agua calculada e incorporar la dosis calculada de Cloro:`,
-      `   * Ordeñadora: Dosificar exactamente ${calcResults.ord.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.ordCloroPorcentaje}%).`,
-      `   * Tanque de Frío: Dosificar exactamente ${calcResults.tan.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.tanCloroPorcentaje}%).`,
-      `7. Recircular la mezcla clorada durante el tiempo configurado:`,
-      `   * Ordeñadora: ${calcResults.cloro.ordCloroTiempo} minutos.`,
-      `   * Tanque de Frío: ${calcResults.cloro.tanCloroTiempo} minutos.`,
-      "8. Enjuague final con abundante agua fría limpia."
+      "1. Enjuague Inicial",
+      "   Realizar un enjuague inicial con abundante agua fría para eliminar restos de leche y suciedad presentes en el sistema.",
+      "",
+      "2. Lavado Alcalino",
+      "   Preparar la cantidad de agua calculada por el sistema y agregar la dosis correspondiente de detergente alcalino.",
+      "   • Ordeñadora:",
+      `     - Agua calculada: ${calcResults.ord.aguaPorLavado.toFixed(1)} L.`,
+      `     - Alcalino calculado: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.ord_alcalino_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "   • Tanque de Frío:",
+      `     - Agua calculada: ${calcResults.tan.aguaPorLavado.toFixed(1)} L.`,
+      `     - Alcalino calculado: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.tan_alcalino_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "",
+      "3. Enjuague Alcalino",
+      "   Realizar un enjuague completo con agua limpia para eliminar residuos del detergente alcalino.",
+      "",
+      "4. Lavado con Cloro",
+      "   Preparar la cantidad de agua calculada y agregar la dosis correspondiente de cloro.",
+      "   • Ordeñadora:",
+      `     - Agua calculada: ${calcResults.ord.aguaPorLavado.toFixed(1)} L.`,
+      `     - Cloro calculado: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (Concentración: ${calcResults.cloro.ordCloroPorcentaje}%).`,
+      `     - Tiempo de recirculación: ${calcResults.cloro.ordCloroTiempo} minutos.`,
+      "   • Tanque de Frío:",
+      `     - Agua calculada: ${calcResults.tan.aguaPorLavado.toFixed(1)} L.`,
+      `     - Cloro calculado: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (Concentración: ${calcResults.cloro.tanCloroPorcentaje}%).`,
+      `     - Tiempo de recirculación: ${calcResults.cloro.tanCloroTiempo} minutos.`
     ];
 
-    normalSteps.forEach(st => {
-      const splitSt = doc.splitTextToSize(st, 180);
-      doc.text(splitSt, 18, y);
-      y += (splitSt.length * 4);
-    });
+    const printSteps = (steps: string[]) => {
+      steps.forEach(st => {
+        if (st.trim() === "") {
+          y += 3;
+          return;
+        }
+        
+        const isHeader = /^\d+\./.test(st.trim());
+        if (isHeader) {
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(15, 15, 15);
+        } else {
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(60, 60, 60);
+        }
+
+        const leadingSpacesMatch = st.match(/^( +)/);
+        const indentLevel = leadingSpacesMatch ? leadingSpacesMatch[1].length : 0;
+        const xOffset = 14 + (indentLevel * 1.5);
+
+        const splitSt = doc.splitTextToSize(st.trim(), 180 - (indentLevel * 2));
+        checkPageOverflow(splitSt.length * 4);
+        doc.text(splitSt, xOffset, y);
+        y += (splitSt.length * 4);
+      });
+    };
+
+    printSteps(normalSteps);
 
     y += 4;
+    checkPageOverflow(30);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(147, 51, 234); // Purple style
-    doc.text("Protocolo B: Lavado de Desincrustación Orgánica (Con Ácido)", 14, y);
+    doc.text("LAVADO COMPLETO (CON ÁCIDO)", 14, y);
     y += 6;
-    doc.setTextColor(60, 60, 60);
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
 
     const acidSteps = [
-      "1. Enjuague inicial con abundante agua fría para barrer remanentes de leche.",
-      `2. Preparar el volumen de agua de lavado caliente y dosificar detergente alcalino:`,
-      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc de alcalino.`,
-      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc de alcalino.`,
-      `3. Recircular durante el lapso de 8 a 10 minutos de forma de desengrasar las superficies.`,
-      "4. Enjuagar con abundante agua fría.",
-      `5. Preparar el volumen de agua regulado y dosificar detergente ácido:`,
-      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.acidoPorLavado.toFixed(0)} cc de ácido (${selectedConfig.ord_acido_porcentaje}%).`,
-      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.acidoPorLavado.toFixed(0)} cc de ácido (${selectedConfig.tan_acido_porcentaje}%).`,
-      `6. Recircular esta solución desincrustante ácida por un periodo de 8 a 10 minutos.`,
-      "7. Enjuagar con abundante agua limpia.",
-      `8. Preparar el volumen de agua correspondiente y agregar la dosis calculada de cloro:`,
-      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.ordCloroPorcentaje}%).`,
-      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.tanCloroPorcentaje}%).`,
-      `9. Recircular la solución desinfectante de cloro durante el tiempo configurado:`,
-      `   * Ordeñadora: ${calcResults.cloro.ordCloroTiempo} minutos.`,
-      `   * Tanque de Frío: ${calcResults.cloro.tanCloroTiempo} minutos.`,
-      "10. Enjuague final abundante con agua fría limpia."
+      "1. Enjuague Inicial",
+      "   Realizar un enjuague inicial con abundante agua fría para eliminar restos de leche y suciedad presentes en el sistema.",
+      "",
+      "2. Lavado Alcalino",
+      "   Preparar la cantidad de agua calculada y agregar la dosis correspondiente de detergente alcalino.",
+      "   • Ordeñadora:",
+      `     - Agua calculada: ${calcResults.ord.aguaPorLavado.toFixed(1)} L.`,
+      `     - Alcalino calculado: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.ord_alcalino_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "   • Tanque de Frío:",
+      `     - Agua calculada: ${calcResults.tan.aguaPorLavado.toFixed(1)} L.`,
+      `     - Alcalino calculado: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.tan_alcalino_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "",
+      "3. Enjuague Alcalino",
+      "   Realizar un enjuague completo con agua limpia para eliminar residuos del detergente alcalino.",
+      "",
+      "4. Lavado Ácido",
+      "   Preparar la cantidad de agua calculada y agregar la dosis correspondiente de detergente ácido.",
+      "   • Ordeñadora:",
+      `     - Agua calculada: ${calcResults.ord.aguaPorLavado.toFixed(1)} L.`,
+      `     - Ácido calculado: ${calcResults.ord.acidoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.ord_acido_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "   • Tanque de Frío:",
+      `     - Agua calculada: ${calcResults.tan.aguaPorLavado.toFixed(1)} L.`,
+      `     - Ácido calculado: ${calcResults.tan.acidoPorLavado.toFixed(0)} cc (Concentración: ${selectedConfig.tan_acido_porcentaje}%).`,
+      "     - Tiempo de recirculación: 8 a 10 minutos.",
+      "",
+      "5. Enjuague Ácido",
+      "   Realizar un enjuague completo con agua limpia para eliminar residuos del detergente ácido.",
+      "",
+      "6. Lavado con Cloro",
+      "   Preparar la cantidad de agua calculada y agregar la dosis correspondiente de cloro.",
+      "   • Ordeñadora:",
+      `     - Agua calculada: ${calcResults.ord.aguaPorLavado.toFixed(1)} L.`,
+      `     - Cloro calculado: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (Concentración: ${calcResults.cloro.ordCloroPorcentaje}%).`,
+      `     - Tiempo de recirculación: ${calcResults.cloro.ordCloroTiempo} minutos.`,
+      "   • Tanque de Frío:",
+      `     - Agua calculada: ${calcResults.tan.aguaPorLavado.toFixed(1)} L.`,
+      `     - Cloro calculado: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (Concentración: ${calcResults.cloro.tanCloroPorcentaje}%).`,
+      `     - Tiempo de recirculación: ${calcResults.cloro.tanCloroTiempo} minutos.`
     ];
 
-    acidSteps.forEach(st => {
-      const splitSt = doc.splitTextToSize(st, 180);
-      doc.text(splitSt, 18, y);
-      y += (splitSt.length * 4);
-    });
+    printSteps(acidSteps);
 
     y += 4;
-    checkPageOverflow(85);
+    checkPageOverflow(40);
 
     // OBSERVATIONS & NOTES
     doc.setFont("helvetica", "bold");
