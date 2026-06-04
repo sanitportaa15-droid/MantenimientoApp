@@ -126,7 +126,7 @@ export default function LavadoPage() {
   const [formTanCloroTiempo, setFormTanCloroTiempo] = useState<number>(8);
 
   // Logo Configurable local state
-  const [companyLogoText, setCompanyLogoText] = useState(() => localStorage.getItem("washing_logo_text") || "GanPor Mantenimiento S.R.L.");
+  const [companyLogoText, setCompanyLogoText] = useState(() => localStorage.getItem("washing_logo_text") || "GanPor Mantenimiento");
 
   // Load basic data
   const loadData = async () => {
