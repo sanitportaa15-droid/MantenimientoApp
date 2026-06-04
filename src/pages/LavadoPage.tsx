@@ -539,7 +539,7 @@ export default function LavadoPage() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    doc.text(companyLogoText, 14, 18);
+    doc.text("GanPor Mantenimiento", 14, 18);
     
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
