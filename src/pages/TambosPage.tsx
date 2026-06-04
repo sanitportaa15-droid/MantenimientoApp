@@ -134,7 +134,7 @@ export default function TambosPage() {
             </div>
 
             <div className="pt-6 border-t border-white/5 flex justify-between items-center text-xs">
-              <span className="text-zinc-500">Marca: {tambo.marca_pezonera || "N/A"}</span>
+              <span className="text-zinc-500">Marca: {(tambo as any).marca_pezonera || tambo.insumos?.nombre || "N/A"}</span>
               <span className="text-emerald-400 font-bold uppercase tracking-widest">Ver Ficha</span>
             </div>
           </Link>

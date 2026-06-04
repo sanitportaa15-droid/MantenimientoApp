@@ -51,10 +51,12 @@ export default function ReclamosPage() {
   }
 
   const filteredReclamos = reclamos.filter(r => {
+    const tamboNombre = r.tambos?.nombre || "";
+    const clienteNombre = (Array.isArray(r.tambos?.clientes) ? r.tambos?.clientes[0]?.nombre : r.tambos?.clientes?.nombre) || "";
     const matchesSearch = 
       r.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.tambos.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.tambos.clientes.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+      tamboNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      clienteNombre.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesEstado = filterEstado === "Todos" || r.estado === filterEstado;
     
@@ -145,7 +147,7 @@ export default function ReclamosPage() {
                       <StatusBadge estado={reclamo.estado} />
                     </div>
                     <p className="text-sm text-zinc-400 font-medium">
-                      {reclamo.tambos.nombre} • <span className="text-zinc-500">{reclamo.tambos.clientes.nombre}</span>
+                      {reclamo.tambos?.nombre || "Tambo desconocido"} • <span className="text-zinc-500">{(Array.isArray(reclamo.tambos?.clientes) ? reclamo.tambos?.clientes[0]?.nombre : reclamo.tambos?.clientes?.nombre) || "Sin cliente"}</span>
                     </p>
                   </div>
                 </div>

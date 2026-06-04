@@ -429,6 +429,22 @@ export const db = {
         console.error("Error al obtener tipos de mantenimiento:", error);
         throw error;
       }
+      if (!data || data.length === 0) {
+        return [
+          { id: "tm-pezoneras", nombre: "Cambio de pezoneras", frecuencia_meses: 4, descripcion: "Cambio periódico de pezoneras", created_at: "" },
+          { id: "tm-mangueras-leche", nombre: "Mangueras de leche", frecuencia_meses: 12, descripcion: "Cambio de mangueras de leche", created_at: "" },
+          { id: "tm-mangueras-pulsado", nombre: "Mangueras de pulsado", frecuencia_meses: 12, descripcion: "Cambio de mangueras de pulsado", created_at: "" },
+          { id: "tm-pulsadores", nombre: "Pulsadores", frecuencia_meses: 6, descripcion: "Mantenimiento de pulsadores", created_at: "" },
+          { id: "tm-sogas", nombre: "Cambio de sogas", frecuencia_meses: 4, descripcion: "Cambio de sogas de retiro", created_at: "" },
+          { id: "tm-diafragmas", nombre: "Cambio de diafragma de los brazos", frecuencia_meses: 12, descripcion: "Mantenimiento de brazos", created_at: "" },
+          { id: "tm-bujes", nombre: "Cambio de bujes", frecuencia_meses: 12, descripcion: "Cambio de bujes generales", created_at: "" },
+          { id: "tm-sensor", nombre: "Sensor de leche", frecuencia_meses: 6, descripcion: "Limpieza y calibración de sensores", created_at: "" },
+          { id: "tm-vacio", nombre: "Bomba de vacío", frecuencia_meses: 12, descripcion: "Mantenimiento preventivo de bomba", created_at: "" },
+          { id: "tm-centrifuga", nombre: "Bomba centrífuga de leche", frecuencia_meses: 6, descripcion: "Revisión de sellos y motor", created_at: "" },
+          { id: "tm-diafragma-leche", nombre: "Bomba diafragma de leche", frecuencia_meses: 4, descripcion: "Cambio de diafragmas", created_at: "" },
+          { id: "tm-colector", nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores", created_at: "" }
+        ] as TipoMantenimiento[];
+      }
       return data as TipoMantenimiento[];
     },
     async create(tipo: Database['public']['Tables']['tipos_mantenimiento']['Insert']) {
@@ -741,15 +757,34 @@ export const db = {
       return data as FichaTecnica | null;
     },
     async create(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
-      const { data, error } = await (supabase.from("ficha_tecnica") as any)
-        .insert(ficha)
-        .select()
-        .single();
-      if (error) {
-        console.error("Error guardando ficha técnica:", error);
-        throw error;
+      try {
+        const { data: existing } = await supabase.from("ficha_tecnica")
+          .select("*")
+          .eq("tambo_id", ficha.tambo_id)
+          .maybeSingle();
+        
+        if (existing) {
+          return existing as FichaTecnica;
+        }
+
+        const { data, error } = await (supabase.from("ficha_tecnica") as any)
+          .insert(ficha)
+          .select()
+          .single();
+        if (error) {
+          // If insert failed due to concurrent race, retry as upsert
+          const { data: upsertData, error: upsertError } = await (supabase.from("ficha_tecnica") as any)
+            .upsert(ficha, { onConflict: "tambo_id" })
+            .select()
+            .single();
+          if (upsertError) throw upsertError;
+          return upsertData as FichaTecnica;
+        }
+        return data as FichaTecnica;
+      } catch (err) {
+        console.error("Error guardando ficha técnica con blindaje 409:", err);
+        throw err;
       }
-      return data as FichaTecnica;
     },
     async update(id: string, ficha: Partial<Database['public']['Tables']['ficha_tecnica']['Update']>) {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
@@ -765,7 +800,7 @@ export const db = {
     },
     async upsert(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
-        .upsert(ficha)
+        .upsert(ficha, { onConflict: "tambo_id" })
         .select()
         .single();
       if (error) {
@@ -908,16 +943,46 @@ export const db = {
       }
     },
     async create(config: Omit<LavadoConfiguracion, 'id' | 'created_at'>) {
-      const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
-      const createdAt = new Date().toISOString();
-      const newConfigRecord = { id: newId, created_at: createdAt, ...config };
       try {
-        const { data, error } = await (supabase.from("lavado_configuraciones") as any).insert(newConfigRecord).select().single();
+        const { data: existing } = await supabase.from("lavado_configuraciones")
+          .select("*")
+          .eq("tambo_id", config.tambo_id)
+          .maybeSingle();
+
+        if (existing) {
+          const { data, error } = await (supabase.from("lavado_configuraciones") as any)
+            .update(config)
+            .eq("id", (existing as any).id)
+            .select()
+            .single();
+          if (error) throw error;
+          return data as LavadoConfiguracion;
+        }
+
+        const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
+        const createdAt = new Date().toISOString();
+        const newConfigRecord = { id: newId, created_at: createdAt, ...config };
+
+        const { data, error } = await (supabase.from("lavado_configuraciones") as any)
+          .insert(newConfigRecord)
+          .select()
+          .single();
         if (error) throw error;
         return data as LavadoConfiguracion;
       } catch (err) {
-        console.warn("Utilizando Local Storage para inserción de lavado_configuraciones.", err);
+        console.warn("Utilizando Local Storage para inserción/actualización de lavado_configuraciones.", err);
         const locals = getLocalConfigs();
+        const existingLocalIndex = locals.findIndex(c => c.tambo_id === config.tambo_id);
+        
+        if (existingLocalIndex !== -1) {
+          locals[existingLocalIndex] = { ...locals[existingLocalIndex], ...config };
+          saveLocalConfigs(locals);
+          return locals[existingLocalIndex] as LavadoConfiguracion;
+        }
+
+        const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
+        const createdAt = new Date().toISOString();
+        const newConfigRecord = { id: newId, created_at: createdAt, ...config };
         locals.push(newConfigRecord);
         saveLocalConfigs(locals);
         return newConfigRecord as LavadoConfiguracion;

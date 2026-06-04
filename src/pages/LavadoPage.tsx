@@ -32,11 +32,55 @@ import { Tambo, Cliente, LavadoConfiguracion, LavadoHistorial } from "../types/s
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+interface CloroConfigSidecar {
+  ordCloroPorcentaje: number;
+  ordCloroTiempo: number;
+  tanCloroPorcentaje: number;
+  tanCloroTiempo: number;
+}
+
+function getCloroConfig(configId: string): CloroConfigSidecar {
+  try {
+    const data = localStorage.getItem(`cloro_config_${configId}`);
+    if (data) return JSON.parse(data);
+  } catch (e) {}
+  return {
+    ordCloroPorcentaje: 0.1,
+    ordCloroTiempo: 8,
+    tanCloroPorcentaje: 0.1,
+    tanCloroTiempo: 8
+  };
+}
+
+function saveCloroConfig(configId: string, values: CloroConfigSidecar) {
+  localStorage.setItem(`cloro_config_${configId}`, JSON.stringify(values));
+}
+
+interface CloroHistorialSidecar {
+  cloroUtilizado: number;
+  cloroTiempo: number;
+}
+
+function getCloroHistorial(histId: string): CloroHistorialSidecar {
+  try {
+    const data = localStorage.getItem(`cloro_historial_${histId}`);
+    if (data) return JSON.parse(data);
+  } catch (e) {}
+  return {
+    cloroUtilizado: 0,
+    cloroTiempo: 0
+  };
+}
+
+function saveCloroHistorial(histId: string, values: CloroHistorialSidecar) {
+  localStorage.setItem(`cloro_historial_${histId}`, JSON.stringify(values));
+}
+
 export default function LavadoPage() {
   const [activeTab, setActiveTab] = useState<"config" | "calculo" | "historial" | "reportes">("calculo");
   const [tambos, setTambos] = useState<(Tambo & { clientes?: { nombre: string } })[]>([]);
   const [configs, setConfigs] = useState<LavadoConfiguracion[]>([]);
-  const [historial, setHistorial] = useState<LavadoHistorial[]>([]);
+  const [historial, setHistorial] = useState<(LavadoHistorial & { cloro_utilizado?: number; cloro_tiempo?: number })[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters for Historial
@@ -75,6 +119,12 @@ export default function LavadoPage() {
   const [formTanFrecuencia, setFormTanFrecuencia] = useState<string>("Diario");
   const [formTanLavadosAcidosSemana, setFormTanLavadosAcidosSemana] = useState<number>(2);
 
+  // Cloro parameters
+  const [formOrdCloroPorcentaje, setFormOrdCloroPorcentaje] = useState<number>(0.1);
+  const [formOrdCloroTiempo, setFormOrdCloroTiempo] = useState<number>(8);
+  const [formTanCloroPorcentaje, setFormTanCloroPorcentaje] = useState<number>(0.1);
+  const [formTanCloroTiempo, setFormTanCloroTiempo] = useState<number>(8);
+
   // Logo Configurable local state
   const [companyLogoText, setCompanyLogoText] = useState(() => localStorage.getItem("washing_logo_text") || "GanPor Mantenimiento S.R.L.");
 
@@ -89,7 +139,15 @@ export default function LavadoPage() {
       setConfigs(configsData);
       
       const histData = await db.lavado_historial.getAll();
-      setHistorial(histData);
+      const enrichedHistory = histData.map(h => {
+        const sidecar = getCloroHistorial(h.id);
+        return {
+          ...h,
+          cloro_utilizado: sidecar.cloroUtilizado,
+          cloro_tiempo: sidecar.cloroTiempo
+        };
+      });
+      setHistorial(enrichedHistory);
       
       // Auto-select first available config on load if not selected
       if (configsData.length > 0 && !selectedConfigId) {
@@ -125,84 +183,110 @@ export default function LavadoPage() {
   const calcResults = useMemo(() => {
     if (!selectedConfig) return null;
 
+    // Load Cloro config
+    const cloro = getCloroConfig(selectedConfig.id);
+
     // --- ORDEÑADORA ---
     const ordAguaPorLavado = selectedConfig.ord_puestos * selectedConfig.ord_litros_por_puesto;
     const ordAlcalinoPorLavado = ordAguaPorLavado * (selectedConfig.ord_alcalino_porcentaje / 100) * 1000; // in ml/cc
     const ordAcidoPorLavado = ordAguaPorLavado * (selectedConfig.ord_acido_porcentaje / 100) * 1000; // in ml/cc
+    const ordCloroPorLavado = ordAguaPorLavado * (cloro.ordCloroPorcentaje / 100) * 1000; // in ml/cc
     
-    const ordAguaDiaria = ordAguaPorLavado * selectedConfig.ord_ordenes_diarios;
-    const ordAlcalinoDiario = ordAlcalinoPorLavado * selectedConfig.ord_ordenes_diarios; // in ml
+    // Milking orders per day / washes per week
+    const ordWeeklyWashes = 7 * selectedConfig.ord_ordenes_diarios;
+    const ordWeeklyAcidWashes = selectedConfig.ord_lavados_acidos_semana;
 
-    // Acid is a double wash prepped water (meaning 1 extra slot of water and acid prepped)
-    // we make total washes per week = 7 * daily milking
-    const ordTotalWashesWeek = 7 * selectedConfig.ord_ordenes_diarios;
-    const ordAcidWashesWeek = selectedConfig.ord_lavados_acidos_semana;
-    
-    // In our model: every wash uses Alkaline. Acid washes additionally prepare water again for Acid.
-    const ordWeeklyWaterConsum = (ordTotalWashesWeek + ordAcidWashesWeek) * ordAguaPorLavado;
-    const ordWeeklyAlcalinoConsum = ordTotalWashesWeek * ordAlcalinoPorLavado; // in ml
-    const ordWeeklyAcidoConsum = ordAcidWashesWeek * ordAcidoPorLavado; // in ml
+    // Water calculations
+    // Normal wash has 2 prepped waters (Alkaline + Chlorine)
+    // Acid wash has 3 prepped waters (Alkaline + Acid + Chlorine)
+    const ordWeeklyWaterConsum = (ordWeeklyWashes * 2 + ordWeeklyAcidWashes) * ordAguaPorLavado;
+    const ordWeeklyAlcalinoConsum = ordWeeklyWashes * ordAlcalinoPorLavado;
+    const ordWeeklyAcidoConsum = ordWeeklyAcidWashes * ordAcidoPorLavado;
+    const ordWeeklyCloroConsum = ordWeeklyWashes * ordCloroPorLavado;
 
     const ordMonthlyWaterConsum = ordWeeklyWaterConsum * 4.34;
     const ordMonthlyAlcalinoConsum = ordWeeklyAlcalinoConsum * 4.34;
     const ordMonthlyAcidoConsum = ordWeeklyAcidoConsum * 4.34;
+    const ordMonthlyCloroConsum = ordWeeklyCloroConsum * 4.34;
+
+    const ordDailyWaterConsum = ordWeeklyWaterConsum / 7;
+    const ordDailyAlcalinoConsum = ordWeeklyAlcalinoConsum / 7;
+    const ordDailyAcidoConsum = ordWeeklyAcidoConsum / 7;
+    const ordDailyCloroConsum = ordWeeklyCloroConsum / 7;
 
     // --- TANQUE DE FRÍO ---
     const tanAguaPorLavado = selectedConfig.tan_capacidad * (selectedConfig.tan_agua_porcentaje / 100);
     const tanAlcalinoPorLavado = tanAguaPorLavado * (selectedConfig.tan_alcalino_porcentaje / 100) * 1000; // in ml/cc
     const tanAcidoPorLavado = tanAguaPorLavado * (selectedConfig.tan_acido_porcentaje / 100) * 1000; // in ml/cc
+    const tanCloroPorLavado = tanAguaPorLavado * (cloro.tanCloroPorcentaje / 100) * 1000; // in ml/cc
 
-    // Determine washes per week and daily multiplier
     let tanWashesPerWeek = 7;
     if (selectedConfig.tan_frecuencia === "Cada 2 días") {
       tanWashesPerWeek = 3.5;
     } else if (selectedConfig.tan_frecuencia === "Personalizado") {
-      // default customized to 3 washes per week as a safe non-zero multiplier
       tanWashesPerWeek = 3;
     }
 
     const tanAcidWashesWeek = Math.min(selectedConfig.tan_lavados_acidos_semana, tanWashesPerWeek);
 
-    const tanWeeklyWaterConsum = (tanWashesPerWeek + tanAcidWashesWeek) * tanAguaPorLavado;
+    // Same logic for Tanque
+    const tanWeeklyWaterConsum = (tanWashesPerWeek * 2 + tanAcidWashesWeek) * tanAguaPorLavado;
     const tanWeeklyAlcalinoConsum = tanWashesPerWeek * tanAlcalinoPorLavado;
     const tanWeeklyAcidoConsum = tanAcidWashesWeek * tanAcidoPorLavado;
+    const tanWeeklyCloroConsum = tanWashesPerWeek * tanCloroPorLavado;
 
     const tanDailyWaterConsum = tanWeeklyWaterConsum / 7;
     const tanDailyAlcalinoConsum = tanWeeklyAlcalinoConsum / 7;
+    const tanDailyAcidoConsum = tanWeeklyAcidoConsum / 7;
+    const tanDailyCloroConsum = tanWeeklyCloroConsum / 7;
 
     const tanMonthlyWaterConsum = tanWeeklyWaterConsum * 4.34;
     const tanMonthlyAlcalinoConsum = tanWeeklyAlcalinoConsum * 4.34;
     const tanMonthlyAcidoConsum = tanWeeklyAcidoConsum * 4.34;
+    const tanMonthlyCloroConsum = tanWeeklyCloroConsum * 4.34;
 
     return {
+      cloro,
       ord: {
         aguaPorLavado: ordAguaPorLavado,
         alcalinoPorLavado: ordAlcalinoPorLavado,
         acidoPorLavado: ordAcidoPorLavado,
-        aguaDiaria: ordAguaDiaria,
-        alcalinoDiario: ordAlcalinoDiario,
+        cloroPorLavado: ordCloroPorLavado,
+        cloroTiempo: cloro.ordCloroTiempo,
+        aguaDiaria: ordDailyWaterConsum,
+        alcalinoDiario: ordDailyAlcalinoConsum,
+        acidoDiario: ordDailyAcidoConsum,
+        cloroDiario: ordDailyCloroConsum,
         semanalAgua: ordWeeklyWaterConsum,
         semanalAlcalino: ordWeeklyAlcalinoConsum,
         semanalAcido: ordWeeklyAcidoConsum,
+        semanalCloro: ordWeeklyCloroConsum,
         mensualAgua: ordMonthlyWaterConsum,
         mensualAlcalino: ordMonthlyAlcalinoConsum,
         mensualAcido: ordMonthlyAcidoConsum,
+        mensualCloro: ordMonthlyCloroConsum,
       },
       tan: {
         aguaPorLavado: tanAguaPorLavado,
         alcalinoPorLavado: tanAlcalinoPorLavado,
         acidoPorLavado: tanAcidoPorLavado,
+        cloroPorLavado: tanCloroPorLavado,
+        cloroTiempo: cloro.tanCloroTiempo,
         diarioAgua: tanDailyWaterConsum,
         diarioAlcalino: tanDailyAlcalinoConsum,
+        diarioAcido: tanDailyAcidoConsum,
+        diarioCloro: tanDailyCloroConsum,
         semanalAgua: tanWeeklyWaterConsum,
         semanalAlcalino: tanWeeklyAlcalinoConsum,
         semanalAcido: tanWeeklyAcidoConsum,
+        semanalCloro: tanWeeklyCloroConsum,
         mensualAgua: tanMonthlyWaterConsum,
         mensualAlcalino: tanMonthlyAlcalinoConsum,
         mensualAcido: tanMonthlyAcidoConsum,
+        mensualCloro: tanMonthlyCloroConsum,
       }
     };
-  }, [selectedConfig]);
+  }, [selectedConfig, configs]);
 
   // Open config modal for creation
   const handleAddConfig = () => {
@@ -243,6 +327,14 @@ export default function LavadoPage() {
     setFormTanAcidoPorcentaje(config.tan_acido_porcentaje);
     setFormTanFrecuencia(config.tan_frecuencia);
     setFormTanLavadosAcidosSemana(config.tan_lavados_acidos_semana);
+    
+    // Load sidecar cloro
+    const cloro = getCloroConfig(config.id);
+    setFormOrdCloroPorcentaje(cloro.ordCloroPorcentaje);
+    setFormOrdCloroTiempo(cloro.ordCloroTiempo);
+    setFormTanCloroPorcentaje(cloro.tanCloroPorcentaje);
+    setFormTanCloroTiempo(cloro.tanCloroTiempo);
+
     setIsModalOpen(true);
   };
 
@@ -271,6 +363,14 @@ export default function LavadoPage() {
       setFormTanAcidoPorcentaje(config.tan_acido_porcentaje);
       setFormTanFrecuencia(config.tan_frecuencia);
       setFormTanLavadosAcidosSemana(config.tan_lavados_acidos_semana);
+
+      // Load sidecar cloro
+      const cloro = getCloroConfig(config.id);
+      setFormOrdCloroPorcentaje(cloro.ordCloroPorcentaje);
+      setFormOrdCloroTiempo(cloro.ordCloroTiempo);
+      setFormTanCloroPorcentaje(cloro.tanCloroPorcentaje);
+      setFormTanCloroTiempo(cloro.tanCloroTiempo);
+
       setIsModalOpen(true);
     } catch (err) {
       console.error("Error al preparar duplicación:", err);
@@ -289,9 +389,11 @@ export default function LavadoPage() {
       formOrdPuestos <= 0 || formOrdLitrosPorPuesto <= 0 || formOrdOrdenesDiarios <= 0 ||
       formOrdAlcalinoPorcentaje < 0 || formOrdAcidoPorcentaje < 0 || formOrdLavadosAcidosSemana < 0 ||
       formTanCapacidad <= 0 || formTanAguaPorcentaje < 0 || formTanAlcalinoPorcentaje < 0 ||
-      formTanAcidoPorcentaje < 0 || formTanLavadosAcidosSemana < 0
+      formTanAcidoPorcentaje < 0 || formTanLavadosAcidosSemana < 0 ||
+      formOrdCloroPorcentaje < 0 || formOrdCloroTiempo < 0 ||
+      formTanCloroPorcentaje < 0 || formTanCloroTiempo < 0
     ) {
-      alert("Por favor, introduzca valores mayores que cero para capacidades/unidades y no negativos para concentraciones.");
+      alert("Por favor, introduzca valores mayores que cero para capacidades/unidades y no negativos para concentraciones o tiempos.");
       return;
     }
 
@@ -314,6 +416,7 @@ export default function LavadoPage() {
     };
 
     try {
+      let configId = editConfigId;
       if (editConfigId) {
         await db.lavado_configuraciones.update(editConfigId, payload);
       } else {
@@ -324,8 +427,20 @@ export default function LavadoPage() {
           return;
         }
         const created = await db.lavado_configuraciones.create(payload);
+        configId = created.id;
         setSelectedConfigId(created.id);
       }
+
+      // Save sidecar cloro values
+      if (configId) {
+        saveCloroConfig(configId, {
+          ordCloroPorcentaje: Number(formOrdCloroPorcentaje),
+          ordCloroTiempo: Number(formOrdCloroTiempo),
+          tanCloroPorcentaje: Number(formTanCloroPorcentaje),
+          tanCloroTiempo: Number(formTanCloroTiempo)
+        });
+      }
+
       setIsModalOpen(false);
       await loadData();
     } catch (err) {
@@ -350,16 +465,17 @@ export default function LavadoPage() {
   };
 
   // Record wash event to history
-  const handleRecordWash = async (type: "Normal" | "Con ácido") => {
+  const handleRecordWash = async (type: "Normal" | "Con ácido" | "Clorado") => {
     if (!selectedConfig || !calcResults) return;
 
     const dataObj = activeEquipment === "ordenadora" ? calcResults.ord : calcResults.tan;
-    const isAcid = type === "Con ácido";
 
     // Values in liters
     const hAgua = dataObj.aguaPorLavado;
-    const hAlcalino = dataObj.alcalinoPorLavado / 1000; // cc to L
-    const hAcido = isAcid ? dataObj.acidoPorLavado / 1000 : 0; // cc to L
+    const hAlcalino = type === "Clorado" ? 0 : dataObj.alcalinoPorLavado / 1000; // cc to L
+    const hAcido = type === "Con ácido" ? dataObj.acidoPorLavado / 1000 : 0; // cc to L
+    const hCloro = dataObj.cloroPorLavado / 1000; // cc to L
+    const hCloroTiempo = dataObj.cloroTiempo;
 
     const payload = {
       tambo_id: selectedConfig.tambo_id,
@@ -375,7 +491,13 @@ export default function LavadoPage() {
     };
 
     try {
-      await db.lavado_historial.create(payload);
+      const created = await db.lavado_historial.create(payload);
+      if (created && created.id) {
+        saveCloroHistorial(created.id, {
+          cloroUtilizado: hCloro,
+          cloroTiempo: hCloroTiempo
+        });
+      }
       alert(`¡Lavado ${type} registrado con éxito en el historial!`);
       await loadData();
     } catch (err) {
@@ -406,10 +528,8 @@ export default function LavadoPage() {
     localStorage.setItem("washing_logo_text", companyLogoText);
 
     const doc = new jsPDF();
-    const isOrd = activeEquipment === "ordenadora";
     
     // Theme Colors
-    const primaryColor = [16, 185, 129]; // Emerald
     const mDark = [15, 15, 15]; // Slate Dark
     
     // Draw Header
@@ -424,7 +544,7 @@ export default function LavadoPage() {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(16, 185, 129);
-    doc.text("RECETA DE LAVADO ESPECIALIZADA", 14, 28);
+    doc.text("INFORME DE CONTROL Y DOSIFICACIÓN CONSOLIDADO", 14, 28);
     
     // Metadata block
     doc.setTextColor(60, 60, 60);
@@ -448,137 +568,263 @@ export default function LavadoPage() {
     doc.text(technicianName || "No especificado", 55, 55);
     
     doc.setFont("helvetica", "bold");
-    doc.text("Equipo de Aplicación:", 115, 55);
+    doc.text("Estado del Reporte:", 115, 55);
     doc.setFont("helvetica", "normal");
-    doc.text(isOrd ? "Ordeñadora de Leche" : "Tanque de Frío", 160, 55);
+    doc.text("Consolidado (Ordeñadora + Tanque)", 160, 55);
 
     // Separator line
     doc.setDrawColor(220, 220, 220);
     doc.line(14, 62, 196, 62);
 
-    // PARAMETERS & CALCULATIONS TABLE
+    let y = 71;
+
+    // SECTION 1: ORDEÑADORA DE LECHE
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor(15, 15, 15);
-    doc.text("1. Configuración de Parámetros y Volúmenes Calculados", 14, 71);
+    doc.text("1. Configuración de Parámetros: Ordeñadora de Leche", 14, y);
+    y += 4;
 
-    const calcData = isOrd ? calcResults.ord : calcResults.tan;
-
-    const dataRows = isOrd ? [
+    const ordRows = [
       ["Puestos de la Ordeñadora", `${selectedConfig.ord_puestos} unidades`],
       ["Volumen de Agua por Puesto", `${selectedConfig.ord_litros_por_puesto} Litros`],
-      ["Dosis de Alcalino", `${selectedConfig.ord_alcalino_porcentaje}%`],
-      ["Dosis de Ácido", `${selectedConfig.ord_acido_porcentaje}%`],
-      ["Ordeños Diarios", `${selectedConfig.ord_ordenes_diarios} veces`],
-      ["Frecuencia de Lavado Ácido", `${selectedConfig.ord_lavados_acidos_semana} veces por semana`],
-      ["Agua Preparada por Lavado", `${calcData.aguaPorLavado.toFixed(1)} Litros`],
-      ["Dosis Alcalino por Lavado", `${calcData.alcalinoPorLavado.toFixed(0)} cc (ml) -- ${(calcData.alcalinoPorLavado/1000).toFixed(2)} L`],
-      ["Dosis Ácido por Lavado", `${calcData.acidoPorLavado.toFixed(0)} cc (ml) -- ${(calcData.acidoPorLavado/1000).toFixed(2)} L`],
-      ["Agua Consumo Diario", `${calcData.aguaDiaria.toFixed(1)} Litros`],
-    ] : [
-      ["Capacidad del Tanque de Frío", `${selectedConfig.tan_capacidad} Litros`],
-      ["Ratio de Agua para Lavado", `${selectedConfig.tan_agua_porcentaje}%`],
-      ["Dosis de Alcalino", `${selectedConfig.tan_alcalino_porcentaje}%`],
-      ["Dosis de Ácido", `${selectedConfig.tan_acido_porcentaje}%`],
-      ["Frecuencia de Lavado", `${selectedConfig.tan_frecuencia}`],
-      ["Cantidad de Lavados Ácidos", `${selectedConfig.tan_lavados_acidos_semana} veces por semana`],
-      ["Agua Necesitada por Lavado", `${calcData.aguaPorLavado.toFixed(1)} Litros`],
-      ["Dosis Alcalino por Lavado", `${calcData.alcalinoPorLavado.toFixed(0)} cc (ml) -- ${(calcData.alcalinoPorLavado/1000).toFixed(2)} L`],
-      ["Dosis Ácido por Lavado", `${calcData.acidoPorLavado.toFixed(0)} cc (ml) -- ${(calcData.acidoPorLavado/1000).toFixed(2)} L`],
-      ["Consumo Diario Estimado (Agua)", `${calcData.diarioAgua.toFixed(1)} Litros`],
+      ["Dosis Alcalino Sugerida", `${selectedConfig.ord_alcalino_porcentaje}%`],
+      ["Dosis Ácido Sugerida", `${selectedConfig.ord_acido_porcentaje}%`],
+      ["Dosis Cloro Sugerida", `${calcResults.cloro.ordCloroPorcentaje}%`],
+      ["Tiempo Recirculación Cloro", `${calcResults.cloro.ordCloroTiempo} minutos`],
+      ["Ordeños Diarios (lavados)", `${selectedConfig.ord_ordenes_diarios} veces/día`],
+      ["Frecuencia Lavado Ácido", `${selectedConfig.ord_lavados_acidos_semana} veces/semana`],
+      ["Calculado: Agua por Lavado", `${calcResults.ord.aguaPorLavado.toFixed(1)} L`],
+      ["Calculado: Alcalino por Lavado", `${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc -- ${(calcResults.ord.alcalinoPorLavado/1000).toFixed(2)} L`],
+      ["Calculado: Ácido por Lavado", `${calcResults.ord.acidoPorLavado.toFixed(0)} cc -- ${(calcResults.ord.acidoPorLavado/1000).toFixed(2)} L`],
+      ["Calculado: Cloro por Lavado", `${calcResults.ord.cloroPorLavado.toFixed(0)} cc -- ${(calcResults.ord.cloroPorLavado/1000).toFixed(2)} L`],
     ];
 
     autoTable(doc, {
-      startY: 76,
-      head: [["Parámetro de Control", "Valor Clave"]],
-      body: dataRows,
+      startY: y,
+      head: [["Parámetro de Control", "Valor sugerido"]],
+      body: ordRows,
       theme: "striped",
-      headStyles: { fillColor: [15, 15, 15] },
-      styles: { fontSize: 9 }
+      headStyles: { fillColor: [15, 118, 110] }, // Teal dark
+      styles: { fontSize: 8 },
+      margin: { left: 14, right: 14 }
     });
+    y = (doc as any).lastAutoTable.finalY + 8;
 
-    const currentY = (doc as any).lastAutoTable.finalY + 12;
-
-    // PROCEDURES SECTION
+    // SECTION 2: TANQUE DE FRÍO
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("2. Protocolos de Higiene de Ordeño y Frío", 14, currentY);
+    doc.setFontSize(11);
+    doc.text("2. Configuración de Parámetros: Tanque de Frío", 14, y);
+    y += 4;
+
+    const tanRows = [
+      ["Capacidad del Tanque de Frío", `${selectedConfig.tan_capacidad} Litros`],
+      ["Ratio de Agua para Lavado", `${selectedConfig.tan_agua_porcentaje}%`],
+      ["Dosis Alcalino Sugerida", `${selectedConfig.tan_alcalino_porcentaje}%`],
+      ["Dosis Ácido Sugerida", `${selectedConfig.tan_acido_porcentaje}%`],
+      ["Dosis Cloro Sugerida", `${calcResults.cloro.tanCloroPorcentaje}%`],
+      ["Tiempo Recirculación Cloro", `${calcResults.cloro.tanCloroTiempo} minutos`],
+      ["Frecuencia de Lavado", `${selectedConfig.tan_frecuencia}`],
+      ["Cantidad Lavados Ácidos/Sem", `${selectedConfig.tan_lavados_acidos_semana} veces/semana`],
+      ["Calculado: Agua por Lavado", `${calcResults.tan.aguaPorLavado.toFixed(1)} L`],
+      ["Calculado: Alcalino por Lavado", `${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc -- ${(calcResults.tan.alcalinoPorLavado/1000).toFixed(2)} L`],
+      ["Calculado: Ácido por Lavado", `${calcResults.tan.acidoPorLavado.toFixed(0)} cc -- ${(calcResults.tan.acidoPorLavado/1000).toFixed(2)} L`],
+      ["Calculado: Cloro por Lavado", `${calcResults.tan.cloroPorLavado.toFixed(0)} cc -- ${(calcResults.tan.cloroPorLavado/1000).toFixed(2)} L`],
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Parámetro de Control", "Valor sugerido"]],
+      body: tanRows,
+      theme: "striped",
+      headStyles: { fillColor: [15, 118, 110] }, // Teal dark
+      styles: { fontSize: 8 },
+      margin: { left: 14, right: 14 }
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Page check helper
+    const checkPageOverflow = (neededHeight: number) => {
+      if (y + neededHeight > 275) {
+        doc.addPage();
+        y = 20;
+      }
+    };
+
+    checkPageOverflow(60);
+
+    // SECTION 3: CONSUMO TOTAL DE PRODUCTOS
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("3. Consumo Total de Productos (Proyecciones Consolidadas)", 14, y);
+    y += 4;
+
+    const totRows = [
+      [
+        "Agua Total",
+        `${(calcResults.ord.aguaDiaria + calcResults.tan.diarioAgua).toFixed(1)} L`,
+        `${(calcResults.ord.semanalAgua + calcResults.tan.semanalAgua).toFixed(1)} L`,
+        `${(calcResults.ord.mensualAgua + calcResults.tan.mensualAgua).toFixed(1)} L`
+      ],
+      [
+        "Alcalino Total",
+        `${((calcResults.ord.alcalinoDiario + calcResults.tan.diarioAlcalino)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.semanalAlcalino + calcResults.tan.semanalAlcalino)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.mensualAlcalino + calcResults.tan.mensualAlcalino)/1000).toFixed(2)} L`
+      ],
+      [
+        "Ácido Total",
+        `${((calcResults.ord.acidoDiario + calcResults.tan.diarioAcido)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.semanalAcido + calcResults.tan.semanalAcido)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.mensualAcido + calcResults.tan.mensualAcido)/1000).toFixed(2)} L`
+      ],
+      [
+        "Cloro Total",
+        `${((calcResults.ord.cloroDiario + calcResults.tan.diarioCloro)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.semanalCloro + calcResults.tan.semanalCloro)/1000).toFixed(2)} L`,
+        `${((calcResults.ord.mensualCloro + calcResults.tan.mensualCloro)/1000).toFixed(2)} L`
+      ],
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Producto", "Consumo Diario", "Consumo Semanal", "Consumo Mensual"]],
+      body: totRows,
+      theme: "striped",
+      headStyles: { fillColor: [16, 185, 129] }, // Emerald
+      styles: { fontSize: 9 },
+      margin: { left: 14, right: 14 }
+    });
+    
+    // Page 2: Protocols and Operating Instructions
+    doc.addPage();
+    y = 20;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 15, 15);
+    doc.text("4. Protocolos Sanitarios e Instrucciones de Lavado", 14, y);
+    y += 8;
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("Protocolo A: Lavado Diario Convencional (Normal)", 14, currentY + 6);
+    doc.setTextColor(16, 185, 129);
+    doc.text("Protocolo A: Lavado Diario Convencional (Normal)", 14, y);
+    y += 6;
+    doc.setTextColor(60, 60, 60);
     doc.setFont("helvetica", "normal");
-    
+    doc.setFontSize(8.5);
+
     const normalSteps = [
-      "1. Realizar un enjuague inicial con abundante agua templada o fría para retirar restos groseros.",
-      `2. Preparar un recipiente con ${calcData.aguaPorLavado.toFixed(1)} L de agua a temperatura óptima (50-60°C).`,
-      `3. Dosificar exactamente ${calcData.alcalinoPorLavado.toFixed(0)} cc de alcalino (${isOrd ? selectedConfig.ord_alcalino_porcentaje : selectedConfig.tan_alcalino_porcentaje}%).`,
-      "4. Hacer circular la mezcla por todo el circuito sanitario durante un lapso de 8 a 10 minutos corridos.",
-      "5. Terminar el ciclo con un enjuague final exhaustivo de agua limpia y fría para asegurar la no alcalinidad."
+      "1. Enjuague inicial con abundante agua fría para remover completamente toda la lactosa y biofilm de leche.",
+      `2. Preparar el volumen de agua de lavado caliente calculada por el sistema:`,
+      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L de agua.`,
+      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L de agua.`,
+      `3. Agregar la cantidad calculada de detergente alcalino:`,
+      `   * Ordeñadora: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc (Concentración del ${selectedConfig.ord_alcalino_porcentaje}%).`,
+      `   * Tanque de Frío: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc (Concentración del ${selectedConfig.tan_alcalino_porcentaje}%).`,
+      `4. Recircular la solución alcalina durante el lapso de 8 a 10 minutos (tiempo óptimo sugerido).`,
+      "5. Enjuagar con abundante agua fría limpia para remover residuos alcalinos.",
+      `6. Preparar de nuevo el volumen de agua calculada e incorporar la dosis calculada de Cloro:`,
+      `   * Ordeñadora: Dosificar exactamente ${calcResults.ord.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.ordCloroPorcentaje}%).`,
+      `   * Tanque de Frío: Dosificar exactamente ${calcResults.tan.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.tanCloroPorcentaje}%).`,
+      `7. Recircular la mezcla clorada durante el tiempo configurado:`,
+      `   * Ordeñadora: ${calcResults.cloro.ordCloroTiempo} minutos.`,
+      `   * Tanque de Frío: ${calcResults.cloro.tanCloroTiempo} minutos.`,
+      "8. Enjuague final con abundante agua fría limpia."
     ];
 
-    let stepY = currentY + 12;
     normalSteps.forEach(st => {
-      doc.text(st, 18, stepY);
-      stepY += 5;
+      const splitSt = doc.splitTextToSize(st, 180);
+      doc.text(splitSt, 18, y);
+      y += (splitSt.length * 4);
     });
 
+    y += 4;
+    doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("Protocolo B: Lavado de Desincrustación Orgánica (Con Ácido)", 14, stepY + 4);
+    doc.setTextColor(147, 51, 234); // Purple style
+    doc.text("Protocolo B: Lavado de Desincrustación Orgánica (Con Ácido)", 14, y);
+    y += 6;
+    doc.setTextColor(60, 60, 60);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
 
     const acidSteps = [
-      "1. Realizar un enjuague previo completo con agua fría limpia para barrer sólidos.",
-      `2. Preparar el juego de lavado alcalino inicial utilizando ${calcData.aguaPorLavado.toFixed(1)} L de agua y ${calcData.alcalinoPorLavado.toFixed(0)} cc del alcalino.`,
-      "3. Recircular enérgicamente por un ciclo de 8 a 10 minutos a fin de saponificar grasas.",
-      `4. Preparar el segundo baño ácido vertiendo ${calcData.aguaPorLavado.toFixed(1)} L de agua pura y agregando ${calcData.acidoPorLavado.toFixed(0)} cc de ácido.`,
-      "5. Circular este baño por un ciclo de 8 a 10 minutos para disolver depósitos de calcio o piedra de leche.",
-      "6. Completar la limpieza realizando un prolijo enjuague posterior con abundante agua corriente."
+      "1. Enjuague inicial con abundante agua fría para barrer remanentes de leche.",
+      `2. Preparar el volumen de agua de lavado caliente y dosificar detergente alcalino:`,
+      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc de alcalino.`,
+      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc de alcalino.`,
+      `3. Recircular durante el lapso de 8 a 10 minutos de forma de desengrasar las superficies.`,
+      "4. Enjuagar con abundante agua fría.",
+      `5. Preparar el volumen de agua regulado y dosificar detergente ácido:`,
+      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.acidoPorLavado.toFixed(0)} cc de ácido (${selectedConfig.ord_acido_porcentaje}%).`,
+      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.acidoPorLavado.toFixed(0)} cc de ácido (${selectedConfig.tan_acido_porcentaje}%).`,
+      `6. Recircular esta solución desincrustante ácida por un periodo de 8 a 10 minutos.`,
+      "7. Enjuagar con abundante agua limpia.",
+      `8. Preparar el volumen de agua correspondiente y agregar la dosis calculada de cloro:`,
+      `   * Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L + ${calcResults.ord.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.ordCloroPorcentaje}%).`,
+      `   * Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L + ${calcResults.tan.cloroPorLavado.toFixed(0)} cc de cloro (${calcResults.cloro.tanCloroPorcentaje}%).`,
+      `9. Recircular la solución desinfectante de cloro durante el tiempo configurado:`,
+      `   * Ordeñadora: ${calcResults.cloro.ordCloroTiempo} minutos.`,
+      `   * Tanque de Frío: ${calcResults.cloro.tanCloroTiempo} minutos.`,
+      "10. Enjuague final abundante con agua fría limpia."
     ];
 
-    stepY += 10;
-    acidSteps.forEach(ast => {
-      doc.text(ast, 18, stepY);
-      stepY += 5;
+    acidSteps.forEach(st => {
+      const splitSt = doc.splitTextToSize(st, 180);
+      doc.text(splitSt, 18, y);
+      y += (splitSt.length * 4);
     });
+
+    y += 4;
+    checkPageOverflow(85);
 
     // OBSERVATIONS & NOTES
     doc.setFont("helvetica", "bold");
-    doc.text("3. Notas de Campo del Técnico / Recomendaciones:", 14, stepY + 5);
+    doc.setTextColor(15, 15, 15);
+    doc.text("5. Notas de Campo del Técnico / Recomendaciones:", 14, y);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
+    y += 5;
     
     const notesText = pdfNotes || "No se detallaron observaciones técnicas adicionales para esta receta. Se sugiere respetar las temperaturas de recirculación prescritas para mantener la máxima eficiencia de sanitización bacteriológica.";
     const splitNotes = doc.splitTextToSize(notesText, 180);
-    doc.text(splitNotes, 16, stepY + 11);
+    doc.text(splitNotes, 16, y);
+    y += (splitNotes.length * 4) + 16;
+
+    checkPageOverflow(40);
 
     // SIGNATURES
-    const sigY = stepY + 38;
-    doc.line(20, sigY, 90, sigY);
-    doc.line(120, sigY, 190, sigY);
+    doc.line(20, y, 90, y);
+    doc.line(120, y, 190, y);
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Firma del Técnico Confecciona", 34, sigY + 4);
-    doc.text("Firma Responsable de Establecimiento", 125, sigY + 4);
+    doc.setFontSize(8);
+    doc.text("Firma del Técnico Confecciona", 34, y + 4);
+    doc.text("Firma Responsable de Establecimiento", 125, y + 4);
 
     // SAVE FILE
-    doc.save(`Receta_Lavado_${selectedConfig.nombre_establecimiento.replace(/\s+/g, "_")}.pdf`);
+    doc.save(`Receta_Lavado_Consolidado_${selectedConfig.nombre_establecimiento.replace(/\s+/g, "_")}.pdf`);
   };
 
   // Share Recipe on WhatsApp
   const shareWhatsApp = () => {
     if (!selectedConfig || !calcResults) return;
-    const isOrd = activeEquipment === "ordenadora";
-    const dataObj = isOrd ? calcResults.ord : calcResults.tan;
 
-    const msg = `*RECETA DE LAVADO - GANPOR MANTENIMIENTO*%0A` +
-      `*Establecimiento:* ${selectedConfig.nombre_establecimiento}%0A` +
-      `*Equipo:* ${isOrd ? 'Ordeñadora' : 'Tanque de Frío'}%0A` +
-      `*Agua sugerida:* ${dataObj.aguaPorLavado.toFixed(1)} Litros%0A` +
-      `*Alcalino:* ${dataObj.alcalinoPorLavado.toFixed(0)} cc (ml)%0A` +
-      `*Ácido:* ${dataObj.acidoPorLavado.toFixed(0)} cc (ml)%0A%0A` +
-      `_Se recomienda mantener recirculando entre 8 a 10 minutos en cada fase._%0A` +
+    const msg = `*REPORTE CONSOLIDADO DE LAVADO - GANPOR MANTENIMIENTO*%0A` +
+      `*Establecimiento:* ${selectedConfig.nombre_establecimiento}%0A%0A` +
+      `*1. ORDEÑADORA DE LECHE:*%0A` +
+      `- Agua Sugerida: ${calcResults.ord.aguaPorLavado.toFixed(1)} L%0A` +
+      `- Alcalino: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc%0A` +
+      `- Ácido: ${calcResults.ord.acidoPorLavado.toFixed(0)} cc%0A` +
+      `- Cloro: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.ordCloroTiempo} min)%0A%0A` +
+      `*2. TANQUE DE FRÍO:*%0A` +
+      `- Agua Sugerida: ${calcResults.tan.aguaPorLavado.toFixed(1)} L%0A` +
+      `- Alcalino: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc%0A` +
+      `- Ácido: ${calcResults.tan.acidoPorLavado.toFixed(0)} cc%0A` +
+      `- Cloro: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.tanCloroTiempo} min)%0A%0A` +
+      `_Toda la información se encuentra consolidada en un único informe técnico._%0A` +
       `Generado el: ${new Date().toLocaleDateString("es-AR")}`;
 
     window.open(`https://api.whatsapp.com/send?text=${msg}`, "_blank");
@@ -587,24 +833,29 @@ export default function LavadoPage() {
   // Share Recipe by Email
   const shareEmail = () => {
     if (!selectedConfig || !calcResults) return;
-    const isOrd = activeEquipment === "ordenadora";
-    const dataObj = isOrd ? calcResults.ord : calcResults.tan;
 
-    const subject = `Receta de Lavado - ${selectedConfig.nombre_establecimiento}`;
-    const body = `RECETA DE LAVADO ESPECIALIZADA - GANPOR\n\n` +
+    const subject = `Receta Lavado Consolidada - ${selectedConfig.nombre_establecimiento}`;
+    const body = `REPORTE CONSOLIDADO Y RECETA DE LAVADO SANITARIO\n\n` +
       `Establecimiento: ${selectedConfig.nombre_establecimiento}\n` +
-      `Equipo: ${isOrd ? 'Ordeñadora' : 'Tanque de Frío'}\n\n` +
-      `CÁLCULOS SANITARIOS POR CICLO:\n` +
-      `- Volumen de Agua Recomendado: ${dataObj.aguaPorLavado.toFixed(1)} Litros\n` +
-      `- Dosis de Alcalino: ${dataObj.alcalinoPorLavado.toFixed(0)} cc (millilitres)\n` +
-      `- Dosis de Ácido: ${dataObj.acidoPorLavado.toFixed(0)} cc (millilitres)\n\n` +
-      `INDICACIONES DE LAVADO NORMAL:\n` +
-      `1. Enjuague inicial con agua templada/fría.\n` +
-      `2. Preparar los ${dataObj.aguaPorLavado.toFixed(0)} L de agua.\n` +
-      `3. Agregar ${dataObj.alcalinoPorLavado.toFixed(0)} cc de alcalino.\n` +
-      `4. Recircular de 8 a 10 minutos.\n` +
-      `5. Enjuague final.\n\n` +
-      `Firmado por el Equipo de Soporte Técnico GanPor Mantenimiento.\n\n`;
+      `Fecha: ${new Date().toLocaleDateString("es-AR")}\n\n` +
+      `==========================================\n` +
+      `1. DOSIFICACIONES ORDEÑADORA DE LECHE:\n` +
+      `- Volumen de Agua Recomendado: ${calcResults.ord.aguaPorLavado.toFixed(1)} L\n` +
+      `- Dosis de Alcalino por Lavado: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc\n` +
+      `- Dosis de Ácido por Lavado: ${calcResults.ord.acidoPorLavado.toFixed(0)} cc\n` +
+      `- Dosis de Cloro por Lavado: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (Recirculación: ${calcResults.cloro.ordCloroTiempo} min)\n\n` +
+      `2. DOSIFICACIONES TANQUE DE FRÍO:\n` +
+      `- Volumen de Agua Recomendado: ${calcResults.tan.aguaPorLavado.toFixed(1)} L\n` +
+      `- Dosis de Alcalino por Lavado: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc\n` +
+      `- Dosis de Ácido por Lavado: ${calcResults.tan.acidoPorLavado.toFixed(0)} cc\n` +
+      `- Dosis de Cloro por Lavado: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (Recirculación: ${calcResults.cloro.tanCloroTiempo} min)\n\n` +
+      `==========================================\n` +
+      `3. CONSUMO CONSOLIDADO PROYECTADO ESTABLECIMIENTO:\n` +
+      `- Agua Total Diaria: ${(calcResults.ord.aguaDiaria + calcResults.tan.diarioAgua).toFixed(1)} L\n` +
+      `- Alcalino Total Diario: ${((calcResults.ord.alcalinoDiario + calcResults.tan.diarioAlcalino)/1000).toFixed(2)} L\n` +
+      `- Ácido Total Diario: ${((calcResults.ord.acidoDiario + calcResults.tan.diarioAcido)/1000).toFixed(2)} L\n` +
+      `- Cloro Total Diario: ${((calcResults.ord.cloroDiario + calcResults.tan.diarioCloro)/1000).toFixed(2)} L\n\n` +
+      `Generado por el departamento de Higiene y Calidad Agropecuaria.`;
 
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
@@ -624,6 +875,7 @@ export default function LavadoPage() {
     const totalWater = filteredHistory.reduce((acc, curr) => acc + curr.agua_utilizada, 0);
     const totalAlcalino = filteredHistory.reduce((acc, curr) => acc + curr.alcalino_utilizado, 0);
     const totalAcido = filteredHistory.reduce((acc, curr) => acc + curr.acido_utilizado, 0);
+    const totalCloro = filteredHistory.reduce((acc, curr) => acc + (curr.cloro_utilizado || 0), 0);
     const count = filteredHistory.length;
 
     // Daily average based on unique days
@@ -634,6 +886,7 @@ export default function LavadoPage() {
       water: totalWater,
       alcalino: totalAlcalino,
       acido: totalAcido,
+      cloro: totalCloro,
       totalCount: count,
       avgWaterDaily: avgWater
     };
@@ -825,8 +1078,12 @@ export default function LavadoPage() {
                                 <span className="font-bold text-white">{config.ord_ordenes_diarios}</span>
                               </li>
                               <li className="flex justify-between">
-                                <span className="text-zinc-500">% Alcalino / Ácido:</span>
-                                <span className="font-bold text-emerald-400">{config.ord_alcalino_porcentaje}% / {config.ord_acido_porcentaje}%</span>
+                                <span className="text-zinc-500">% Alcalino / Ácido / Cloro:</span>
+                                <span className="font-bold text-emerald-400">{config.ord_alcalino_porcentaje}% / {config.ord_acido_porcentaje}% / {getCloroConfig(config.id).ordCloroPorcentaje}%</span>
+                              </li>
+                              <li className="flex justify-between">
+                                <span className="text-zinc-500">Recirculación Cloro:</span>
+                                <span className="font-bold text-teal-400">{getCloroConfig(config.id).ordCloroTiempo} min</span>
                               </li>
                               <li className="flex justify-between border-t border-white/5 pt-1 mt-1">
                                 <span className="text-zinc-500">Lavados ácidos:</span>
@@ -855,8 +1112,12 @@ export default function LavadoPage() {
                                 <span className="font-bold text-white">{config.tan_frecuencia}</span>
                               </li>
                               <li className="flex justify-between">
-                                <span className="text-zinc-500">% Alcalino / Ácido:</span>
-                                <span className="font-bold text-emerald-400">{config.tan_alcalino_porcentaje}% / {config.tan_acido_porcentaje}%</span>
+                                <span className="text-zinc-500">% Alcalino / Ácido / Cloro:</span>
+                                <span className="font-bold text-emerald-400">{config.tan_alcalino_porcentaje}% / {config.tan_acido_porcentaje}% / {getCloroConfig(config.id).tanCloroPorcentaje}%</span>
+                              </li>
+                              <li className="flex justify-between">
+                                <span className="text-zinc-500">Recirculación Cloro:</span>
+                                <span className="font-bold text-teal-400">{getCloroConfig(config.id).tanCloroTiempo} min</span>
                               </li>
                               <li className="flex justify-between border-t border-white/5 pt-1 mt-1">
                                 <span className="text-zinc-500">Lavados ácidos:</span>
@@ -978,7 +1239,7 @@ export default function LavadoPage() {
                   ) : (
                     <>
                       {/* STATS BENTO BOARD */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-gradient-to-br from-blue-950/20 to-zinc-950 border border-blue-500/10 rounded-2xl p-5">
                           <div className="flex justify-between items-center mb-3">
                             <span className="text-xs font-extrabold text-blue-400 tracking-wider uppercase">Enjuague / Dilución</span>
@@ -998,9 +1259,9 @@ export default function LavadoPage() {
                           </div>
                           <p className="text-3xl font-extrabold text-emerald-400 font-mono">
                             {(activeEquipment === "ordenadora" ? calcResults.ord.alcalinoPorLavado : calcResults.tan.alcalinoPorLavado).toFixed(0)}
-                            <span className="text-sm font-semibold ml-1 text-white">cc / mililitros</span>
+                            <span className="text-sm font-semibold ml-1 text-white">cc</span>
                           </p>
-                          <p className="text-xs text-zinc-500 mt-2">Equivale a {(activeEquipment === "ordenadora" ? cssLiters(calcResults.ord.alcalinoPorLavado) : cssLiters(calcResults.tan.alcalinoPorLavado))} Litros de químico.</p>
+                          <p className="text-xs text-zinc-500 mt-2">Equivale a {(activeEquipment === "ordenadora" ? cssLiters(calcResults.ord.alcalinoPorLavado) : cssLiters(calcResults.tan.alcalinoPorLavado))} L de químico.</p>
                         </div>
 
                         <div className="bg-gradient-to-br from-purple-950/20 to-zinc-950 border border-purple-500/10 rounded-2xl p-5">
@@ -1010,9 +1271,21 @@ export default function LavadoPage() {
                           </div>
                           <p className="text-3xl font-extrabold text-purple-400 font-mono">
                             {(activeEquipment === "ordenadora" ? calcResults.ord.acidoPorLavado : calcResults.tan.acidoPorLavado).toFixed(0)}
-                            <span className="text-sm font-semibold ml-1 text-white">cc / mililitros</span>
+                            <span className="text-sm font-semibold ml-1 text-white">cc</span>
                           </p>
-                          <p className="text-xs text-zinc-500 mt-2">Equivale a {(activeEquipment === "ordenadora" ? cssLiters(calcResults.ord.acidoPorLavado) : cssLiters(calcResults.tan.acidoPorLavado))} Litros de químico.</p>
+                          <p className="text-xs text-zinc-500 mt-2">Equivale a {(activeEquipment === "ordenadora" ? cssLiters(calcResults.ord.acidoPorLavado) : cssLiters(calcResults.tan.acidoPorLavado))} L de químico.</p>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-teal-950/20 to-zinc-950 border border-teal-500/10 rounded-2xl p-5">
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-xs font-extrabold text-teal-400 tracking-wider uppercase">Dosis Cloro</span>
+                            <Sparkles className="w-4 h-4 text-teal-400" />
+                          </div>
+                          <p className="text-3xl font-extrabold text-teal-400 font-mono">
+                            {(activeEquipment === "ordenadora" ? calcResults.ord.cloroPorLavado : calcResults.tan.cloroPorLavado).toFixed(0)}
+                            <span className="text-sm font-semibold ml-1 text-white">cc</span>
+                          </p>
+                          <p className="text-xs text-zinc-500 mt-2">Circulación por {(activeEquipment === "ordenadora" ? calcResults.cloro.ordCloroTiempo : calcResults.cloro.tanCloroTiempo)} minutos en total.</p>
                         </div>
                       </div>
 
@@ -1063,6 +1336,7 @@ export default function LavadoPage() {
                               <div className="flex justify-between"><span>Agua:</span><span className="text-white font-bold">{activeEquipment === "ordenadora" ? calcResults.ord.aguaDiaria.toFixed(1) : calcResults.tan.diarioAgua.toFixed(1)} L</span></div>
                               <div className="flex justify-between"><span>Alcalino:</span><span className="text-emerald-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.alcalinoDiario : calcResults.tan.diarioAlcalino).toFixed(0)} cc</span></div>
                               <div className="flex justify-between"><span>Ácido (Prom):</span><span className="text-purple-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.semanalAcido / 7 : calcResults.tan.semanalAcido / 7).toFixed(0)} cc</span></div>
+                              <div className="flex justify-between"><span>Cloro (Prom):</span><span className="text-teal-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.semanalCloro / 7 : calcResults.tan.semanalCloro / 7).toFixed(0)} cc</span></div>
                             </div>
                           </div>
 
@@ -1073,6 +1347,7 @@ export default function LavadoPage() {
                               <div className="flex justify-between"><span>Agua:</span><span className="text-white font-bold">{activeEquipment === "ordenadora" ? calcResults.ord.semanalAgua.toFixed(1) : calcResults.tan.semanalAgua.toFixed(1)} L</span></div>
                               <div className="flex justify-between"><span>Alcalino:</span><span className="text-emerald-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.semanalAlcalino : calcResults.tan.semanalAlcalino).toFixed(0)} cc</span></div>
                               <div className="flex justify-between"><span>Ácido:</span><span className="text-purple-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.semanalAcido : calcResults.tan.semanalAcido).toFixed(0)} cc</span></div>
+                              <div className="flex justify-between"><span>Cloro:</span><span className="text-teal-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.semanalCloro : calcResults.tan.semanalCloro).toFixed(0)} cc</span></div>
                             </div>
                           </div>
 
@@ -1083,17 +1358,18 @@ export default function LavadoPage() {
                               <div className="flex justify-between"><span>Agua:</span><span className="text-white font-bold">{activeEquipment === "ordenadora" ? calcResults.ord.mensualAgua.toFixed(1) : calcResults.tan.mensualAgua.toFixed(1)} L</span></div>
                               <div className="flex justify-between"><span>Alcalino:</span><span className="text-emerald-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.mensualAlcalino : calcResults.tan.mensualAlcalino).toFixed(0)} cc</span></div>
                               <div className="flex justify-between"><span>Ácido:</span><span className="text-purple-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.mensualAcido : calcResults.tan.mensualAcido).toFixed(0)} cc</span></div>
+                              <div className="flex justify-between"><span>Cloro:</span><span className="text-teal-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.mensualCloro : calcResults.tan.mensualCloro).toFixed(0)} cc</span></div>
                             </div>
                           </div>
                         </div>
                       </div>
 
                       {/* DETAILED STEPS RECIPES VIEW */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Normal wash recipe container */}
                         <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-6 space-y-4">
                           <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                            <h3 className="text-md font-bold text-white flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
                               <Flame className="w-5 h-5 text-emerald-400" />
                               Protocolo A: Lavado Normal
                             </h3>
@@ -1102,7 +1378,7 @@ export default function LavadoPage() {
                               onClick={() => handleRecordWash("Normal")}
                               className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-extrabold"
                             >
-                              Registrar este lavado
+                              Registrar
                             </button>
                           </div>
                           
@@ -1133,7 +1409,7 @@ export default function LavadoPage() {
                         {/* Acid wash recipe container */}
                         <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-6 space-y-4">
                           <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                            <h3 className="text-md font-bold text-white flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
                               <Snowflake className="w-5 h-5 text-purple-400" />
                               Protocolo B: Lavado con Ácido
                             </h3>
@@ -1142,7 +1418,7 @@ export default function LavadoPage() {
                               onClick={() => handleRecordWash("Con ácido")}
                               className="px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-xs font-extrabold"
                             >
-                              Registrar este lavado
+                              Registrar
                             </button>
                           </div>
                           
@@ -1170,6 +1446,46 @@ export default function LavadoPage() {
                             <li className="flex gap-2">
                               <span className="font-bold font-mono text-purple-400 bg-purple-500/5 px-2 py-0.5 rounded-md h-fit">6</span>
                               <span>Llevar a cabo un prolijo y completo <strong>enjuague final</strong> abundante con agua potable fría.</span>
+                            </li>
+                          </ol>
+                        </div>
+
+                        {/* Chlorine sanitization recipe container */}
+                        <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-6 space-y-4">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                              <Sparkles className="w-5 h-5 text-teal-400" />
+                              Protocolo C: Sanitización con Cloro
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => handleRecordWash("Clorado")}
+                              className="px-3 py-1 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 rounded-lg text-xs font-extrabold"
+                            >
+                              Registrar
+                            </button>
+                          </div>
+                          
+                          <ol className="space-y-4 text-xs font-semibold text-zinc-300">
+                            <li className="flex gap-2">
+                              <span className="font-bold font-mono text-teal-400 bg-teal-500/5 px-2 py-0.5 rounded-md h-fit">1</span>
+                              <span>Asegurar que todo el circuito de lavado esté completamente drenado y libre de trazas de detergentes previos.</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="font-bold font-mono text-teal-400 bg-teal-500/5 px-2 py-0.5 rounded-md h-fit">2</span>
+                              <span>Preparar agua limpia a temperatura ambiente de <strong className="text-blue-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.aguaPorLavado : calcResults.tan.aguaPorLavado).toFixed(1)} Litros</strong> en el pilón colector.</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="font-bold font-mono text-teal-400 bg-teal-500/5 px-2 py-0.5 rounded-md h-fit">3</span>
+                              <span>Dosificar la dosis de cloro calculada: <strong className="text-teal-400 font-bold">{(activeEquipment === "ordenadora" ? calcResults.ord.cloroPorLavado : calcResults.tan.cloroPorLavado).toFixed(0)} cc (ml)</strong> (Concentración {activeEquipment === "ordenadora" ? calcResults.cloro.ordCloroPorcentaje : calcResults.cloro.tanCloroPorcentaje}%).</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="font-bold font-mono text-teal-400 bg-teal-500/5 px-2 py-0.5 rounded-md h-fit">4</span>
+                              <span>Recircular la mezcla clorada continuamente durante <strong className="text-teal-400 font-bold">{activeEquipment === "ordenadora" ? calcResults.cloro.ordCloroTiempo : calcResults.cloro.tanCloroTiempo} minutos</strong> exactos.</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="font-bold font-mono text-teal-400 bg-teal-500/5 px-2 py-0.5 rounded-md h-fit">5</span>
+                              <span>Drenar velozmente por gravedad el remanente de solución de cloro para evitar oxidaciones y depósitos.</span>
                             </li>
                           </ol>
                         </div>
@@ -1253,6 +1569,7 @@ export default function LavadoPage() {
                           <th className="py-4 px-6 text-right">Agua (L)</th>
                           <th className="py-4 px-6 text-right">Alcalino (L)</th>
                           <th className="py-4 px-6 text-right">Ácido (L)</th>
+                          <th className="py-4 px-6 text-right">Cloro (L) / Tiempo</th>
                           <th className="py-4 px-6">Lavado Tipo</th>
                           <th className="py-4 px-6">Acciones</th>
                         </tr>
@@ -1260,7 +1577,7 @@ export default function LavadoPage() {
                       <tbody className="divide-y divide-white/5 text-sm">
                         {filteredHistory.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="py-12 text-center text-zinc-500 italic">No se encontraron registros en la bitácora que coincidan con los filtros aplicados.</td>
+                            <td colSpan={9} className="py-12 text-center text-zinc-500 italic">No se encontraron registros en la bitácora que coincidan con los filtros aplicados.</td>
                           </tr>
                         ) : (
                           filteredHistory.map((item) => (
@@ -1289,11 +1606,19 @@ export default function LavadoPage() {
                               <td className="py-4 px-6 text-right font-mono text-purple-400">
                                 {item.acido_utilizado} L
                               </td>
+                              <td className="py-4 px-6 text-right font-mono text-teal-400">
+                                <div className="text-right">
+                                  <div>{(item.cloro_utilizado ?? 0).toFixed(3)} L</div>
+                                  <div className="text-[10px] text-zinc-400">{(item.cloro_tiempo ?? 0)} min</div>
+                                </div>
+                              </td>
                               <td className="py-4 px-6">
                                 <span className={`inline-flex px-2 py-1 rounded-full text-xs font-bold leading-none ${
                                   item.tipo_lavado === "Normal" 
                                     ? "bg-zinc-800 text-zinc-300" 
-                                    : "bg-purple-950/20 text-purple-400"
+                                    : item.tipo_lavado === "Con ácido"
+                                      ? "bg-purple-950/20 text-purple-400"
+                                      : "bg-teal-950/20 text-teal-400"
                                 }`}>
                                   {item.tipo_lavado}
                                 </span>
@@ -1598,6 +1923,29 @@ export default function LavadoPage() {
                           required
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-xs text-zinc-400 font-semibold mb-1">% Cloro Sugerido</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={formOrdCloroPorcentaje}
+                          onChange={(e) => setFormOrdCloroPorcentaje(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-zinc-400 font-semibold mb-1">Tiempo Recirculación Cloro (min)</label>
+                        <input
+                          type="number"
+                          value={formOrdCloroTiempo}
+                          onChange={(e) => setFormOrdCloroTiempo(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1669,13 +2017,36 @@ export default function LavadoPage() {
                         />
                       </div>
 
-                      <div className="col-span-2">
+                      <div>
                         <label className="block text-xs text-zinc-400 font-semibold mb-1">% Ácido Sugerido</label>
                         <input
                           type="number"
                           step="0.01"
                           value={formTanAcidoPorcentaje}
                           onChange={(e) => setFormTanAcidoPorcentaje(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-zinc-400 font-semibold mb-1">% Cloro Sugerido</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={formTanCloroPorcentaje}
+                          onChange={(e) => setFormTanCloroPorcentaje(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-zinc-400 font-semibold mb-1">Tiempo Recirculación Cloro (min)</label>
+                        <input
+                          type="number"
+                          value={formTanCloroTiempo}
+                          onChange={(e) => setFormTanCloroTiempo(Math.max(0, parseInt(e.target.value) || 0))}
                           className="w-full bg-black border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                           required
                         />
