@@ -862,22 +862,104 @@ export default function LavadoPage() {
   const shareWhatsApp = () => {
     if (!selectedConfig || !calcResults) return;
 
-    const msg = `*REPORTE CONSOLIDADO DE LAVADO - GANPOR MANTENIMIENTO*%0A` +
-      `*Establecimiento:* ${selectedConfig.nombre_establecimiento}%0A%0A` +
-      `*1. ORDEÑADORA DE LECHE:*%0A` +
-      `- Agua Sugerida: ${calcResults.ord.aguaPorLavado.toFixed(1)} L%0A` +
-      `- Alcalino: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc%0A` +
-      `- Ácido: ${calcResults.ord.acidoPorLavado.toFixed(0)} cc%0A` +
-      `- Cloro: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.ordCloroTiempo} min)%0A%0A` +
-      `*2. TANQUE DE FRÍO:*%0A` +
-      `- Agua Sugerida: ${calcResults.tan.aguaPorLavado.toFixed(1)} L%0A` +
-      `- Alcalino: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc%0A` +
-      `- Ácido: ${calcResults.tan.acidoPorLavado.toFixed(0)} cc%0A` +
-      `- Cloro: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.tanCloroTiempo} min)%0A%0A` +
-      `_Toda la información se encuentra consolidada en un único informe técnico._%0A` +
-      `Generado el: ${new Date().toLocaleDateString("es-AR")}`;
+    const formattedDate = new Date().toLocaleDateString("es-AR");
+    const techLine = technicianName ? `*Técnico Confecciona:* ${technicianName}` : `*Técnico Confecciona:* No especificado`;
 
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, "_blank");
+    const messageText = `*GANPOR MANTENIMIENTO*
+*INFORME TÉCNICO Y RECETA DE LAVADO SANITARIO*
+
+*Establecimiento:* ${selectedConfig.nombre_establecimiento}
+${techLine}
+*Fecha de Confección:* ${formattedDate}
+
+----------------------------------------
+*1. DOSIFICACIONES Y PARÁMETROS CLAVE*
+
+*ORDEÑADORA DE LECHE:*
+- Puestos de Ordeño: ${selectedConfig.ord_puestos}
+- Litros por Puesto: ${selectedConfig.ord_litros_por_puesto} L
+- Agua Sugerida por Lavado: ${calcResults.ord.aguaPorLavado.toFixed(1)} L
+- Alcalino por Lavado: ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc (${selectedConfig.ord_alcalino_porcentaje}%)
+- Ácido por Lavado: ${calcResults.ord.acidoPorLavado.toFixed(0)} cc (${selectedConfig.ord_acido_porcentaje}%)
+- Cloro por Lavado: ${calcResults.ord.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.ordCloroPorcentaje}%) - recircular ${calcResults.cloro.ordCloroTiempo} min
+- Lavados Ácidos/Semana: ${selectedConfig.ord_lavados_acidos_semana}
+
+*TANQUE DE FRÍO:*
+- Capacidad de Tanque: ${selectedConfig.tan_capacidad} L
+- Agua Sugerida por Lavado: ${calcResults.tan.aguaPorLavado.toFixed(1)} L
+- Alcalino por Lavado: ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc (${selectedConfig.tan_alcalino_porcentaje}%)
+- Ácido por Lavado: ${calcResults.tan.acidoPorLavado.toFixed(0)} cc (${selectedConfig.tan_acido_porcentaje}%)
+- Cloro por Lavado: ${calcResults.tan.cloroPorLavado.toFixed(0)} cc (${calcResults.cloro.tanCloroPorcentaje}%) - recircular ${calcResults.cloro.tanCloroTiempo} min
+- Frecuencia / Lavados Ácidos: ${selectedConfig.tan_frecuencia} (${selectedConfig.tan_lavados_acidos_semana} acidos/sem)
+
+----------------------------------------
+*2. RECETA DE TRABAJO - LAVADO SIMPLE*
+
+• *Enjuague Inicial:*
+  Realizar un enjuague inicial con abundante agua fría para eliminar restos de leche y suciedad presentes en el sistema.
+• *Lavado Alcalino:*
+  Preparar la cantidad de agua calculada por el sistema y agregar la dosis correspondiente de detergente alcalino. Recircular 8 a 10 min.
+  - Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L agua | ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc alcalino
+  - Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L agua | ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc alcalino
+• *Enjuague Alcalino:*
+  Realizar un enjuague completo con agua limpia para eliminar residuos del detergente alcalino.
+• *Lavado con Cloro:*
+  Preparar la cantidad de agua calculada y agregar la dosis correspondiente de cloro. Recircular según tiempo:
+  - Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L agua | ${calcResults.ord.cloroPorLavado.toFixed(0)} cc cloro | ${calcResults.cloro.ordCloroTiempo} min
+  - Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L agua | ${calcResults.tan.cloroPorLavado.toFixed(0)} cc cloro | ${calcResults.cloro.tanCloroTiempo} min
+
+----------------------------------------
+*3. RECETA DE TRABAJO - LAVADO COMPLETO (CON ÁCIDO)*
+
+• *Enjuague Inicial:*
+  Realizar un enjuague inicial con abundante agua fría para eliminar restos de leche y suciedad presentes en el sistema.
+• *Lavado Alcalino:*
+  Preparar la cantidad de agua calculada y agregar la dosis correspondiente de detergente alcalino. Recircular 8 a 10 min.
+  - Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L agua | ${calcResults.ord.alcalinoPorLavado.toFixed(0)} cc alcalino
+  - Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L agua | ${calcResults.tan.alcalinoPorLavado.toFixed(0)} cc alcalino
+• *Enjuague Alcalino:*
+  Realizar un enjuague completo con agua limpia para eliminar residuos del detergente alcalino.
+• *Lavado Ácido:*
+  Preparar la cantidad de agua calculada y agregar la dosis correspondiente de detergente ácido. Recircular 8 a 10 min.
+  - Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L agua | ${calcResults.ord.acidoPorLavado.toFixed(0)} cc ácido
+  - Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L agua | ${calcResults.tan.acidoPorLavado.toFixed(0)} cc ácido
+• *Enjuague Ácido:*
+  Realizar un enjuague completo con agua limpia para eliminar residuos del detergente ácido.
+• *Lavado con Cloro:*
+  Preparar la cantidad de agua calculada y agregar la dosis correspondiente de cloro. Recircular según tiempo:
+  - Ordeñadora: ${calcResults.ord.aguaPorLavado.toFixed(1)} L agua | ${calcResults.ord.cloroPorLavado.toFixed(0)} cc cloro | ${calcResults.cloro.ordCloroTiempo} min
+  - Tanque de Frío: ${calcResults.tan.aguaPorLavado.toFixed(1)} L agua | ${calcResults.tan.cloroPorLavado.toFixed(0)} cc cloro | ${calcResults.cloro.tanCloroTiempo} min
+
+----------------------------------------
+*4. PROYECCIÓN DE CONSUMO CONSOLIDADO (TOTAL)*
+
+*Diario:*
+- Agua: ${(calcResults.ord.aguaDiaria + calcResults.tan.diarioAgua).toFixed(1)} L
+- Alcalino: ${(calcResults.ord.alcalinoDiario + calcResults.tan.diarioAlcalino).toFixed(0)} cc
+- Ácido (promedio): ${(calcResults.ord.semanalAcido / 7 + calcResults.tan.semanalAcido / 7).toFixed(0)} cc
+- Cloro (promedio): ${(calcResults.ord.semanalCloro / 7 + calcResults.tan.semanalCloro / 7).toFixed(0)} cc
+
+*Semanal:*
+- Agua: ${(calcResults.ord.semanalAgua + calcResults.tan.semanalAgua).toFixed(1)} L
+- Alcalino: ${(calcResults.ord.semanalAlcalino + calcResults.tan.semanalAlcalino).toFixed(0)} cc
+- Ácido: ${(calcResults.ord.semanalAcido + calcResults.tan.semanalAcido).toFixed(0)} cc
+- Cloro: ${(calcResults.ord.semanalCloro + calcResults.tan.semanalCloro).toFixed(0)} cc
+
+*Mensual:*
+- Agua: ${(calcResults.ord.mensualAgua + calcResults.tan.mensualAgua).toFixed(1)} L
+- Alcalino: ${(calcResults.ord.mensualAlcalino + calcResults.tan.mensualAlcalino).toFixed(0)} cc
+- Ácido: ${(calcResults.ord.mensualAcido + calcResults.tan.mensualAcido).toFixed(0)} cc
+- Cloro: ${(calcResults.ord.mensualCloro + calcResults.tan.mensualCloro).toFixed(0)} cc
+
+----------------------------------------
+*5. OBSERVACIONES Y RECOMENDACIONES*
+${pdfNotes || "No se detallaron observaciones técnicas adicionales. Se sugiere respetar las temperaturas de recirculación prescritas para mantener la máxima eficiencia de sanitización bacteriológica."}
+
+----------------------------------------
+_Informe técnico digital generado automáticamente por GanPor Mantenimiento._`;
+
+    const encodedMsg = encodeURIComponent(messageText);
+    window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, "_blank");
   };
 
   // Share Recipe by Email
