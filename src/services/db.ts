@@ -488,6 +488,44 @@ export const db = {
         console.error("Error al complementar tipos de mantenimiento históricos:", historyErr);
       }
 
+      // Safely fetch and merge any custom configured maintenance types from active configurations across all tambos
+      try {
+        const { data: configsData } = await (supabase.from("configuracion") as any)
+          .select("valor")
+          .like("clave", "tambo_mantenimientos_%");
+        if (configsData) {
+          const existingNamesLower = new Set(baseList.map(b => b.nombre.toLowerCase().trim()));
+          configsData.forEach((row: any) => {
+            try {
+              if (row.valor) {
+                const parsed = JSON.parse(row.valor);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((tipoName: any) => {
+                    if (typeof tipoName === 'string') {
+                      const trimmed = tipoName.trim();
+                      if (trimmed && !existingNamesLower.has(trimmed.toLowerCase())) {
+                        baseList.push({
+                          id: `tm-config-${trimmed.replace(/\s+/g, '-').toLowerCase()}`,
+                          nombre: trimmed,
+                          frecuencia_meses: 12,
+                          descripcion: `Mantenimiento de ${trimmed}`,
+                          created_at: ""
+                        });
+                        existingNamesLower.add(trimmed.toLowerCase());
+                      }
+                    }
+                  });
+                }
+              }
+            } catch (e) {
+              // Ignore invalid JSON parsing
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error al complementar tipos de mantenimiento configurados:", err);
+      }
+
       baseList.sort((a, b) => a.nombre.localeCompare(b.nombre));
       return baseList;
     },
