@@ -104,15 +104,28 @@ export const db = {
         .eq("clave", `tambo_mantenimientos_${tamboId}`)
         .maybeSingle();
       
+      const defaultMaintNames = [
+        "Cambio de pezoneras", "Mangueras de leche", "Mangueras de pulsado", "Pulsadores",
+        "Cambio de sogas", "Cambio de diafragma de los brazos", "Cambio de bujes",
+        "Sensor de leche", "Bomba de vacío", "Bomba centrífuga de leche",
+        "Bomba diafragma de leche", "Kit de colector de leche"
+      ];
+
       if (error || !data) {
         const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
-        return allTypes?.map((t: any) => t.nombre) || [];
+        if (!allTypes || allTypes.length === 0) {
+          return defaultMaintNames;
+        }
+        return allTypes.map((t: any) => t.nombre);
       }
       try {
         return JSON.parse(data.valor);
       } catch (e) {
         const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
-        return allTypes?.map((t: any) => t.nombre) || [];
+        if (!allTypes || allTypes.length === 0) {
+          return defaultMaintNames;
+        }
+        return allTypes.map((t: any) => t.nombre);
       }
     },
     async setMantenimientosActivos(tamboId: string, tipos: string[]) {
@@ -429,8 +442,10 @@ export const db = {
         console.error("Error al obtener tipos de mantenimiento:", error);
         throw error;
       }
+      
+      let baseList: TipoMantenimiento[] = [];
       if (!data || data.length === 0) {
-        return [
+        baseList = [
           { id: "tm-pezoneras", nombre: "Cambio de pezoneras", frecuencia_meses: 4, descripcion: "Cambio periódico de pezoneras", created_at: "" },
           { id: "tm-mangueras-leche", nombre: "Mangueras de leche", frecuencia_meses: 12, descripcion: "Cambio de mangueras de leche", created_at: "" },
           { id: "tm-mangueras-pulsado", nombre: "Mangueras de pulsado", frecuencia_meses: 12, descripcion: "Cambio de mangueras de pulsado", created_at: "" },
@@ -444,8 +459,37 @@ export const db = {
           { id: "tm-diafragma-leche", nombre: "Bomba diafragma de leche", frecuencia_meses: 4, descripcion: "Cambio de diafragmas", created_at: "" },
           { id: "tm-colector", nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores", created_at: "" }
         ] as TipoMantenimiento[];
+      } else {
+        baseList = [...data] as TipoMantenimiento[];
       }
-      return data as TipoMantenimiento[];
+
+      // Safely fetch and merge any custom historical maintenance types already recorded in Supabase
+      try {
+        const { data: historyData } = await (supabase.from("mantenimientos") as any).select("tipo");
+        if (historyData) {
+          const uniqueNamesInHistory = Array.from(new Set(historyData.map((h: any) => h.tipo).filter(Boolean) as string[]));
+          const existingNamesLower = new Set(baseList.map(b => b.nombre.toLowerCase().trim()));
+          
+          uniqueNamesInHistory.forEach(tipoName => {
+            const trimmed = tipoName.trim();
+            if (trimmed && !existingNamesLower.has(trimmed.toLowerCase())) {
+              baseList.push({
+                id: `tm-historical-${trimmed.replace(/\s+/g, '-').toLowerCase()}`,
+                nombre: trimmed,
+                frecuencia_meses: 12,
+                descripcion: `Mantenimiento de ${trimmed}`,
+                created_at: ""
+              });
+              existingNamesLower.add(trimmed.toLowerCase());
+            }
+          });
+        }
+      } catch (historyErr) {
+        console.error("Error al complementar tipos de mantenimiento históricos:", historyErr);
+      }
+
+      baseList.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      return baseList;
     },
     async create(tipo: Database['public']['Tables']['tipos_mantenimiento']['Insert']) {
       const { data, error } = await (supabase.from("tipos_mantenimiento") as any).insert(tipo).select().single();

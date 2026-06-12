@@ -56,6 +56,45 @@ export default function TechnicalConfigPage() {
   const [newItem, setNewItem] = useState<any>({});
   const [subTab, setSubTab] = useState<"prioridades" | "estados">("prioridades");
 
+  // Memoized calculations to dynamically merge any custom configurations or history-based types
+  const displayMaintTypes = React.useMemo(() => {
+    // Start with the standard types
+    const types = [...maintTypes];
+    const existing = new Set(types.map(t => t.nombre.toLowerCase().trim()));
+
+    // 1. Add any active configured types that are not in the standard list
+    tamboMantenimientos.forEach(name => {
+      const norm = name.trim();
+      if (norm && !existing.has(norm.toLowerCase())) {
+        types.push({
+          id: `custom-config-${norm.replace(/\s+/g, '-').toLowerCase()}`,
+          nombre: norm,
+          frecuencia_meses: 12,
+          descripcion: `Mantenimiento de ${norm}`,
+          created_at: ""
+        });
+        existing.add(norm.toLowerCase());
+      }
+    });
+
+    // 2. Add any name from lastDates keys (which includes history) that are not in the list
+    Object.keys(tamboLastDates).forEach(name => {
+      const norm = name.trim();
+      if (norm && !existing.has(norm.toLowerCase())) {
+        types.push({
+          id: `custom-history-${norm.replace(/\s+/g, '-').toLowerCase()}`,
+          nombre: norm,
+          frecuencia_meses: 12,
+          descripcion: `Mantenimiento de ${norm}`,
+          created_at: ""
+        });
+        existing.add(norm.toLowerCase());
+      }
+    });
+
+    return types;
+  }, [maintTypes, tamboMantenimientos, tamboLastDates]);
+
   useEffect(() => {
     loadAllData();
   }, []);
@@ -115,14 +154,20 @@ export default function TechnicalConfigPage() {
       
       setTamboMantenimientos(activeTypes);
       
+      const uniqueNames = new Set([
+        ...maintTypes.map(t => t.nombre),
+        ...activeTypes,
+        ...history.map(m => m.tipo).filter(Boolean) as string[]
+      ]);
+
       const lastDates: Record<string, string> = {};
-      maintTypes.forEach(type => {
+      uniqueNames.forEach(typeName => {
         const last = history
-          .filter(m => m.tipo === type.nombre)
+          .filter(m => m.tipo === typeName)
           .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
         
         if (last) {
-          lastDates[type.nombre] = last.fecha;
+          lastDates[typeName] = last.fecha;
         }
       });
       setTamboLastDates(lastDates);
@@ -375,7 +420,7 @@ export default function TechnicalConfigPage() {
                     Mantenimientos Habilitados
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {maintTypes.map(type => {
+                    {displayMaintTypes.map(type => {
                       const isActive = tamboMantenimientos.includes(type.nombre);
                       const lastDate = tamboLastDates[type.nombre];
                       

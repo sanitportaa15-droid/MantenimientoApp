@@ -172,7 +172,11 @@ export default function TamboDetailPage() {
       }
       
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, allMaintTypesData);
-      const filteredStatuses = calcStatuses.filter(s => s.ultimaFecha !== null);
+      
+      // Filter to only include active configured maintenance types for this tambo
+      const filteredStatuses = calcStatuses.filter(s => {
+        return activeTypesNames.some(name => name.toLowerCase().trim() === s.tipo.toLowerCase().trim());
+      });
       setStatuses(filteredStatuses);
     } catch (error) {
       console.error("Error loading tambo details:", error);
@@ -278,9 +282,9 @@ export default function TamboDetailPage() {
       
       const statusData = statuses.map(s => [
         s.tipo,
-        s.status === "gris" ? "NUNCA REALIZADO" : s.status.toUpperCase(),
-        formatDate(s.ultimaFecha),
-        formatDate(s.proximaFecha),
+        s.status === "gris" ? "SIN REGISTRO" : s.status.toUpperCase(),
+        s.ultimaFecha ? formatDate(s.ultimaFecha) : "SIN HISTORIAL",
+        s.proximaFecha ? formatDate(s.proximaFecha) : "N/A",
         s.diasRestantes !== null ? `${s.diasRestantes} días` : "N/A"
       ]);
 
@@ -559,9 +563,15 @@ export default function TamboDetailPage() {
                         </button>
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
-                        <span>Último: {s.ultimaFecha ? formatDate(s.ultimaFecha) : 'NUNCA'}</span>
-                        <span>•</span>
-                        <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
+                        {!s.ultimaFecha ? (
+                          <span className="text-zinc-500 font-bold normal-case">Sin historial de mantenimiento registrado aún</span>
+                        ) : (
+                          <>
+                            <span>Último: {formatDate(s.ultimaFecha)}</span>
+                            <span>•</span>
+                            <span>Próximo: {s.proximaFecha ? formatDate(s.proximaFecha) : 'N/A'}</span>
+                          </>
+                        )}
                       </div>
                       {s.frecuenciaLabel && (
                         <div className="text-[9px] text-zinc-600 font-medium italic mt-0.5">
