@@ -172,7 +172,8 @@ export default function TamboDetailPage() {
       }
       
       const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, allMaintTypesData);
-      setStatuses(calcStatuses);
+      const filteredStatuses = calcStatuses.filter(s => s.ultimaFecha !== null);
+      setStatuses(filteredStatuses);
     } catch (error) {
       console.error("Error loading tambo details:", error);
     } finally {
