@@ -40,20 +40,7 @@ export default function FilteredResultsPage() {
 
         for (const t of tambos) {
           const mantenimientos = await db.mantenimientos.getByTambo(t.id);
-          
-          // Extract active types from configs
-          const activeConfig = configs.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
-          let activeTypesNames: string[] = allMaintTypes.map(t => t.nombre);
-          if (activeConfig) {
-            try {
-              activeTypesNames = JSON.parse(activeConfig.valor);
-            } catch (e) {
-              console.error("Error parsing active types for tambo", t.id);
-            }
-          }
-
-          const activeTypesObjects = allMaintTypes.filter(type => activeTypesNames.includes(type.nombre));
-          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, activeTypesObjects);
+          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, allMaintTypes);
 
           statuses.forEach(s => {
             allItems.push({

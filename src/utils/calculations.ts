@@ -170,7 +170,25 @@ export function calculateMaintenanceStatus(
   const diasAlerta = getConfig("dias_alerta", 30);
   const today = startOfDay(new Date());
 
-  return activeTypes.map(tipoObj => {
+  // Dynamically include any maintenance type names present in historical records that are not in activeTypes
+  const existingNames = new Set(activeTypes.map(t => t.nombre.toLowerCase().trim()));
+  const mergedTypes = [...activeTypes];
+
+  mantenimientos.forEach(m => {
+    const norm = m.tipo?.trim() || "";
+    if (norm && !existingNames.has(norm.toLowerCase())) {
+      mergedTypes.push({
+        id: `dynamic-${norm.replace(/\s+/g, '-').toLowerCase()}`,
+        nombre: norm,
+        frecuencia_meses: 12,
+        descripcion: `Mantenimiento de ${norm}`,
+        created_at: ""
+      });
+      existingNames.add(norm.toLowerCase());
+    }
+  });
+
+  return mergedTypes.map(tipoObj => {
     const tipo = tipoObj.nombre;
     
     // 1. Obtener la fecha del último mantenimiento (fecha_ultimo)

@@ -30,12 +30,18 @@ export default function ConvertReclamoPage() {
         const reclamoData = await db.reclamos.getById(id!);
         setReclamo(reclamoData);
         
-        const [maintTypes, repairTypesData] = await Promise.all([
+        const [maintTypes, repairTypesData, actualMantenimientos] = await Promise.all([
           db.tambos.getMantenimientosActivos(reclamoData.tambo_id),
-          db.tipos_reparacion.getAll()
+          db.tipos_reparacion.getAll(),
+          db.mantenimientos.getByTambo(reclamoData.tambo_id)
         ]);
         
-        setActiveTypes(maintTypes);
+        const mergedSet = new Set([...maintTypes]);
+        actualMantenimientos.forEach(m => {
+          if (m.tipo?.trim()) mergedSet.add(m.tipo.trim());
+        });
+        
+        setActiveTypes(Array.from(mergedSet));
         setRepairTypes(repairTypesData);
       } catch (error) {
         console.error("Error loading data:", error);

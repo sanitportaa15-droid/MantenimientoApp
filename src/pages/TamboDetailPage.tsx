@@ -171,8 +171,7 @@ export default function TamboDetailPage() {
         setTambo({ ...tamboData, ficha_tecnica: ficha });
       }
       
-      const activeTypesObjects = allMaintTypesData.filter(t => activeTypesNames.includes(t.nombre));
-      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, activeTypesObjects);
+      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, allMaintTypesData);
       setStatuses(calcStatuses);
     } catch (error) {
       console.error("Error loading tambo details:", error);
@@ -856,7 +855,13 @@ export default function TamboDetailPage() {
       {isModalOpen && (
         <MaintenanceModal 
           tamboId={tambo.id} 
-          activeTypes={activeTypes}
+          activeTypes={(() => {
+            const set = new Set([...activeTypes]);
+            mantenimientos.forEach(m => {
+              if (m.tipo?.trim()) set.add(m.tipo.trim());
+            });
+            return Array.from(set);
+          })()}
           onClose={() => setIsModalOpen(false)} 
           onSuccess={() => {
             setIsModalOpen(false);

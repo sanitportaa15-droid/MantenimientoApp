@@ -87,18 +87,7 @@ export default function UpcomingPage() {
             bomba_leche_marca: ficha?.bomba_leche_marca || ""
           };
 
-          const activeConfig = configsData.find(c => c.clave === `tambo_mantenimientos_${t.id}`);
-          let activeTypesNames: string[] = maintTypesData.map(type => type.nombre);
-          if (activeConfig) {
-            try {
-              activeTypesNames = JSON.parse(activeConfig.valor);
-            } catch (e) {
-              console.error("Error parsing active types for tambo", t.id);
-            }
-          }
-
-          const activeTypesObjects = maintTypesData.filter(type => activeTypesNames.includes(type.nombre));
-          const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configsData, activeTypesObjects);
+          const statuses = calculateMaintenanceStatus(technicalData, mantenimientos, configsData, maintTypesData);
 
           statuses.forEach(s => {
             if (s.proximaFecha && isWithinInterval(s.proximaFecha, interval)) {

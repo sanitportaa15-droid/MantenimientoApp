@@ -87,9 +87,8 @@ export default function TamboTechnicalAnalysisPage() {
 
   const statuses = useMemo(() => {
     if (!tambo || !mantenimientos || !configs || !allMaintTypes) return [];
-    const activeTypes = allMaintTypes.filter(t => activeTypesNames.includes(t.nombre));
-    return calculateMaintenanceStatus(tambo, mantenimientos, configs, activeTypes);
-  }, [tambo, mantenimientos, configs, allMaintTypes, activeTypesNames]);
+    return calculateMaintenanceStatus(tambo, mantenimientos, configs, allMaintTypes);
+  }, [tambo, mantenimientos, configs, allMaintTypes]);
 
   const analysis = useMemo(() => {
     if (loading || !tambo || !configs) return null;
