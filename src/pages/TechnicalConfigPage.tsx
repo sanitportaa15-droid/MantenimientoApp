@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../services/db";
+import { db, normalizeMaintenanceName } from "../services/db";
 import { 
   Configuracion, 
   TipoMantenimiento, 
@@ -120,15 +120,20 @@ export default function TechnicalConfigPage() {
       
       setTamboMantenimientos(activeTypes);
       
+      const normalizedHistory = history.map(m => ({
+        ...m,
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : null
+      }));
+      
       const uniqueNames = new Set([
         ...maintTypes.map(t => t.nombre),
         ...activeTypes,
-        ...history.map(m => m.tipo).filter(Boolean) as string[]
+        ...normalizedHistory.map(m => m.tipo).filter(Boolean) as string[]
       ]);
 
       const lastDates: Record<string, string> = {};
       uniqueNames.forEach(typeName => {
-        const last = history
+        const last = normalizedHistory
           .filter(m => m.tipo === typeName)
           .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
         

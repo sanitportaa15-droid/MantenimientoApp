@@ -1,6 +1,69 @@
 import { supabase } from "./supabase";
 import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial } from "../types/supabase";
 
+export function normalizeMaintenanceName(name: string): string {
+  if (!name) return "";
+  const normalized = name.trim().toLowerCase();
+  
+  if (normalized.includes("pezonera")) {
+    return "Cambio de pezoneras";
+  }
+  if (normalized.includes("diafragma") && normalized.includes("brazo")) {
+    return "Cambio de diafragma de los brazos";
+  }
+  if (normalized.includes("diafragma de los brazos")) {
+    return "Cambio de diafragma de los brazos";
+  }
+  if (normalized.includes("aceite bomba") || (normalized.includes("bomba") && normalized.includes("vacío")) || (normalized.includes("bomba") && normalized.includes("vacio"))) {
+    return "Bomba de vacío";
+  }
+  if (normalized.includes("centrífuga") || normalized.includes("centrifuga") || normalized.includes("service bomba de leche")) {
+    return "Bomba centrífuga de leche";
+  }
+  if (normalized.includes("pulsador") && (normalized.includes("service") || normalized.includes("mantenimiento") || normalized.includes("pulsadores"))) {
+    return "Pulsadores";
+  }
+  if (normalized === "pulsador" || normalized === "pulsadores") {
+    return "Pulsadores";
+  }
+  if (normalized.includes("colector")) {
+    return "Kit de colector de leche";
+  }
+  if (normalized.includes("soga")) {
+    return "Cambio de sogas";
+  }
+  if (normalized.includes("buje")) {
+    return "Cambio de bujes";
+  }
+  if (normalized.includes("sensor")) {
+    return "Sensor de leche";
+  }
+  if (normalized.includes("diafragma") && normalized.includes("bomba")) {
+    return "Bomba diafragma de leche";
+  }
+  if (normalized.includes("caucho")) {
+    return "Caucho línea de leche y lavado";
+  }
+
+  const cleanMaintKeys: Record<string, string> = {
+    "cambio de pezoneras": "Cambio de pezoneras",
+    "mangueras de leche": "Mangueras de leche",
+    "mangueras de pulsado": "Mangueras de pulsado",
+    "pulsadores": "Pulsadores",
+    "cambio de sogas": "Cambio de sogas",
+    "cambio de diafragma de los brazos": "Cambio de diafragma de los brazos",
+    "cambio de bujes": "Cambio de bujes",
+    "sensor de leche": "Sensor de leche",
+    "bomba de vacío": "Bomba de vacío",
+    "bomba centrífuga de leche": "Bomba centrífuga de leche",
+    "bomba diafragma de leche": "Bomba diafragma de leche",
+    "kit de colector de leche": "Kit de colector de leche",
+    "caucho línea de leche y lavado": "Caucho línea de leche y lavado"
+  };
+
+  return cleanMaintKeys[normalized] || name.trim();
+}
+
 export const db = {
   clientes: {
     async getAll() {
@@ -105,27 +168,33 @@ export const db = {
         .maybeSingle();
       
       const defaultMaintNames = [
-        "Cambio de pezoneras", "Mangueras de leche", "Mangueras de pulsado", "Pulsadores",
-        "Cambio de sogas", "Cambio de diafragma de los brazos", "Cambio de bujes",
-        "Sensor de leche", "Bomba de vacío", "Bomba centrífuga de leche",
-        "Bomba diafragma de leche", "Kit de colector de leche"
+        "Bomba centrífuga de leche",
+        "Bomba de vacío",
+        "Bomba diafragma de leche",
+        "Cambio de bujes",
+        "Cambio de diafragma de los brazos",
+        "Cambio de pezoneras",
+        "Cambio de sogas",
+        "Caucho línea de leche y lavado",
+        "Kit de colector de leche",
+        "Mangueras de leche",
+        "Mangueras de pulsado",
+        "Pulsadores",
+        "Sensor de leche"
       ];
 
       if (error || !data) {
-        const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
-        if (!allTypes || allTypes.length === 0) {
-          return defaultMaintNames;
-        }
-        return allTypes.map((t: any) => t.nombre);
+        return defaultMaintNames;
       }
       try {
-        return JSON.parse(data.valor);
-      } catch (e) {
-        const { data: allTypes } = await (supabase.from("tipos_mantenimiento") as any).select("nombre");
-        if (!allTypes || allTypes.length === 0) {
-          return defaultMaintNames;
+        const parsed = JSON.parse(data.valor);
+        if (Array.isArray(parsed)) {
+          const mapped = parsed.map(normalizeMaintenanceName);
+          return Array.from(new Set(mapped));
         }
-        return allTypes.map((t: any) => t.nombre);
+        return defaultMaintNames;
+      } catch (e) {
+        return defaultMaintNames;
       }
     },
     async setMantenimientosActivos(tamboId: string, tipos: string[]) {
@@ -162,7 +231,11 @@ export const db = {
         console.error("Error al obtener mantenimientos:", error);
         throw error;
       }
-      return data as Mantenimiento[];
+      if (!data) return [];
+      return data.map((m: any) => ({
+        ...m,
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : null
+      })) as Mantenimiento[];
     },
     async getAll() {
       const { data, error } = await (supabase.from("mantenimientos") as any).select("*, tambos(nombre)").order("fecha", { ascending: false });
@@ -170,27 +243,50 @@ export const db = {
         console.error("Error al obtener todos los mantenimientos:", error);
         throw error;
       }
-      return data as any[];
+      if (!data) return [];
+      return data.map((m: any) => ({
+        ...m,
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : null
+      })) as any[];
     },
     async create(mantenimiento: Database['public']['Tables']['mantenimientos']['Insert']) {
-      const { data, error } = await (supabase.from("mantenimientos") as any).insert(mantenimiento).select().single();
+      const normalizedMantenimiento = {
+        ...mantenimiento,
+        tipo: mantenimiento.tipo ? normalizeMaintenanceName(mantenimiento.tipo) : mantenimiento.tipo
+      };
+      const { data, error } = await (supabase.from("mantenimientos") as any).insert(normalizedMantenimiento).select().single();
       if (error) {
         console.error("Error guardando mantenimiento:", error);
         throw error;
       }
-      return data as Mantenimiento;
+      return {
+        ...data,
+        tipo: data.tipo ? normalizeMaintenanceName(data.tipo) : null
+      } as Mantenimiento;
     },
     async createMany(mantenimientos: Database['public']['Tables']['mantenimientos']['Insert'][]) {
-      const { data, error } = await (supabase.from("mantenimientos") as any).insert(mantenimientos).select();
+      const normalizedMantenimientos = mantenimientos.map(m => ({
+        ...m,
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : m.tipo
+      }));
+      const { data, error } = await (supabase.from("mantenimientos") as any).insert(normalizedMantenimientos).select();
       if (error) {
         console.error("Error guardando múltiples mantenimientos:", error);
         throw error;
       }
-      return data as Mantenimiento[];
+      if (!data) return [];
+      return data.map((m: any) => ({
+        ...m,
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : null
+      })) as Mantenimiento[];
     },
     async update(id: string, mantenimiento: Partial<Database['public']['Tables']['mantenimientos']['Update']>) {
+      const normalizedUpdate = {
+        ...mantenimiento,
+        tipo: mantenimiento.tipo ? normalizeMaintenanceName(mantenimiento.tipo) : mantenimiento.tipo
+      };
       const { data, error } = await (supabase.from("mantenimientos") as any)
-        .update(mantenimiento)
+        .update(normalizedUpdate)
         .eq("id", id)
         .select()
         .single();
@@ -199,10 +295,14 @@ export const db = {
         console.error("Error actualizando mantenimiento:", error);
         throw error;
       }
-      return data as Mantenimiento;
+      return {
+        ...data,
+        tipo: data.tipo ? normalizeMaintenanceName(data.tipo) : null
+      } as Mantenimiento;
     },
     async deleteByType(tamboId: string, tipo: string) {
-      const { error } = await supabase.from("mantenimientos").delete().eq("tambo_id", tamboId).eq("tipo", tipo);
+      const cleanTipo = normalizeMaintenanceName(tipo);
+      const { error } = await supabase.from("mantenimientos").delete().eq("tambo_id", tamboId).or(`tipo.eq."${tipo}",tipo.eq."${cleanTipo}"`);
       if (error) {
         console.error("Error eliminando mantenimientos por tipo:", error);
         throw error;
@@ -443,87 +543,40 @@ export const db = {
         throw error;
       }
       
-      let baseList: TipoMantenimiento[] = [];
-      if (!data || data.length === 0) {
-        baseList = [
-          { id: "tm-pezoneras", nombre: "Cambio de pezoneras", frecuencia_meses: 4, descripcion: "Cambio periódico de pezoneras", created_at: "" },
-          { id: "tm-mangueras-leche", nombre: "Mangueras de leche", frecuencia_meses: 12, descripcion: "Cambio de mangueras de leche", created_at: "" },
-          { id: "tm-mangueras-pulsado", nombre: "Mangueras de pulsado", frecuencia_meses: 12, descripcion: "Cambio de mangueras de pulsado", created_at: "" },
-          { id: "tm-pulsadores", nombre: "Pulsadores", frecuencia_meses: 6, descripcion: "Mantenimiento de pulsadores", created_at: "" },
-          { id: "tm-sogas", nombre: "Cambio de sogas", frecuencia_meses: 4, descripcion: "Cambio de sogas de retiro", created_at: "" },
-          { id: "tm-diafragmas", nombre: "Cambio de diafragma de los brazos", frecuencia_meses: 12, descripcion: "Mantenimiento de brazos", created_at: "" },
-          { id: "tm-bujes", nombre: "Cambio de bujes", frecuencia_meses: 12, descripcion: "Cambio de bujes generales", created_at: "" },
-          { id: "tm-sensor", nombre: "Sensor de leche", frecuencia_meses: 6, descripcion: "Limpieza y calibración de sensores", created_at: "" },
-          { id: "tm-vacio", nombre: "Bomba de vacío", frecuencia_meses: 12, descripcion: "Mantenimiento preventivo de bomba", created_at: "" },
-          { id: "tm-centrifuga", nombre: "Bomba centrífuga de leche", frecuencia_meses: 6, descripcion: "Revisión de sellos y motor", created_at: "" },
-          { id: "tm-diafragma-leche", nombre: "Bomba diafragma de leche", frecuencia_meses: 4, descripcion: "Cambio de diafragmas", created_at: "" },
-          { id: "tm-colector", nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores", created_at: "" }
-        ] as TipoMantenimiento[];
-      } else {
-        baseList = [...data] as TipoMantenimiento[];
-      }
+      const baseList: TipoMantenimiento[] = [
+        { id: "tm-pezoneras", nombre: "Cambio de pezoneras", frecuencia_meses: 4, descripcion: "Cambio periódico de pezoneras", created_at: "" },
+        { id: "tm-mangueras-leche", nombre: "Mangueras de leche", frecuencia_meses: 12, descripcion: "Cambio de mangueras de leche", created_at: "" },
+        { id: "tm-mangueras-pulsado", nombre: "Mangueras de pulsado", frecuencia_meses: 12, descripcion: "Cambio de mangueras de pulsado", created_at: "" },
+        { id: "tm-pulsadores", nombre: "Pulsadores", frecuencia_meses: 6, descripcion: "Mantenimiento de pulsadores", created_at: "" },
+        { id: "tm-sogas", nombre: "Cambio de sogas", frecuencia_meses: 4, descripcion: "Cambio de sogas de retiro", created_at: "" },
+        { id: "tm-diafragmas", nombre: "Cambio de diafragma de los brazos", frecuencia_meses: 12, descripcion: "Mantenimiento de brazos", created_at: "" },
+        { id: "tm-bujes", nombre: "Cambio de bujes", frecuencia_meses: 12, descripcion: "Cambio de bujes generales", created_at: "" },
+        { id: "tm-sensor", nombre: "Sensor de leche", frecuencia_meses: 6, descripcion: "Limpieza y calibración de sensores", created_at: "" },
+        { id: "tm-vacio", nombre: "Bomba de vacío", frecuencia_meses: 12, descripcion: "Mantenimiento preventivo de bomba", created_at: "" },
+        { id: "tm-centrifuga", nombre: "Bomba centrífuga de leche", frecuencia_meses: 6, descripcion: "Revisión de sellos y motor", created_at: "" },
+        { id: "tm-diafragma-leche", nombre: "Bomba diafragma de leche", frecuencia_meses: 4, descripcion: "Cambio de diafragmas", created_at: "" },
+        { id: "tm-colector", nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores", created_at: "" },
+        { id: "tm-linea-lavado", nombre: "Caucho línea de leche y lavado", frecuencia_meses: 12, descripcion: "Reemplazo de gomas de línea de leche y lavado", created_at: "" }
+      ] as TipoMantenimiento[];
 
-      // Safely fetch and merge any custom historical maintenance types already recorded in Supabase
-      try {
-        const { data: historyData } = await (supabase.from("mantenimientos") as any).select("tipo");
-        if (historyData) {
-          const uniqueNamesInHistory = Array.from(new Set(historyData.map((h: any) => h.tipo).filter(Boolean) as string[]));
-          const existingNamesLower = new Set(baseList.map(b => b.nombre.toLowerCase().trim()));
+      const existingNamesLower = new Set(baseList.map(b => b.nombre.toLowerCase().trim()));
+
+      if (data && data.length > 0) {
+        data.forEach((item: any) => {
+          const canonicalName = normalizeMaintenanceName(item.nombre);
+          const canonicalLower = canonicalName.toLowerCase().trim();
           
-          uniqueNamesInHistory.forEach(tipoName => {
-            const trimmed = tipoName.trim();
-            if (trimmed && !existingNamesLower.has(trimmed.toLowerCase())) {
-              baseList.push({
-                id: `tm-historical-${trimmed.replace(/\s+/g, '-').toLowerCase()}`,
-                nombre: trimmed,
-                frecuencia_meses: 12,
-                descripcion: `Mantenimiento de ${trimmed}`,
-                created_at: ""
-              });
-              existingNamesLower.add(trimmed.toLowerCase());
+          if (!existingNamesLower.has(canonicalLower)) {
+            baseList.push(item as TipoMantenimiento);
+            existingNamesLower.add(canonicalLower);
+          } else {
+            const idx = baseList.findIndex(b => b.nombre.toLowerCase().trim() === canonicalLower);
+            if (idx !== -1) {
+              baseList[idx].frecuencia_meses = item.frecuencia_meses ?? baseList[idx].frecuencia_meses;
+              baseList[idx].descripcion = item.descripcion ?? baseList[idx].descripcion;
             }
-          });
-        }
-      } catch (historyErr) {
-        console.error("Error al complementar tipos de mantenimiento históricos:", historyErr);
-      }
-
-      // Safely fetch and merge any custom configured maintenance types from active configurations across all tambos
-      try {
-        const { data: configsData } = await (supabase.from("configuracion") as any)
-          .select("valor")
-          .like("clave", "tambo_mantenimientos_%");
-        if (configsData) {
-          const existingNamesLower = new Set(baseList.map(b => b.nombre.toLowerCase().trim()));
-          configsData.forEach((row: any) => {
-            try {
-              if (row.valor) {
-                const parsed = JSON.parse(row.valor);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((tipoName: any) => {
-                    if (typeof tipoName === 'string') {
-                      const trimmed = tipoName.trim();
-                      if (trimmed && !existingNamesLower.has(trimmed.toLowerCase())) {
-                        baseList.push({
-                          id: `tm-config-${trimmed.replace(/\s+/g, '-').toLowerCase()}`,
-                          nombre: trimmed,
-                          frecuencia_meses: 12,
-                          descripcion: `Mantenimiento de ${trimmed}`,
-                          created_at: ""
-                        });
-                        existingNamesLower.add(trimmed.toLowerCase());
-                      }
-                    }
-                  });
-                }
-              }
-            } catch (e) {
-              // Ignore invalid JSON parsing
-            }
-          });
-        }
-      } catch (err) {
-        console.error("Error al complementar tipos de mantenimiento configurados:", err);
+          }
+        });
       }
 
       baseList.sort((a, b) => a.nombre.localeCompare(b.nombre));
