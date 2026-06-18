@@ -1095,13 +1095,26 @@ function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess
         // If marking as never, delete all previous history for this type
         await db.mantenimientos.deleteByType(tamboId, status.tipo);
       } else {
-        // Always INSERT a new record to preserve history and follow "INSERT, no UPDATE" rule
-        await db.mantenimientos.create({
-          tambo_id: tamboId,
-          tipo: status.tipo,
-          fecha: fecha,
-          observaciones: obs
-        });
+        // Find existing maintenance of this type for this tambo to see if we can update it
+        const latestMaint = mantenimientos
+          .filter(m => m.tipo === status.tipo && m.fecha !== '1900-01-01')
+          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+
+        if (latestMaint) {
+          // UPDATE existing maintenance with the new date
+          await db.mantenimientos.update(latestMaint.id, {
+            fecha: fecha,
+            observaciones: obs
+          });
+        } else {
+          // CREATE a new record if no previous record exists
+          await db.mantenimientos.create({
+            tambo_id: tamboId,
+            tipo: status.tipo,
+            fecha: fecha,
+            observaciones: obs
+          });
+        }
       }
       onSuccess();
     } catch (error) {
