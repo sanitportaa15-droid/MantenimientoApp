@@ -216,6 +216,85 @@ export const db = {
         });
       }
     },
+    async delete(id: string) {
+      // 1. Delete associated configuracion (e.g., custom active maintenance keys)
+      try {
+        const key = `tambo_mantenimientos_${id}`;
+        await supabase.from("configuracion").delete().eq("clave", key);
+      } catch (e) {
+        console.warn("Error deleting tambo maintenance configuracion:", e);
+      }
+
+      // 2. Delete from ficha_tecnica
+      try {
+        await supabase.from("ficha_tecnica").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting ficha_tecnica for tambo:", e);
+      }
+
+      // 3. Delete from tambo_insumos
+      try {
+        await supabase.from("tambo_insumos").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting tambo_insumos for tambo:", e);
+      }
+
+      // 4. Delete from tambo_componentes
+      try {
+        await supabase.from("tambo_componentes").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting tambo_componentes for tambo:", e);
+      }
+
+      // 5. Delete from lavado_configuraciones (local and supabase)
+      try {
+        await supabase.from("lavado_configuraciones").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting lavado_configuraciones for tambo:", e);
+      }
+      try {
+        const locals = getLocalConfigs();
+        const filtered = locals.filter(c => c.tambo_id !== id);
+        saveLocalConfigs(filtered);
+      } catch (e) {
+        console.warn("Error deleting local lavado_configuraciones for tambo:", e);
+      }
+
+      // 6. Delete from lavado_historial (local and supabase)
+      try {
+        await supabase.from("lavado_historial").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting lavado_historial for tambo:", e);
+      }
+      try {
+        const locals = getLocalHistorial();
+        const filtered = locals.filter(h => h.tambo_id !== id);
+        saveLocalHistorial(filtered);
+      } catch (e) {
+        console.warn("Error deleting local lavado_historial for tambo:", e);
+      }
+
+      // 7. Delete from reclamos
+      try {
+        await supabase.from("reclamos").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting reclamos for tambo:", e);
+      }
+
+      // 8. Delete from mantenimientos
+      try {
+        await supabase.from("mantenimientos").delete().eq("tambo_id", id);
+      } catch (e) {
+        console.warn("Error deleting mantenimientos for tambo:", e);
+      }
+
+      // 9. Delete the tambo itself
+      const { error } = await supabase.from("tambos").delete().eq("id", id);
+      if (error) {
+        console.error("Error al eliminar el tambo:", error);
+        throw error;
+      }
+    },
     subscribeToChanges(callback: () => void) {
       const subscription = supabase
         .channel('tambos-changes')
