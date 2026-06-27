@@ -104,6 +104,7 @@ export default function TamboDetailPage() {
       
       setTambo(normalizedTambo);
       setMantenimientos(mantData);
+      console.log("DATOS_RECARGADOS", mantData);
       setConfigs(configData);
       setActiveTypes(activeTypesNames);
       setReclamos(reclamosData);
@@ -1100,20 +1101,28 @@ function EditLastDateModal({ tamboId, status, mantenimientos, onClose, onSuccess
           .filter(m => m.tipo === status.tipo && m.fecha !== '1900-01-01')
           .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
 
+        console.log("STATUS_TIPO", status.tipo);
+        console.log("FECHA_FORMULARIO", fecha);
+        console.log("LATEST_MAINT", latestMaint);
+        console.log("ID_UPDATE", latestMaint?.id);
+
         if (latestMaint) {
           // UPDATE existing maintenance with the new date
-          await db.mantenimientos.update(latestMaint.id, {
+          console.log("ANTES_UPDATE", latestMaint);
+          const resultadoUpdate = await db.mantenimientos.update(latestMaint.id, {
             fecha: fecha,
             observaciones: obs
           });
+          console.log("DESPUES_UPDATE", resultadoUpdate);
         } else {
           // CREATE a new record if no previous record exists
-          await db.mantenimientos.create({
+          const nuevoRegistro = await db.mantenimientos.create({
             tambo_id: tamboId,
             tipo: status.tipo,
             fecha: fecha,
             observaciones: obs
           });
+          console.log("DESPUES_UPDATE", nuevoRegistro);
         }
       }
       onSuccess();

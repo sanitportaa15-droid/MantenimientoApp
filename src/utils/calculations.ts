@@ -245,7 +245,27 @@ export function calculateMaintenanceStatus(
       frecuenciaLabel = `Frecuencia calculada: ${pezoneraMaxOrdenes} ordeños`;
     } else {
       // Cálculo por meses (resto de mantenimientos)
-      const meses = tipoObj.frecuencia_meses || 12;
+      let meses = tipoObj.frecuencia_meses || 12;
+      const lowerTipo = tipo.toLowerCase().trim();
+      
+      const isCilindroLavado = lowerTipo.includes("cilindro lavado") || lowerTipo.includes("dosificadoras") || lowerTipo.includes("mangueras") || lowerTipo.includes("cilindro lavado automático, dosificadoras, mangueras, pulsador") || lowerTipo.includes("cilindro lavado automatico");
+      const isCentrifuga = lowerTipo.includes("centrífuga") || lowerTipo.includes("centrifuga") || lowerTipo === "bomba centrífuga de leche" || lowerTipo === "bomba centrifuga de leche";
+      const isBombaVacio = lowerTipo.includes("vacío") || lowerTipo.includes("vacio") || lowerTipo === "bomba de vacío" || lowerTipo === "bomba de vacio";
+      const isSensorLeche = lowerTipo.includes("sensor de leche") || lowerTipo === "sensor de leche";
+      const isPulsadores = (lowerTipo.includes("pulsador") || lowerTipo === "pulsadores") && !isCilindroLavado;
+
+      if (isCentrifuga) {
+        meses = 6;
+      } else if (isBombaVacio) {
+        meses = 12;
+      } else if (isCilindroLavado) {
+        meses = 12;
+      } else if (isPulsadores) {
+        meses = 10;
+      } else if (isSensorLeche) {
+        meses = 12;
+      }
+
       proximaFecha = addMonths(ultimaFecha, meses);
       frecuenciaLabel = `Cada ${meses} meses`;
     }
