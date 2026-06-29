@@ -112,11 +112,26 @@ export default function MaintenanceStatusPage() {
 
   const currentStatus = filterStatus ? getStatusConfig(filterStatus) : null;
 
+  const showPrintButton = filterStatus === "rojo" || filterStatus === "amarillo";
+
+  const getPrintTitle = () => {
+    if (filterStatus === "rojo") return "Listado de Mantenimientos Vencidos";
+    if (filterStatus === "amarillo") return "Listado de Próximos Mantenimientos";
+    return "Listado de Mantenimientos";
+  };
+
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = getPrintTitle();
+    window.print();
+    document.title = originalTitle;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link to="/" className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+          <Link to="/" className="p-2 hover:bg-white/5 rounded-lg transition-colors no-print">
             <ArrowLeft className="w-6 h-6" />
           </Link>
           <div>
@@ -126,9 +141,17 @@ export default function MaintenanceStatusPage() {
             <p className="text-zinc-500 text-sm">Listado detallado para planificación técnica.</p>
           </div>
         </div>
+        {showPrintButton && (
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black px-4 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-emerald-500/10 shrink-0 no-print"
+          >
+            🖨️ Imprimir listado
+          </button>
+        )}
       </div>
 
-      <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[#0f0f0f] border border-white/5 rounded-2xl overflow-hidden no-print">
         <div className="p-4 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -154,7 +177,9 @@ export default function MaintenanceStatusPage() {
                 <th className="px-6 py-4 font-semibold">Tipo de Mantenimiento</th>
                 <th className="px-6 py-4 font-semibold">Última Fecha</th>
                 <th className="px-6 py-4 font-semibold">Estado</th>
-                <th className="px-6 py-4 font-semibold text-right">Días Vencido</th>
+                <th className="px-6 py-4 font-semibold text-right">
+                  {filterStatus === "amarillo" ? "Días Restantes" : filterStatus === "rojo" ? "Días Vencido" : "Días Vencido / Restantes"}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -162,7 +187,6 @@ export default function MaintenanceStatusPage() {
                 filteredData.map((item, index) => {
                   const status = getStatusConfig(item.status);
                   const Icon = status.icon;
-                  const diasVencido = item.diasRestantes !== null && item.diasRestantes < 0 ? Math.abs(item.diasRestantes) : 0;
 
                   return (
                     <tr key={`${item.tamboId}-${index}`} className="hover:bg-white/5 transition-colors group">
@@ -195,8 +219,14 @@ export default function MaintenanceStatusPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {diasVencido > 0 ? (
-                          <span className="text-sm font-bold text-red-400">{diasVencido} días</span>
+                        {item.diasRestantes !== null ? (
+                          item.diasRestantes < 0 ? (
+                            <span className="text-sm font-bold text-red-400">{Math.abs(item.diasRestantes)} días</span>
+                          ) : item.diasRestantes > 0 ? (
+                            <span className="text-sm font-bold text-amber-400">{item.diasRestantes} días</span>
+                          ) : (
+                            <span className="text-sm font-bold text-emerald-400">Hoy</span>
+                          )
                         ) : (
                           <span className="text-sm text-zinc-600">-</span>
                         )}
@@ -214,6 +244,94 @@ export default function MaintenanceStatusPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Printable Area - Clean Black & White format */}
+      <div className="hidden print:block print-only text-black bg-white p-4 w-full">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            .print-only, .print-only * {
+              visibility: visible !important;
+            }
+            .print-only {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              display: block !important;
+              background-color: white !important;
+              color: black !important;
+            }
+            @page {
+              margin: 1.5cm;
+              size: auto;
+            }
+          }
+        `}} />
+        
+        <div style={{ borderBottom: "2px solid black", paddingBottom: "12px", marginBottom: "20px" }}>
+          <h1 style={{ fontSize: "22px", fontWeight: "bold", margin: "0 0 6px 0", color: "black", fontFamily: "sans-serif" }}>
+            {getPrintTitle()}
+          </h1>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "black", fontFamily: "sans-serif" }}>
+            <span><strong>Fecha y hora de impresión:</strong> {new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</span>
+            <span><strong>Cantidad total de registros impresos:</strong> {filteredData.length}</span>
+          </div>
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", color: "black", fontFamily: "sans-serif" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid black", borderTop: "2px solid black" }}>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "left", fontWeight: "bold" }}>Cliente</th>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "left", fontWeight: "bold" }}>Tambo</th>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "left", fontWeight: "bold" }}>Tipo de mantenimiento</th>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "left", fontWeight: "bold" }}>Última fecha</th>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "left", fontWeight: "bold" }}>Estado</th>
+              <th style={{ padding: "8px", border: "1px solid black", textAlign: "right", fontWeight: "bold" }}>
+                {filterStatus === "rojo" ? "Días vencido" : filterStatus === "amarillo" ? "Días restantes" : "Días vencido / restantes"}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((item, index) => {
+              const formattedDate = item.ultimaFecha ? format(item.ultimaFecha, "dd/MM/yyyy") : "NUNCA";
+              const statusLabel = item.status === "verde" ? "Al día" 
+                : item.status === "amarillo" ? "Próximo" 
+                : item.status === "rojo" ? "Vencido" 
+                : "Nunca realizado";
+                
+              let diasLabel = "-";
+              if (item.diasRestantes !== null) {
+                if (item.diasRestantes < 0) {
+                  diasLabel = `${Math.abs(item.diasRestantes)} días`;
+                } else if (item.diasRestantes > 0) {
+                  diasLabel = `${item.diasRestantes} días`;
+                } else {
+                  diasLabel = "Hoy";
+                }
+              }
+
+              return (
+                <tr key={index} style={{ borderBottom: "1px solid black" }}>
+                  <td style={{ padding: "8px", border: "1px solid black" }}>{item.clienteNombre}</td>
+                  <td style={{ padding: "8px", border: "1px solid black" }}>{item.tamboNombre}</td>
+                  <td style={{ padding: "8px", border: "1px solid black" }}>
+                    <strong>{item.tipo}</strong>
+                    {item.frecuenciaLabel && (
+                      <div style={{ fontSize: "9px", color: "#333", fontStyle: "italic", marginTop: "2px" }}>{item.frecuenciaLabel}</div>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px", border: "1px solid black" }}>{formattedDate}</td>
+                  <td style={{ padding: "8px", border: "1px solid black" }}>{statusLabel.toUpperCase()}</td>
+                  <td style={{ padding: "8px", border: "1px solid black", textAlign: "right", fontWeight: "bold" }}>{diasLabel}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
