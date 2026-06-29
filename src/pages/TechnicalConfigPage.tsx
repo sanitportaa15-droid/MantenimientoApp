@@ -24,11 +24,14 @@ import {
   Activity,
   ChevronRight,
   Droplets,
-  Calendar
+  Calendar,
+  Building
 } from "lucide-react";
 import { cn, formatDate } from "../utils/ui";
+import { useCompany } from "../services/CompanyContext";
 
-type ConfigTab = "equipos" | "parametros" | "mantenimientos" | "reparaciones" | "reclamos";
+type ConfigTab = "equipos" | "parametros" | "mantenimientos" | "reparaciones" | "reclamos" | "identidad";
+
 
 export default function TechnicalConfigPage() {
   const [activeTab, setActiveTab] = useState<ConfigTab>("equipos");
@@ -296,6 +299,7 @@ export default function TechnicalConfigPage() {
     { id: "mantenimientos", name: "Mantenimientos", icon: Wrench },
     { id: "reparaciones", name: "Reparaciones", icon: Wrench },
     { id: "reclamos", name: "Reclamos", icon: Activity },
+    { id: "identidad", name: "Identidad de la Empresa", icon: Building },
   ];
 
   return (
@@ -811,6 +815,260 @@ export default function TechnicalConfigPage() {
           </div>
         </div>
       )}
+
+      {activeTab === "identidad" && (
+        <IdentidadForm />
+      )}
     </div>
+  );
+}
+
+function IdentidadForm() {
+  const { company, updateCompany } = useCompany();
+  const [nombre, setNombre] = useState(company.nombre || "");
+  const [logoUrl, setLogoUrl] = useState(company.logo_url || "");
+  const [colorPrincipal, setColorPrincipal] = useState(company.color_principal || "#10b981");
+  const [colorSecundario, setColorSecundario] = useState(company.color_secundario || "#06b6d4");
+  const [email, setEmail] = useState(company.email || "");
+  const [telefono, setTelefono] = useState(company.telefono || "");
+  const [direccion, setDireccion] = useState(company.direccion || "");
+  const [sitioWeb, setSitioWeb] = useState(company.sitio_web || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
+  // Sync state if company changes
+  useEffect(() => {
+    if (company) {
+      setNombre(company.nombre || "");
+      setLogoUrl(company.logo_url || "");
+      setColorPrincipal(company.color_principal || "#10b981");
+      setColorSecundario(company.color_secundario || "#06b6d4");
+      setEmail(company.email || "");
+      setTelefono(company.telefono || "");
+      setDireccion(company.direccion || "");
+      setSitioWeb(company.sitio_web || "");
+    }
+  }, [company]);
+
+  const handleLogoUpload = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleLogoUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      await updateCompany({
+        nombre,
+        logo_url: logoUrl || null,
+        color_principal: colorPrincipal || null,
+        color_secundario: colorSecundario || null,
+        email,
+        telefono,
+        direccion,
+        sitio_web: sitioWeb || null
+      });
+      alert("Identidad de la empresa guardada correctamente.");
+    } catch (error) {
+      console.error("Error saving company identity:", error);
+      alert("Error al guardar la identidad de la empresa.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 md:p-8 space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-6">
+        <div>
+          <h3 className="text-2xl font-bold">Identidad de la Empresa</h3>
+          <p className="text-zinc-500 mt-1">Configure la marca, logotipos, colores y datos de contacto de su empresa.</p>
+        </div>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 text-sm"
+        >
+          {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          Guardar Identidad
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left column: Logo upload */}
+        <div className="space-y-4">
+          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Logotipo Corporativo</label>
+          <div 
+            onDragEnter={handleDrag}
+            onDragOver={handleDrag}
+            onDragLeave={handleDrag}
+            onDrop={handleDrop}
+            className={cn(
+              "border-2 border-dashed rounded-3xl p-6 text-center transition-all flex flex-col items-center justify-center min-h-[250px] relative overflow-hidden group",
+              dragActive ? "border-emerald-500 bg-emerald-500/5" : "border-white/10 bg-black/20 hover:border-white/20"
+            )}
+          >
+            {logoUrl ? (
+              <div className="space-y-4 w-full">
+                <div className="w-32 h-32 mx-auto bg-white/5 rounded-2xl flex items-center justify-center p-2 relative">
+                  <img src={logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => setLogoUrl("")}
+                    className="absolute -top-2 -right-2 bg-red-500/80 hover:bg-red-500 p-1.5 rounded-full text-white transition-all shadow-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">Arrastre una nueva imagen para reemplazarla</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="w-16 h-16 mx-auto bg-white/5 rounded-2xl flex items-center justify-center text-zinc-500 group-hover:text-zinc-300 transition-colors">
+                  <Building className="w-8 h-8" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-zinc-300">Arrastre su logotipo aquí</p>
+                  <p className="text-xs text-zinc-500 mt-1">o haga clic para seleccionar el archivo</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleLogoUpload(e.target.files[0]);
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Center & Right columns: Info forms */}
+        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Nombre de la Empresa</label>
+            <input
+              type="text"
+              required
+              placeholder="Ej. INELAC"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Color Principal</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={colorPrincipal}
+                  onChange={(e) => setColorPrincipal(e.target.value)}
+                  className="w-12 h-11 bg-transparent border border-white/10 rounded-xl cursor-pointer p-0.5"
+                />
+                <input
+                  type="text"
+                  placeholder="#10b981"
+                  value={colorPrincipal}
+                  onChange={(e) => setColorPrincipal(e.target.value)}
+                  className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-sm focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Color Secundario</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  value={colorSecundario}
+                  onChange={(e) => setColorSecundario(e.target.value)}
+                  className="w-12 h-11 bg-transparent border border-white/10 rounded-xl cursor-pointer p-0.5"
+                />
+                <input
+                  type="text"
+                  placeholder="#06b6d4"
+                  value={colorSecundario}
+                  onChange={(e) => setColorSecundario(e.target.value)}
+                  className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-sm focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Correo Electrónico</label>
+            <input
+              type="email"
+              placeholder="contacto@empresa.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Teléfono de Contacto</label>
+            <input
+              type="tel"
+              placeholder="Ej. +549341234567"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Dirección Física</label>
+            <input
+              type="text"
+              placeholder="Ej. Av. Rivadavia 1234, CABA"
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Sitio Web corporativo</label>
+            <input
+              type="url"
+              placeholder="Ej. https://www.empresa.com"
+              value={sitioWeb}
+              onChange={(e) => setSitioWeb(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+    </form>
   );
 }

@@ -17,6 +17,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { cn } from "../utils/ui";
+import { useCompany } from "../services/CompanyContext";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,6 +26,8 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
+  const { company } = useCompany();
+
 
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -47,10 +50,14 @@ export default function Layout({ children }: LayoutProps) {
       {/* Mobile Header */}
       <header className="lg:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#0f0f0f] sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-            <Droplets className="text-black w-5 h-5" />
-          </div>
-          <span className="font-bold tracking-tight text-lg">GanPor</span>
+          {company.logo_url ? (
+            <img src={company.logo_url} alt={company.nombre} className="w-8 h-8 rounded-lg object-contain bg-white/5 p-0.5" />
+          ) : (
+            <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
+              <Droplets className="text-black w-5 h-5" />
+            </div>
+          )}
+          <span className="font-bold tracking-tight text-lg">{company.nombre}</span>
         </div>
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -68,11 +75,15 @@ export default function Layout({ children }: LayoutProps) {
         )}>
           <div className="flex flex-col h-full p-6">
             <div className="hidden lg:flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Droplets className="text-black w-6 h-6" />
-              </div>
+              {company.logo_url ? (
+                <img src={company.logo_url} alt={company.nombre} className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1 shadow-lg shadow-emerald-500/10" />
+              ) : (
+                <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <Droplets className="text-black w-6 h-6" />
+                </div>
+              )}
               <div>
-                <h1 className="font-bold tracking-tight text-xl leading-none">GanPor</h1>
+                <h1 className="font-bold tracking-tight text-lg leading-none break-words max-w-[150px]">{company.nombre}</h1>
                 <p className="text-[10px] uppercase tracking-widest text-zinc-500 mt-1 font-semibold">Mantenimiento</p>
               </div>
             </div>

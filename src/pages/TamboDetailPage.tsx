@@ -19,7 +19,8 @@ import {
   Info,
   Activity,
   Wrench,
-  Package
+  Package,
+  MessageCircle
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, TamboComponente, TamboInsumo, Insumo } from "../types/supabase";
@@ -27,6 +28,8 @@ import { calculateMaintenanceStatus, getGeneralStatus, Status, MaintenanceStatus
 import { cn, formatDate } from "../utils/ui";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useCompany } from "../services/CompanyContext";
+
 
 import FichaTecnicaModal from "../components/FichaTecnicaModal";
 
@@ -35,6 +38,8 @@ type TabType = "info" | "history" | "reclamos" | "technical";
 export default function TamboDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { company } = useCompany();
+
   const [loading, setLoading] = useState(true);
   const [tambo, setTambo] = useState<(Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null, insumos: Insumo | null }) | null>(null);
   const [mantenimientos, setMantenimientos] = useState<Mantenimiento[]>([]);
@@ -229,7 +234,8 @@ export default function TamboDetailPage() {
       doc.setFont("helvetica", "bold");
       doc.text("Reporte Técnico", 20, 20);
       doc.setFontSize(14);
-      doc.text("GanPor Mantenimiento", 20, 30);
+      doc.text(company.nombre === "Sistema de Mantenimiento" ? "Sistema de Mantenimiento" : `${company.nombre} Mantenimiento`, 20, 30);
+
       
       // Client & Tambo Info
       doc.setTextColor(0, 0, 0);
@@ -864,9 +870,11 @@ export default function TamboDetailPage() {
         />
       )}
 
-      {isModalOpen && (
+      {isModalOpen && tambo && (
         <MaintenanceModal 
-          tamboId={tambo.id} 
+          tambo={tambo}
+          configs={configs}
+          allMaintTypes={allMaintTypes}
           activeTypes={(() => {
             const set = new Set([...activeTypes]);
             mantenimientos.forEach(m => {
@@ -940,12 +948,205 @@ function StatusBadge({ status, size = "md" }: { status: Status, size?: "sm" | "m
   );
 }
 
-function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboId: string, activeTypes: string[], onClose: () => void, onSuccess: () => void }) {
+function guessEquipoForMantenimiento(tipo: string, ficha: any): string {
+  const lower = tipo.toLowerCase().trim();
+  if (lower.includes("pezonera")) {
+    return ficha?.colector_marca ? `Pezoneras (${ficha.colector_marca})` : "Pezoneras";
+  }
+  if (lower.includes("manguera") && lower.includes("leche")) {
+    return "Mangueras de leche";
+  }
+  if (lower.includes("manguera") && lower.includes("pulsado")) {
+    return "Mangueras de pulsado";
+  }
+  if (lower.includes("pulsador")) {
+    return ficha?.tipo_pulsadores ? `Pulsadores (${ficha.tipo_pulsadores})` : "Pulsadores";
+  }
+  if (lower.includes("soga")) {
+    return "Sogas de retiro";
+  }
+  if (lower.includes("diafragma") && lower.includes("brazo")) {
+    return "Brazos de retiro";
+  }
+  if (lower.includes("buje")) {
+    return "Brazos / Bujes";
+  }
+  if (lower.includes("sensor")) {
+    return "Sensor de leche";
+  }
+  if (lower.includes("vacio") || lower.includes("vacío")) {
+    return ficha?.bomba_vacio_marca ? `Bomba de vacío (${ficha.bomba_vacio_marca})` : "Bomba de vacío";
+  }
+  if (lower.includes("centrifuga") || lower.includes("centrífuga")) {
+    return ficha?.bomba_leche_marca ? `Bomba centrífuga de leche (${ficha.bomba_leche_marca})` : "Bomba centrífuga de leche";
+  }
+  if (lower.includes("diafragma") && lower.includes("bomba")) {
+    return ficha?.bomba_leche_marca ? `Bomba diafragma de leche (${ficha.bomba_leche_marca})` : "Bomba diafragma de leche";
+  }
+  if (lower.includes("colector")) {
+    return ficha?.colector_marca ? `Colector de leche (${ficha.colector_marca})` : "Kit de colector de leche";
+  }
+  if (lower.includes("caucho")) {
+    return "Línea de leche y lavado";
+  }
+  return ficha?.tipo_equipo || "Equipo de Ordeñe";
+}
+
+function calculateNextDate(
+  tipo: string,
+  fechaStr: string,
+  tambo: any,
+  configs: Configuracion[],
+  allMaintTypes: TipoMantenimiento[]
+): string {
+  const normTipo = tipo.trim().toLowerCase();
+  const isPezonera = normTipo.includes("pezonera");
+
+  if (isPezonera) {
+    const configMax = configs.find(c => c.clave === "pezonera_max_ordenes");
+    const pezoneraMaxOrdenes = configMax ? parseInt(configMax.valor) || 1200 : 1200;
+
+    const vacas = tambo.vacas_en_ordene || 0;
+    const ordenes = tambo.ordenes_por_dia || 0;
+    const bajadas = tambo.ficha_tecnica?.bajadas || tambo.bajadas || 1;
+
+    const ordenosPorPezonera = (vacas * ordenes) / bajadas;
+    const diasEstimados = ordenosPorPezonera > 0 ? Math.floor(pezoneraMaxOrdenes / ordenosPorPezonera) : 365;
+
+    const [year, month, day] = fechaStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    d.setDate(d.getDate() + diasEstimados);
+    return formatDate(d);
+  } else {
+    const tipoObj = allMaintTypes.find(t => t.nombre.toLowerCase().trim() === normTipo);
+    let meses = tipoObj?.frecuencia_meses || 12;
+
+    const getMaintConfigKey = (name: string): string | null => {
+      const lower = name.toLowerCase();
+      if (lower.includes("pezonera")) return "pezoneras_meses";
+      if (lower.includes("manguera") && lower.includes("leche")) return "mangueras_leche_meses";
+      if (lower.includes("manguera") && lower.includes("pulsado")) return "mangueras_pulsado_meses";
+      if (lower.includes("pulsador")) return "pulsadores_meses";
+      if (lower.includes("soga")) return "sogas_meses";
+      if (lower.includes("diafragma") && lower.includes("brazo")) return "diafragma_brazos_meses";
+      if (lower.includes("buje")) return "bujes_meses";
+      if (lower.includes("sensor")) return "sensor_leche_meses";
+      if (lower.includes("vacio") || lower.includes("vacío")) return "bomba_vacio_meses";
+      if (lower.includes("centrifuga") || lower.includes("centrífuga")) return "bomba_centrifuga_leche_meses";
+      if (lower.includes("diafragma") && lower.includes("bomba")) return "bomba_diafragma_leche_meses";
+      if (lower.includes("colector")) return "kit_colector_leche_meses";
+      if (lower.includes("caucho")) return "caucho_linea_leche_y_lavado_meses";
+      return null;
+    };
+
+    const configKey = getMaintConfigKey(tipo);
+    if (configKey) {
+      const configObj = configs.find(c => c.clave === configKey);
+      if (configObj) {
+        meses = parseInt(configObj.valor) || meses;
+      }
+    }
+
+    const [year, month, day] = fechaStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    d.setMonth(d.getMonth() + meses);
+    return formatDate(d);
+  }
+}
+
+function buildWhatsAppMessage({
+  clienteNombre,
+  tamboNombre,
+  equipos,
+  tipos,
+  fechaStr,
+  proximaFechaStr,
+  observacionesText,
+  tecnicoNombre
+}: {
+  clienteNombre: string;
+  tamboNombre: string;
+  equipos: string;
+  tipos: string;
+  fechaStr: string;
+  proximaFechaStr: string;
+  observacionesText: string;
+  tecnicoNombre: string;
+}) {
+  let msg = `✅ *Mantenimiento realizado*\n\n`;
+  msg += `*Cliente:* ${clienteNombre}\n`;
+  msg += `*Tambo:* ${tamboNombre}\n`;
+  msg += `*Equipo:* ${equipos}\n`;
+  msg += `*Mantenimiento:* ${tipos}\n`;
+  msg += `*Fecha:* ${fechaStr}\n`;
+  if (proximaFechaStr) {
+    msg += `*Próximo mantenimiento:* ${proximaFechaStr}\n`;
+  }
+  msg += `*Estado:* Al día\n`;
+  if (observacionesText) {
+    msg += `\n*Observaciones:*\n${observacionesText}\n`;
+  }
+  if (tecnicoNombre) {
+    msg += `\n*Técnico:* ${tecnicoNombre}`;
+  }
+  return msg;
+}
+
+function MaintenanceModal({ 
+  tambo, 
+  configs, 
+  allMaintTypes, 
+  activeTypes, 
+  onClose, 
+  onSuccess 
+}: { 
+  tambo: Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null, insumos: Insumo | null }, 
+  configs: Configuracion[],
+  allMaintTypes: TipoMantenimiento[],
+  activeTypes: string[], 
+  onClose: () => void, 
+  onSuccess: () => void 
+}) {
   const [loading, setLoading] = useState(false);
   const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   const [observaciones, setObservaciones] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
+  const [showShareConfirmation, setShowShareConfirmation] = useState(false);
+  const [savedRecords, setSavedRecords] = useState<any[]>([]);
+
+  const [tecnicoNombre, setTecnicoNombre] = useState(() => localStorage.getItem("tecnico_nombre") || "");
+  const [telefono, setTelefono] = useState(() => tambo.clientes?.telefono || "");
+  const [customMessage, setCustomMessage] = useState("");
+
+  useEffect(() => {
+    if (tecnicoNombre !== null) {
+      localStorage.setItem("tecnico_nombre", tecnicoNombre);
+    }
+  }, [tecnicoNombre]);
+
+  useEffect(() => {
+    if (showShareConfirmation && savedRecords.length > 0) {
+      const [year, month, day] = fecha.split('-').map(Number);
+      const formattedFecha = formatDate(new Date(year, month - 1, day));
+
+      const tiposStr = savedRecords.map(r => r.tipo).join(", ");
+      const equiposStr = savedRecords.map(r => guessEquipoForMantenimiento(r.tipo, tambo.ficha_tecnica)).join(", ");
+      const nextDatesStr = savedRecords.map(r => calculateNextDate(r.tipo, fecha, tambo, configs, allMaintTypes)).join(", ");
+
+      const msg = buildWhatsAppMessage({
+        clienteNombre: tambo.clientes?.nombre || "N/A",
+        tamboNombre: tambo.nombre,
+        equipos: equiposStr,
+        tipos: tiposStr,
+        fechaStr: formattedFecha,
+        proximaFechaStr: nextDatesStr,
+        observacionesText: observaciones.trim(),
+        tecnicoNombre: tecnicoNombre
+      });
+      setCustomMessage(msg);
+    }
+  }, [showShareConfirmation, savedRecords, tecnicoNombre]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -957,7 +1158,7 @@ function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboI
     setLoading(true);
     try {
       const records = selectedTipos.map(tipo => ({
-        tambo_id: tamboId,
+        tambo_id: tambo.id,
         tipo,
         fecha,
         observaciones: observaciones.trim() || null,
@@ -965,7 +1166,8 @@ function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboI
       }));
 
       await db.mantenimientos.createMany(records);
-      onSuccess();
+      setSavedRecords(records);
+      setShowShareConfirmation(true);
     } catch (error) {
       console.error("Error creating maintenance records:", error);
       alert("Error al registrar el mantenimiento.");
@@ -979,6 +1181,100 @@ function MaintenanceModal({ tamboId, activeTypes, onClose, onSuccess }: { tamboI
       prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
     );
   };
+
+  const cleanPhone = (phone: string) => {
+    return phone.replace(/\D/g, "");
+  };
+
+  const cleanTelefono = cleanPhone(telefono);
+  const whatsappUrl = cleanTelefono
+    ? `https://wa.me/${cleanTelefono}?text=${encodeURIComponent(customMessage)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(customMessage)}`;
+
+  if (showShareConfirmation) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-xl p-6 md:p-8 space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-2xl font-bold flex items-center gap-2 text-emerald-400">
+              <CheckCircle2 className="w-6 h-6" /> Mantenimiento Guardado
+            </h3>
+            <button onClick={onSuccess} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+              <XCircle className="w-6 h-6 text-zinc-500" />
+            </button>
+          </div>
+
+          <p className="text-sm text-zinc-400">
+            El mantenimiento se registró correctamente en el sistema. ¿Deseas compartir el resumen por WhatsApp?
+          </p>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                  Teléfono del Cliente
+                </label>
+                <input
+                  type="text"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  placeholder="ej: 549341234567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                  Nombre del Técnico
+                </label>
+                <input
+                  type="text"
+                  value={tecnicoNombre}
+                  onChange={(e) => setTecnicoNombre(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  placeholder="Técnico realizador"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                Vista previa del Mensaje
+              </label>
+              <textarea
+                value={customMessage}
+                onChange={(e) => setCustomMessage(e.target.value)}
+                rows={10}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-emerald-500 transition-colors resize-y leading-relaxed"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-4 pt-2">
+            <button
+              onClick={onSuccess}
+              className="flex-1 px-6 py-4 rounded-2xl font-bold border border-white/10 hover:bg-white/5 transition-colors text-sm text-zinc-300"
+            >
+              Cerrar
+            </button>
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                setTimeout(() => {
+                  onSuccess();
+                }, 300);
+              }}
+              className="flex-[2] bg-emerald-500 hover:bg-emerald-600 text-black text-center font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-sm"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Compartir por WhatsApp
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">

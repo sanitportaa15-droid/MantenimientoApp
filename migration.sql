@@ -210,3 +210,33 @@ BEGIN
     END IF;
 END $$;
 
+
+-- 14) TABLA DE IDENTIDAD DE LA EMPRESA (SaaS-READY)
+CREATE TABLE IF NOT EXISTS empresa_identidad (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre TEXT NOT NULL DEFAULT 'Sistema de Mantenimiento',
+  logo_url TEXT,
+  color_principal TEXT DEFAULT '#10b981',
+  color_secundario TEXT DEFAULT '#06b6d4',
+  email TEXT DEFAULT '',
+  telefono TEXT DEFAULT '',
+  direccion TEXT DEFAULT '',
+  sitio_web TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE empresa_identidad ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Permitir todo empresa_identidad') THEN
+        CREATE POLICY "Permitir todo empresa_identidad" ON empresa_identidad FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- 15) REGISTRO INICIAL DE LA EMPRESA
+INSERT INTO empresa_identidad (nombre, logo_url, color_principal, color_secundario, email, telefono, direccion, sitio_web)
+SELECT 'Sistema de Mantenimiento', NULL, '#10b981', '#06b6d4', '', '', '', ''
+WHERE NOT EXISTS (SELECT 1 FROM empresa_identidad);
+
+

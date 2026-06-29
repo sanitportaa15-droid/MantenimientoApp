@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial, EmpresaIdentidad } from "../types/supabase";
+
 
 export function normalizeMaintenanceName(name: string): string {
   if (!name) return "";
@@ -1268,15 +1269,88 @@ export const db = {
         saveLocalHistorial(filtered);
       }
     }
+  },
+  empresa_identidad: {
+    async get() {
+      try {
+        const { data, error } = await (supabase.from("empresa_identidad") as any).select("*");
+        if (error) throw error;
+        if (data && data.length > 0) {
+          return data[0] as EmpresaIdentidad;
+        }
+        return defaultEmpresa;
+      } catch (err) {
+        console.error("Error loading company identity from Supabase:", err);
+        return defaultEmpresa;
+      }
+    },
+    async save(empresa: Omit<EmpresaIdentidad, 'id' | 'created_at'> & { id?: string }) {
+      const defaultId = empresa.id || "default-empresa-id";
+      const record = {
+        id: defaultId,
+        nombre: empresa.nombre || 'Sistema de Mantenimiento',
+        logo_url: empresa.logo_url || null,
+        color_principal: empresa.color_principal || '#10b981',
+        color_secundario: empresa.color_secundario || '#06b6d4',
+        email: empresa.email || '',
+        telefono: empresa.telefono || '',
+        direccion: empresa.direccion || '',
+        sitio_web: empresa.sitio_web || '',
+      };
+      
+      try {
+        const { data: existing } = await (supabase.from("empresa_identidad") as any).select("id").maybeSingle();
+        let result;
+        if (existing) {
+          const { data, error } = await (supabase.from("empresa_identidad") as any)
+            .update(record)
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (error) throw error;
+          result = data;
+        } else {
+          const { data, error } = await (supabase.from("empresa_identidad") as any)
+            .insert({ ...record, id: undefined })
+            .select()
+            .single();
+          if (error) throw error;
+          result = data;
+        }
+        return result as EmpresaIdentidad;
+      } catch (err) {
+        console.error("Error saving company identity to Supabase:", err);
+        throw err;
+      }
+    }
   }
 };
 
-const LOCAL_STORAGE_CONFIG_KEY = "ganpor_lavado_configuraciones";
-const LOCAL_STORAGE_HISTORIAL_KEY = "ganpor_lavado_historial";
+const LOCAL_STORAGE_CONFIG_KEY = "mantenimiento_lavado_configuraciones";
+const LOCAL_STORAGE_HISTORIAL_KEY = "mantenimiento_lavado_historial";
+
+const defaultEmpresa: EmpresaIdentidad = {
+  id: "default",
+  nombre: "Sistema de Mantenimiento",
+  logo_url: null,
+  color_principal: "#10b981",
+  color_secundario: "#06b6d4",
+  email: "",
+  telefono: "",
+  direccion: "",
+  sitio_web: ""
+};
 
 function getLocalConfigs(): any[] {
   try {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_CONFIG_KEY) || "[]");
+    let data = localStorage.getItem(LOCAL_STORAGE_CONFIG_KEY);
+    if (!data) {
+      data = localStorage.getItem("ganpor_lavado_configuraciones");
+      if (data) {
+        localStorage.setItem(LOCAL_STORAGE_CONFIG_KEY, data);
+      }
+    }
+    return JSON.parse(data || "[]");
   } catch {
     return [];
   }
@@ -1288,7 +1362,14 @@ function saveLocalConfigs(configs: any[]) {
 
 function getLocalHistorial(): any[] {
   try {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_HISTORIAL_KEY) || "[]");
+    let data = localStorage.getItem(LOCAL_STORAGE_HISTORIAL_KEY);
+    if (!data) {
+      data = localStorage.getItem("ganpor_lavado_historial");
+      if (data) {
+        localStorage.setItem(LOCAL_STORAGE_HISTORIAL_KEY, data);
+      }
+    }
+    return JSON.parse(data || "[]");
   } catch {
     return [];
   }

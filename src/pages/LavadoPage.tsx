@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../services/db";
+import { useCompany } from "../services/CompanyContext";
+
 import { Tambo, Cliente, LavadoConfiguracion, LavadoHistorial } from "../types/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -126,7 +128,15 @@ export default function LavadoPage() {
   const [formTanCloroTiempo, setFormTanCloroTiempo] = useState<number>(8);
 
   // Logo Configurable local state
-  const [companyLogoText, setCompanyLogoText] = useState(() => localStorage.getItem("washing_logo_text") || "GanPor Mantenimiento");
+  const { company } = useCompany();
+  const [companyLogoText, setCompanyLogoText] = useState(() => localStorage.getItem("washing_logo_text") || "");
+
+  useEffect(() => {
+    if (!localStorage.getItem("washing_logo_text") && company?.nombre) {
+      setCompanyLogoText(company.nombre === "Sistema de Mantenimiento" ? "Sistema de Mantenimiento" : `${company.nombre} Mantenimiento`);
+    }
+  }, [company]);
+
 
   // Load basic data
   const loadData = async () => {
@@ -539,7 +549,8 @@ export default function LavadoPage() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    doc.text("GanPor Mantenimiento", 14, 18);
+    doc.text(companyLogoText || "Sistema de Mantenimiento", 14, 18);
+
     
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
@@ -865,7 +876,7 @@ export default function LavadoPage() {
     const formattedDate = new Date().toLocaleDateString("es-AR");
     const techLine = technicianName ? `*Técnico Confecciona:* ${technicianName}` : `*Técnico Confecciona:* No especificado`;
 
-    const messageText = `*GANPOR MANTENIMIENTO*
+    const messageText = `*${(companyLogoText || "Sistema de Mantenimiento").toUpperCase()}*
 *INFORME TÉCNICO Y RECETA DE LAVADO SANITARIO*
 
 *Establecimiento:* ${selectedConfig.nombre_establecimiento}
@@ -956,7 +967,7 @@ ${techLine}
 ${pdfNotes || "No se detallaron observaciones técnicas adicionales. Se sugiere respetar las temperaturas de recirculación prescritas para mantener la máxima eficiencia de sanitización bacteriológica."}
 
 ----------------------------------------
-_Informe técnico digital generado automáticamente por GanPor Mantenimiento._`;
+_Informe técnico digital generado automáticamente por ${companyLogoText || "Sistema de Mantenimiento"}._`;
 
     const encodedMsg = encodeURIComponent(messageText);
     window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, "_blank");

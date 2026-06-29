@@ -580,6 +580,44 @@ export interface Database {
           created_at?: string
         }
       }
+      empresa_identidad: {
+        Row: {
+          id: string
+          nombre: string
+          logo_url: string | null
+          color_principal: string | null
+          color_secundario: string | null
+          email: string | null
+          telefono: string | null
+          direccion: string | null
+          sitio_web: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nombre?: string
+          logo_url?: string | null
+          color_principal?: string | null
+          color_secundario?: string | null
+          email?: string | null
+          telefono?: string | null
+          direccion?: string | null
+          sitio_web?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          logo_url?: string | null
+          color_principal?: string | null
+          color_secundario?: string | null
+          email?: string | null
+          telefono?: string | null
+          direccion?: string | null
+          sitio_web?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -623,3 +661,17 @@ export interface TamboMantenimiento {
   tipo: string;
   fecha_ultimo_mantenimiento: string | null;
 }
+
+export interface EmpresaIdentidad {
+  id: string;
+  nombre: string;
+  logo_url: string | null;
+  color_principal: string | null;
+  color_secundario: string | null;
+  email: string | null;
+  telefono: string | null;
+  direccion: string | null;
+  sitio_web: string | null;
+  created_at?: string;
+}
+

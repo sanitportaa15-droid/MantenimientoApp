@@ -3,6 +3,8 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-emerald-500: var(--color-primary, #10b981);
+  --color-cyan-500: var(--color-secondary, #06b6d4);
 }
 
 :root {
