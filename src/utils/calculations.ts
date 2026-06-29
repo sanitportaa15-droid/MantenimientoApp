@@ -157,11 +157,57 @@ export function calculateSupplies(
   });
 }
 
+export function getMaintConfigKey(normalizedName: string): string | null {
+  const lower = normalizedName.toLowerCase().trim();
+  
+  if (lower.includes("pezonera")) {
+    return "pezonera_max_ordenes";
+  }
+  if (lower.includes("manguera") && lower.includes("leche")) {
+    return "mangueras_leche_meses";
+  }
+  if (lower.includes("manguera") && lower.includes("pulsado")) {
+    return "mangueras_pulsado_meses";
+  }
+  if (lower.includes("pulsador")) {
+    return "pulsadores_meses";
+  }
+  if (lower.includes("soga")) {
+    return "sogas_meses";
+  }
+  if (lower.includes("diafragma") && lower.includes("brazo")) {
+    return "diafragma_brazos_meses";
+  }
+  if (lower.includes("buje")) {
+    return "bujes_meses";
+  }
+  if (lower.includes("sensor")) {
+    return "sensor_leche_meses";
+  }
+  if (lower.includes("vacio") || lower.includes("vacío")) {
+    return "bomba_vacio_meses";
+  }
+  if (lower.includes("centrifuga") || lower.includes("centrífuga")) {
+    return "bomba_centrifuga_leche_meses";
+  }
+  if (lower.includes("diafragma") && lower.includes("bomba")) {
+    return "bomba_diafragma_leche_meses";
+  }
+  if (lower.includes("colector")) {
+    return "kit_colector_leche_meses";
+  }
+  if (lower.includes("caucho")) {
+    return "caucho_linea_leche_y_lavado_meses";
+  }
+  return null;
+}
+
 export function calculateMaintenanceStatus(
   tambo: Tambo,
   mantenimientos: Mantenimiento[],
   configs: Configuracion[],
-  activeTypes: TipoMantenimiento[]
+  activeTypes: TipoMantenimiento[],
+  activeNamesOverride?: string[]
 ): MaintenanceStatus[] {
   const getConfig = (clave: string, defaultValue: number) => {
     const config = configs.find(c => c.clave === clave);
@@ -170,6 +216,39 @@ export function calculateMaintenanceStatus(
 
   const diasAlerta = getConfig("dias_alerta", 30);
   const today = startOfDay(new Date());
+
+  // Get active maintenance names for this tambo to filter results at the end
+  let activeNames = activeNamesOverride;
+  if (!activeNames) {
+    const defaultMaintNames = [
+      "Bomba centrífuga de leche",
+      "Bomba de vacío",
+      "Bomba diafragma de leche",
+      "Cambio de bujes",
+      "Cambio de diafragma de los brazos",
+      "Cambio de pezoneras",
+      "Cambio de sogas",
+      "Caucho línea de leche y lavado",
+      "Kit de colector de leche",
+      "Mangueras de leche",
+      "Mangueras de pulsado",
+      "Pulsadores",
+      "Sensor de leche"
+    ].map(normalizeMaintenanceName);
+
+    const configRow = configs.find(c => c.clave === `tambo_mantenimientos_${tambo.id}`);
+    activeNames = defaultMaintNames;
+    if (configRow) {
+      try {
+        const parsed = JSON.parse(configRow.valor);
+        if (Array.isArray(parsed)) {
+          activeNames = parsed.map(normalizeMaintenanceName);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
 
   // Dynamically include any maintenance type names present in historical records that are not in activeTypes
   const existingNames = new Set(activeTypes.map(t => t.nombre.toLowerCase().trim()));
@@ -189,7 +268,7 @@ export function calculateMaintenanceStatus(
     }
   });
 
-  return mergedTypes.map(tipoObj => {
+  const calculated = mergedTypes.map((tipoObj): MaintenanceStatus => {
     const tipo = tipoObj.nombre;
     const normTipo = normalizeMaintenanceName(tipo).toLowerCase().trim();
     
@@ -216,15 +295,33 @@ export function calculateMaintenanceStatus(
       }
     }
 
+    const pezoneraMaxOrdenes = getConfig("pezonera_max_ordenes", 1200);
+    const isPezoneraType = tipo.toLowerCase().includes("pezonera");
+
     // Si el mantenimiento está marcado como "nunca realizado" o no hay fecha -> NEUTRO (gris)
     if (!ultimaFecha || isNeverPerformed) {
+      let label: string;
+      if (isPezoneraType) {
+        label = `Cada ${pezoneraMaxOrdenes} ordeños`;
+      } else {
+        let meses = tipoObj.frecuencia_meses || 12;
+        const configKey = getMaintConfigKey(normTipo);
+        if (configKey) {
+          const configObj = configs.find(c => c.clave === configKey);
+          if (configObj) {
+            meses = parseInt(configObj.valor) || meses;
+          }
+        }
+        label = `Cada ${meses} meses`;
+      }
+
       return {
         tipo,
         ultimaFecha: null,
         proximaFecha: null,
         diasRestantes: null,
         status: "gris",
-        frecuenciaLabel: tipo.toLowerCase().includes("pezonera") ? `Cada ${getConfig("pezonera_max_ordenes", 1200)} ordeños` : `Cada ${tipoObj.frecuencia_meses || 12} meses`
+        frecuenciaLabel: label
       };
     }
 
@@ -232,9 +329,6 @@ export function calculateMaintenanceStatus(
     let frecuenciaLabel: string;
     let ordenosPorPezonera: number | undefined;
     let diasEstimados: number | undefined;
-
-    const pezoneraMaxOrdenes = getConfig("pezonera_max_ordenes", 1200);
-    const isPezoneraType = tipo.toLowerCase().includes("pezonera");
 
     if (isPezoneraType) {
       // FÓRMULA OFICIAL:
@@ -255,24 +349,12 @@ export function calculateMaintenanceStatus(
     } else {
       // Cálculo por meses (resto de mantenimientos)
       let meses = tipoObj.frecuencia_meses || 12;
-      const lowerTipo = tipo.toLowerCase().trim();
-      
-      const isCilindroLavado = lowerTipo.includes("cilindro lavado") || lowerTipo.includes("dosificadoras") || lowerTipo.includes("mangueras") || lowerTipo.includes("cilindro lavado automático, dosificadoras, mangueras, pulsador") || lowerTipo.includes("cilindro lavado automatico");
-      const isCentrifuga = lowerTipo.includes("centrífuga") || lowerTipo.includes("centrifuga") || lowerTipo === "bomba centrífuga de leche" || lowerTipo === "bomba centrifuga de leche";
-      const isBombaVacio = lowerTipo.includes("vacío") || lowerTipo.includes("vacio") || lowerTipo === "bomba de vacío" || lowerTipo === "bomba de vacio";
-      const isSensorLeche = lowerTipo.includes("sensor de leche") || lowerTipo === "sensor de leche";
-      const isPulsadores = (lowerTipo.includes("pulsador") || lowerTipo === "pulsadores") && !isCilindroLavado;
-
-      if (isCentrifuga) {
-        meses = 6;
-      } else if (isBombaVacio) {
-        meses = 12;
-      } else if (isCilindroLavado) {
-        meses = 12;
-      } else if (isPulsadores) {
-        meses = 10;
-      } else if (isSensorLeche) {
-        meses = 12;
+      const configKey = getMaintConfigKey(normTipo);
+      if (configKey) {
+        const configObj = configs.find(c => c.clave === configKey);
+        if (configObj) {
+          meses = parseInt(configObj.valor) || meses;
+        }
       }
 
       proximaFecha = addMonths(ultimaFecha, meses);
@@ -304,6 +386,11 @@ export function calculateMaintenanceStatus(
       ordenosPorPezonera,
       diasEstimados
     };
+  });
+
+  // Filter to only include active configured maintenance types for this tambo
+  return calculated.filter(s => {
+    return activeNames && activeNames.some(name => name.toLowerCase().trim() === s.tipo.toLowerCase().trim());
   });
 }
 

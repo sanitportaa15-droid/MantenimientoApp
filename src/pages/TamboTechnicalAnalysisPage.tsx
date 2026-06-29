@@ -50,7 +50,7 @@ export default function TamboTechnicalAnalysisPage() {
           db.reclamos.getByTambo(id),
           db.mantenimientos.getByTambo(id),
           db.tipos_reparacion.getAll(),
-          db.configuracion.getAll(),
+          db.configuracion.getAllWithHidden(),
           db.tipos_mantenimiento.getAll(),
           db.tambos.getMantenimientosActivos(id)
         ]);
@@ -87,7 +87,7 @@ export default function TamboTechnicalAnalysisPage() {
 
   const statuses = useMemo(() => {
     if (!tambo || !mantenimientos || !configs || !allMaintTypes) return [];
-    return calculateMaintenanceStatus(tambo, mantenimientos, configs, allMaintTypes);
+    return calculateMaintenanceStatus(tambo, mantenimientos, configs, allMaintTypes, activeTypesNames);
   }, [tambo, mantenimientos, configs, allMaintTypes]);
 
   const analysis = useMemo(() => {

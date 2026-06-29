@@ -91,7 +91,7 @@ export default function TamboDetailPage() {
       const [tamboData, mantData, configData, activeTypesNames, reclamosData, allMaintTypesData, tamboCompsData, tamboInsumosData] = await Promise.all([
         db.tambos.getById(id!),
         db.mantenimientos.getByTambo(id!),
-        db.configuracion.getAll(),
+        db.configuracion.getAllWithHidden(),
         db.tambos.getMantenimientosActivos(id!),
         db.reclamos.getByTambo(id!, !showResolvedReclamos),
         db.tipos_mantenimiento.getAll(),
@@ -172,7 +172,7 @@ export default function TamboDetailPage() {
         setTambo({ ...tamboData, ficha_tecnica: ficha });
       }
       
-      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, allMaintTypesData);
+      const calcStatuses = calculateMaintenanceStatus(tamboData, mantData, configData, allMaintTypesData, activeTypesNames);
       
       // Filter to only include active configured maintenance types for this tambo
       const filteredStatuses = calcStatuses.filter(s => {

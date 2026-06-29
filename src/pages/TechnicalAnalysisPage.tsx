@@ -47,7 +47,7 @@ export default function TechnicalAnalysisPage() {
           db.reclamos.getAll(),
           db.mantenimientos.getAll(),
           db.tipos_reparacion.getAll(),
-          db.configuracion.getAll(),
+          db.configuracion.getAllWithHidden(),
           db.tipos_mantenimiento.getAll()
         ]);
         setTambos(tambosData);

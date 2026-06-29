@@ -441,6 +441,7 @@ export const db = {
         { clave: "bomba_centrifuga_leche_meses", valor: "6", descripcion: "Meses para bomba centrífuga de leche" },
         { clave: "bomba_diafragma_leche_meses", valor: "4", descripcion: "Meses para bomba diafragma de leche" },
         { clave: "kit_colector_leche_meses", valor: "12", descripcion: "Meses para kit de colector de leche" },
+        { clave: "caucho_linea_leche_y_lavado_meses", valor: "12", descripcion: "Meses para caucho línea de leche y lavado" },
         { clave: "dias_alerta", valor: "30", descripcion: "Días de antelación para alerta amarilla" },
         { clave: "reclamo_deduccion", valor: "7", descripcion: "Puntos a restar por cada reclamo" },
         { clave: "vencido_deduccion", valor: "10", descripcion: "Puntos a restar por mantenimiento vencido" },
@@ -457,14 +458,11 @@ export const db = {
       // Remove old keys
       await (supabase.from("configuracion") as any).delete().in("clave", oldKeys);
       
-      const { data: existing } = await (supabase.from("configuracion") as any).select("clave");
-      const existingKeys = new Set((existing as any[])?.map(c => c.clave) || []);
-      
-      const toInsert = defaultConfigs.filter(c => !existingKeys.has(c.clave));
-      if (toInsert.length > 0) {
-        const { error } = await (supabase.from("configuracion") as any).insert(toInsert);
-        if (error) console.error("Error al sembrar configuraciones por defecto:", error);
-      }
+      const { error } = await (supabase.from("configuracion") as any).upsert(
+        defaultConfigs,
+        { onConflict: 'clave', ignoreDuplicates: true }
+      );
+      if (error) console.error("Error al sembrar configuraciones por defecto:", error);
     },
     subscribeToChanges(callback: () => void) {
       const subscription = supabase
