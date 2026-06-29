@@ -1,5 +1,6 @@
 import { addDays, addMonths, differenceInDays, parseISO, startOfDay } from "date-fns";
 import { Mantenimiento, Tambo, Configuracion, TipoMantenimiento, TamboComponente, Componente, TamboInsumo, Insumo } from "../types/supabase";
+import { normalizeMaintenanceName } from "../services/db";
 
 export type Status = "verde" | "amarillo" | "rojo" | "gris";
 
@@ -190,11 +191,19 @@ export function calculateMaintenanceStatus(
 
   return mergedTypes.map(tipoObj => {
     const tipo = tipoObj.nombre;
+    const normTipo = normalizeMaintenanceName(tipo).toLowerCase().trim();
     
-    // 1. Obtener la fecha del último mantenimiento (fecha_ultimo)
-    const ultimoRecord = mantenimientos
-      .filter(m => m.tipo === tipo)
-      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+    // Filter records for this maintenance type with case-insensitive, normalized comparison
+    const matchingRecords = mantenimientos.filter(
+      m => m.tipo && normalizeMaintenanceName(m.tipo).toLowerCase().trim() === normTipo
+    );
+
+    // If there are multiple records, and at least one is NOT '1900-01-01', we exclude the '1900-01-01' ones
+    const validRecords = matchingRecords.filter(m => m.fecha !== '1900-01-01');
+    const recordsToSort = validRecords.length > 0 ? validRecords : matchingRecords;
+
+    // Get the latest maintenance record using robust ISO date parsing
+    const ultimoRecord = recordsToSort.sort((a, b) => parseISO(b.fecha).getTime() - parseISO(a.fecha).getTime())[0];
 
     let ultimaFecha: Date | null = null;
     let isNeverPerformed = false;

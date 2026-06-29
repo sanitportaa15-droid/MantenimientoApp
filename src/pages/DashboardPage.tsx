@@ -12,10 +12,41 @@ import {
   Wrench
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { db } from "../services/db";
+import { db, normalizeMaintenanceName } from "../services/db";
 import { Cliente, Tambo, Configuracion, Mantenimiento, ReclamoEstado, TipoMantenimiento } from "../types/supabase";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
 import { cn } from "../utils/ui";
+
+function getActiveMaintenanceNames(tamboId: string, configs: Configuracion[]): string[] {
+  const defaultMaintNames = [
+    "Bomba centrífuga de leche",
+    "Bomba de vacío",
+    "Bomba diafragma de leche",
+    "Cambio de bujes",
+    "Cambio de diafragma de los brazos",
+    "Cambio de pezoneras",
+    "Cambio de sogas",
+    "Caucho línea de leche y lavado",
+    "Kit de colector de leche",
+    "Mangueras de leche",
+    "Mangueras de pulsado",
+    "Pulsadores",
+    "Sensor de leche"
+  ].map(normalizeMaintenanceName);
+
+  const configRow = configs.find(c => c.clave === `tambo_mantenimientos_${tamboId}`);
+  if (configRow) {
+    try {
+      const parsed = JSON.parse(configRow.valor);
+      if (Array.isArray(parsed)) {
+        return parsed.map(normalizeMaintenanceName);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return defaultMaintNames;
+}
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -50,7 +81,11 @@ export default function Dashboard() {
         const tambosWithStatus = tambos.map((t) => {
           const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
           const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, allMaintTypes);
-          const generalStatus = getGeneralStatus(statuses);
+          const activeNames = getActiveMaintenanceNames(t.id, configs);
+          const filteredStatuses = statuses.filter(s => {
+            return activeNames.some(name => name.toLowerCase().trim() === s.tipo.toLowerCase().trim());
+          });
+          const generalStatus = getGeneralStatus(filteredStatuses);
           
           // Defensive check for clientes join
           const cliente = Array.isArray(t.clientes) ? t.clientes[0] : t.clientes;
@@ -62,13 +97,34 @@ export default function Dashboard() {
           };
         });
 
+        let countAlDia = 0;
+        let countProximos = 0;
+        let countVencidos = 0;
+        let countNunca = 0;
+
+        for (const t of tambos) {
+          const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
+          const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, allMaintTypes);
+          const activeNames = getActiveMaintenanceNames(t.id, configs);
+          const filteredStatuses = statuses.filter(s => {
+            return activeNames.some(name => name.toLowerCase().trim() === s.tipo.toLowerCase().trim());
+          });
+
+          filteredStatuses.forEach(s => {
+            if (s.status === "verde") countAlDia++;
+            else if (s.status === "amarillo") countProximos++;
+            else if (s.status === "rojo") countVencidos++;
+            else if (s.status === "gris") countNunca++;
+          });
+        }
+
         setStats({
           clientes: clientes.length,
           tambos: tambos.length,
-          alDia: tambosWithStatus.filter(t => t.status === "verde").length,
-          proximos: tambosWithStatus.filter(t => t.status === "amarillo").length,
-          vencidos: tambosWithStatus.filter(t => t.status === "rojo").length,
-          nunca: tambosWithStatus.filter(t => t.status === "gris").length
+          alDia: countAlDia,
+          proximos: countProximos,
+          vencidos: countVencidos,
+          nunca: countNunca
         });
 
         setReclamosStats({
@@ -101,10 +157,20 @@ export default function Dashboard() {
       loadDashboard();
     });
 
+    const tambosSubscription = db.tambos.subscribeToChanges(() => {
+      loadDashboard();
+    });
+
+    const reclamosSubscription = db.reclamos.subscribeToChanges(() => {
+      loadDashboard();
+    });
+
     return () => {
       mantenimientosSubscription.unsubscribe();
       configSubscription.unsubscribe();
       maintTypesSubscription.unsubscribe();
+      tambosSubscription.unsubscribe();
+      reclamosSubscription.unsubscribe();
     };
   }, []);
 

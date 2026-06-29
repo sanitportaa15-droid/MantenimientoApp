@@ -9,8 +9,39 @@ import {
   Search,
   Filter
 } from "lucide-react";
-import { db } from "../services/db";
+import { db, normalizeMaintenanceName } from "../services/db";
 import { calculateMaintenanceStatus, Status } from "../utils/calculations";
+
+function getActiveMaintenanceNames(tamboId: string, configs: any[]): string[] {
+  const defaultMaintNames = [
+    "Bomba centrífuga de leche",
+    "Bomba de vacío",
+    "Bomba diafragma de leche",
+    "Cambio de bujes",
+    "Cambio de diafragma de los brazos",
+    "Cambio de pezoneras",
+    "Cambio de sogas",
+    "Caucho línea de leche y lavado",
+    "Kit de colector de leche",
+    "Mangueras de leche",
+    "Mangueras de pulsado",
+    "Pulsadores",
+    "Sensor de leche"
+  ].map(normalizeMaintenanceName);
+
+  const configRow = configs.find(c => c.clave === `tambo_mantenimientos_${tamboId}`);
+  if (configRow) {
+    try {
+      const parsed = JSON.parse(configRow.valor);
+      if (Array.isArray(parsed)) {
+        return parsed.map(normalizeMaintenanceName);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return defaultMaintNames;
+}
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "../utils/ui";
@@ -38,12 +69,16 @@ export default function MaintenanceStatusPage() {
         for (const t of tambos) {
           const mantenimientos = allMantenimientos.filter(m => m.tambo_id === t.id);
           const statuses = calculateMaintenanceStatus(t, mantenimientos, configs, allMaintTypes);
+          const activeNames = getActiveMaintenanceNames(t.id, configs);
+          const filteredStatuses = statuses.filter(s => {
+            return activeNames.some(name => name.toLowerCase().trim() === s.tipo.toLowerCase().trim());
+          });
           
           // Defensive check for clientes join
           const cliente = Array.isArray(t.clientes) ? t.clientes[0] : t.clientes;
           const clienteNombre = cliente?.nombre || "Sin cliente";
 
-          statuses.forEach(s => {
+          filteredStatuses.forEach(s => {
             if (!filterStatus || s.status === filterStatus) {
               allStatuses.push({
                 tamboId: t.id,
