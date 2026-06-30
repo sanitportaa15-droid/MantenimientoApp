@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import ClientsPage from "./pages/ClientsPage";
@@ -24,13 +25,41 @@ import AuthPage from "./pages/AuthPage";
 import UsersPage from "./pages/UsersPage";
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, error, logout, retryFetchProfile } = useAuth();
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#070707] text-zinc-100 flex flex-col items-center justify-center gap-4 font-sans">
         <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-lg shadow-emerald-500/20" />
         <p className="text-zinc-500 text-sm font-medium">Verificando sesión...</p>
+      </div>
+    );
+  }
+
+  if (error && user) {
+    return (
+      <div className="min-h-screen bg-[#070707] text-zinc-100 flex flex-col items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center shadow-2xl">
+          <div className="w-12 h-12 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-2">Error de Sesión</h2>
+          <p className="text-zinc-400 text-sm mb-6">{error}</p>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={retryFetchProfile}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={logout}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

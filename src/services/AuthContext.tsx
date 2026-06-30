@@ -8,109 +8,159 @@ interface AuthContextType {
   user: User | null;
   profile: Perfil | null;
   loading: boolean;
+  error: string | null;
+  clearError: () => void;
   login: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string, nombre: string, companyName?: string) => Promise<any>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Omit<Perfil, 'id' | 'created_at'>>) => Promise<Perfil>;
+  retryFetchProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Perfil | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Sync user profile from database
   const fetchProfile = async (u: User) => {
+    setError(null);
     try {
-      // 1. Get profile by user_id
-      let p = await db.perfiles.getByUserId(u.id);
-      
-      // 2. If no profile exists, check if there's an invitation or profile by email
-      if (!p && u.email) {
-        p = await db.perfiles.getByEmail(u.email);
-        if (p) {
-          // Link invited/existing profile to this newly authenticated user
-          p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
-        }
-      }
-
-      // 3. Fallback: If absolutely no profile exists, auto-provision a profile
-      // connected to the existing "GanPor" company to ensure no broken state
-      if (!p && u.email) {
-        let targetCompanyId = "d1a58a74-9f93-4e8c-8c08-0123456789ab"; // default ID
-        try {
-          const { data: companies } = await (supabase.from("empresa_identidad") as any).select("*");
-          if (companies && companies.length > 0) {
-            // Find one with "ganpor" in its name
-            const ganporComp = companies.find((c: any) => 
-              c.nombre && c.nombre.toLowerCase().includes("ganpor")
-            );
-            if (ganporComp) {
-              targetCompanyId = ganporComp.id;
-            } else {
-              // Fallback to the first company found
-              targetCompanyId = companies[0].id;
-            }
+      const getProfileTask = (async () => {
+        // 1. Get profile by user_id
+        let p = await db.perfiles.getByUserId(u.id);
+        
+        // 2. If no profile exists, check if there's an invitation or profile by email
+        if (!p && u.email) {
+          p = await db.perfiles.getByEmail(u.email);
+          if (p) {
+            // Link invited/existing profile to this newly authenticated user
+            p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
           }
-        } catch (e) {
-          console.error("Error finding existing GanPor company:", e);
         }
 
-        p = await db.perfiles.create({
-          user_id: u.id,
-          empresa_id: targetCompanyId,
-          nombre: u.email.split("@")[0],
-          email: u.email,
-          rol: "Administrador",
-          activo: true
-        });
+        // 3. Fallback: If absolutely no profile exists, auto-provision a profile
+        // connected to the existing "GanPor" company to ensure no broken state
+        if (!p && u.email) {
+          let targetCompanyId = "d1a58a74-9f93-4e8c-8c08-0123456789ab"; // default ID
+          try {
+            const { data: companies } = await (supabase.from("empresa_identidad") as any).select("*");
+            if (companies && companies.length > 0) {
+              // Find one with "ganpor" in its name
+              const ganporComp = companies.find((c: any) => 
+                c.nombre && c.nombre.toLowerCase().includes("ganpor")
+              );
+              if (ganporComp) {
+                targetCompanyId = ganporComp.id;
+              } else {
+                // Fallback to the first company found
+                targetCompanyId = companies[0].id;
+              }
+            }
+          } catch (e) {
+            console.error("Error finding existing GanPor company:", e);
+          }
+
+          p = await db.perfiles.create({
+            user_id: u.id,
+            empresa_id: targetCompanyId,
+            nombre: u.email.split("@")[0],
+            email: u.email,
+            rol: "Administrador",
+            activo: true
+          });
+        }
+        return p;
+      })();
+
+      // Apply a 5 seconds timeout to the entire profile fetch process
+      const p = await withTimeout(
+        getProfileTask,
+        5000,
+        "La consulta de perfil tardó demasiado tiempo. Por favor verifica tu conexión de red o vuelve a intentar."
+      );
+
+      if (!p) {
+        throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
       }
 
       setProfile(p);
       
       // Sync active company and role in db services to make sure queries load correct tenant and enforce permissions
-      if (p) {
-        if (p.empresa_id) {
-          setActiveCompanyId(p.empresa_id);
-        }
-        if (p.rol) {
-          setActiveUserRole(p.rol);
-        }
+      if (p.empresa_id) {
+        setActiveCompanyId(p.empresa_id);
       }
-    } catch (error) {
-      console.error("Error fetching user profile:", error);
+      if (p.rol) {
+        setActiveUserRole(p.rol);
+      }
+    } catch (err: any) {
+      console.error("Error fetching user profile:", err);
+      setError(err?.message || "Ocurrió un error inesperado al verificar tu sesión.");
+      setProfile(null);
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     // Check active session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user).then(() => setLoading(false));
+      if (!isMounted) return;
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        fetchProfile(currentUser)
+          .catch((err) => console.error("Error fetching profile on mount:", err))
+          .finally(() => {
+            if (isMounted) setLoading(false);
+          });
       } else {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
+    }).catch((err) => {
+      console.error("Error getting session on mount:", err);
+      if (isMounted) setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return;
       const currentUser = session?.user ?? null;
-      setUser(currentUser);
       
-      if (currentUser) {
-        setLoading(true);
-        await fetchProfile(currentUser);
-        setLoading(false);
-      } else {
-        setProfile(null);
-        setLoading(false);
+      try {
+        setUser(currentUser);
+        if (currentUser) {
+          setLoading(true);
+          await fetchProfile(currentUser);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error("Error in onAuthStateChange handler:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -272,8 +322,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearError = () => setError(null);
+
+  const retryFetchProfile = async () => {
+    if (user) {
+      setLoading(true);
+      await fetchProfile(user);
+      setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, signUp, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, error, clearError, login, signUp, logout, updateProfile, retryFetchProfile }}>
       {children}
     </AuthContext.Provider>
   );
