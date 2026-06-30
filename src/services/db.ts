@@ -1791,7 +1791,7 @@ export const db = {
   },
   ordenesTrabajo: {
     async getAll() {
-      const { data, error } = await supabase.from("ordenes_trabajo")
+      const { data, error } = await (supabase as any).from("ordenes_trabajo")
         .select("*, clientes(nombre), tambos(nombre)")
         .eq("empresa_id", getActiveCompanyId())
         .order("numero", { ascending: false });
@@ -1802,7 +1802,7 @@ export const db = {
       return data as any[];
     },
     async getById(id: string) {
-      const { data, error } = await supabase.from("ordenes_trabajo")
+      const { data, error } = await (supabase as any).from("ordenes_trabajo")
         .select("*, clientes(*), tambos(*)")
         .eq("id", id)
         .eq("empresa_id", getActiveCompanyId())
@@ -1814,7 +1814,7 @@ export const db = {
       return data as any;
     },
     async getItems(ordenId: string) {
-      const { data, error } = await supabase.from("orden_trabajo_items")
+      const { data, error } = await (supabase as any).from("orden_trabajo_items")
         .select("*")
         .eq("orden_id", ordenId)
         .order("componente");
@@ -1827,14 +1827,14 @@ export const db = {
     async create(orden: any, items: any[]) {
       checkWritePermission();
       // 1. Get next sequence number
-      const { data: existing, error: countError } = await supabase.from("ordenes_trabajo")
+      const { data: existing, error: countError } = await (supabase as any).from("ordenes_trabajo")
         .select("numero")
         .eq("empresa_id", getActiveCompanyId());
       
       let nextNum = 1;
       if (existing && existing.length > 0) {
         // Find highest number
-        const numbers = existing.map(o => {
+        const numbers = (existing as any[]).map(o => {
           const m = o.numero.match(/\d+/);
           return m ? parseInt(m[0], 10) : 0;
         });
@@ -1844,7 +1844,7 @@ export const db = {
       const numero = `OT-${String(nextNum).padStart(4, "0")}`;
 
       // 2. Insert order
-      const { data: createdOrden, error: ordenError } = await supabase.from("ordenes_trabajo")
+      const { data: createdOrden, error: ordenError } = await (supabase as any).from("ordenes_trabajo")
         .insert({
           ...orden,
           numero,
@@ -1859,27 +1859,31 @@ export const db = {
         throw ordenError;
       }
 
+      if (!createdOrden) {
+        throw new Error("No se pudo crear la orden de trabajo");
+      }
+
       // 3. Insert items
       if (items && items.length > 0) {
         const itemsToInsert = items.map(item => ({
           ...item,
-          orden_id: createdOrden.id
+          orden_id: (createdOrden as any).id
         }));
-        const { error: itemsError } = await supabase.from("orden_trabajo_items")
+        const { error: itemsError } = await (supabase as any).from("orden_trabajo_items")
           .insert(itemsToInsert);
         if (itemsError) {
           console.error("Error al crear items de orden de trabajo:", itemsError);
           // try to clean up order to avoid orphan records
-          await supabase.from("ordenes_trabajo").delete().eq("id", createdOrden.id);
+          await (supabase as any).from("ordenes_trabajo").delete().eq("id", (createdOrden as any).id);
           throw itemsError;
         }
       }
 
-      return createdOrden;
+      return createdOrden as any;
     },
     async update(id: string, updates: any) {
       checkWritePermission();
-      const { data, error } = await supabase.from("ordenes_trabajo")
+      const { data, error } = await (supabase as any).from("ordenes_trabajo")
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", id)
         .eq("empresa_id", getActiveCompanyId())
@@ -1893,7 +1897,7 @@ export const db = {
     },
     async updateItem(itemId: string, updates: any) {
       checkWritePermission();
-      const { data, error } = await supabase.from("orden_trabajo_items")
+      const { data, error } = await (supabase as any).from("orden_trabajo_items")
         .update(updates)
         .eq("id", itemId)
         .select()
@@ -1906,7 +1910,7 @@ export const db = {
     },
     async delete(id: string) {
       checkDeletePermission();
-      const { error } = await supabase.from("ordenes_trabajo")
+      const { error } = await (supabase as any).from("ordenes_trabajo")
         .delete()
         .eq("id", id)
         .eq("empresa_id", getActiveCompanyId());
@@ -1921,7 +1925,7 @@ export const db = {
       
       // Update each item first
       for (const item of itemsUpdates) {
-        const { error: itemErr } = await supabase.from("orden_trabajo_items")
+        const { error: itemErr } = await (supabase as any).from("orden_trabajo_items")
           .update({ realizado: item.realizado, observaciones: item.observaciones })
           .eq("id", item.id);
         if (itemErr) {
@@ -1931,7 +1935,7 @@ export const db = {
       }
 
       // Update order status to Finalizada
-      const { data: updatedOrden, error: ordenErr } = await supabase.from("ordenes_trabajo")
+      const { data: updatedOrden, error: ordenErr } = await (supabase as any).from("ordenes_trabajo")
         .update({ estado: "Finalizada", updated_at: new Date().toISOString() })
         .eq("id", ordenId)
         .eq("empresa_id", getActiveCompanyId())

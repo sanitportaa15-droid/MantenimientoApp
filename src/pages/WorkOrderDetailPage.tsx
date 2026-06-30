@@ -21,7 +21,8 @@ import {
   FileText,
   AlertTriangle,
   Info,
-  Check
+  Check,
+  Droplets
 } from "lucide-react";
 import { cn, formatDate } from "../utils/ui";
 
@@ -97,11 +98,14 @@ export default function WorkOrderDetailPage() {
       setLoading(true);
       
       // Update items status on table
-      const itemsUpdates = Object.entries(finalizingItems).map(([itemId, val]) => ({
-        id: itemId,
-        realizado: val.realizado,
-        observaciones: val.observaciones
-      }));
+      const itemsUpdates = Object.keys(finalizingItems).map((itemId) => {
+        const val = finalizingItems[itemId];
+        return {
+          id: itemId,
+          realizado: val.realizado,
+          observaciones: val.observaciones
+        };
+      });
 
       // Call database service to complete the order
       await db.ordenesTrabajo.finalize(orden.id, itemsUpdates);

@@ -20,7 +20,8 @@ import {
   Activity,
   Wrench,
   Package,
-  MessageCircle
+  MessageCircle,
+  AlertTriangle
 } from "lucide-react";
 import { db } from "../services/db";
 import { Tambo, Mantenimiento, Configuracion, Cliente, Reclamo, TipoMantenimiento, FichaTecnica, Componente, TamboComponente, TamboInsumo, Insumo } from "../types/supabase";
@@ -1253,7 +1254,7 @@ export default function TamboDetailPage() {
                           setAssignedTech("");
                           
                           // Quick prompt to navigate directly
-                          if (confirm(`¡Orden de Trabajo generada con éxito!\n¿Desea abrir el detalle de la Orden de Trabajo para imprimirla o descargar el PDF?`)) {
+                          if (created && confirm(`¡Orden de Trabajo generada con éxito!\n¿Desea abrir el detalle de la Orden de Trabajo para imprimirla o descargar el PDF?`)) {
                             navigate(`/ordenes/${created.id}`);
                           } else {
                             loadData(); // reload status
