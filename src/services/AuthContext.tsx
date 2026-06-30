@@ -37,6 +37,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const userRef = React.useRef<User | null>(null);
+  const profileRef = React.useRef<Perfil | null>(null);
+
+  const setUserAndRef = (u: User | null) => {
+    setUser(u);
+    userRef.current = u;
+  };
+
+  const setProfileAndRef = (p: Perfil | null) => {
+    setProfile(p);
+    profileRef.current = p;
+  };
+
   // Sync user profile from database
   const fetchProfile = async (u: User) => {
     setError(null);
@@ -142,17 +155,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return p;
       })();
 
-      const p = await withTimeout(
-        getProfileTask,
-        12000,
-        "La consulta de perfil tardó demasiado tiempo. Por favor, reintenta."
-      );
+      const p = await getProfileTask;
 
       if (!p) {
         throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
       }
 
-      setProfile(p);
+      setProfileAndRef(p);
       setLoading(false);
       console.log("Paso 17: fetchProfile finalizado con éxito. Perfil cargado:", p);
       
@@ -167,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("Paso 18 - ERROR GLOBAL en fetchProfile:", err);
       console.error("Error fetching user profile:", err);
       setError(err?.message || "Ocurrió un error inesperado al verificar tu sesión.");
-      setProfile(null);
+      setProfileAndRef(null);
       setLoading(false);
     }
   };
@@ -179,38 +188,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check active session on mount
     console.log("Paso 1: Iniciando getSession() en el mount de AuthContext");
     console.time("Supabase: getSession");
-    withTimeout(supabase.auth.getSession(), 8000, "Timeout al obtener la sesión de Supabase en el inicio")
-      .then(({ data: { session } }) => {
-        console.timeEnd("Supabase: getSession");
-        if (!isMounted) {
-          console.log("Paso 2 (Desmontado): getSession() resuelto pero componente desmontado");
-          return;
-        }
-        const currentUser = session?.user ?? null;
-        console.log("Paso 2: getSession() resuelto con usuario:", currentUser ? currentUser.email : "ninguno", "ID:", currentUser ? currentUser.id : "ninguno");
-        setUser(currentUser);
-        if (currentUser) {
-          fetchProfile(currentUser)
-            .catch((err) => console.error("Error fetching profile on mount:", err))
-            .finally(() => {
-              initialSessionFetched = true;
-              if (isMounted) setLoading(false);
-            });
-        } else {
-          initialSessionFetched = true;
-          if (isMounted) setLoading(false);
-        }
-      }).catch((err) => {
-        console.timeEnd("Supabase: getSession");
-        console.log("Paso 3 - ERROR: getSession() falló con:", err);
-        console.error("Error getting session on mount:", err);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.timeEnd("Supabase: getSession");
+      if (!isMounted) {
+        console.log("Paso 2 (Desmontado): getSession() resuelto pero componente desmontado");
+        return;
+      }
+      const currentUser = session?.user ?? null;
+      console.log("Paso 2: getSession() resuelto con usuario:", currentUser ? currentUser.email : "ninguno", "ID:", currentUser ? currentUser.id : "ninguno");
+      setUserAndRef(currentUser);
+      if (currentUser) {
+        fetchProfile(currentUser)
+          .catch((err) => console.error("Error fetching profile on mount:", err))
+          .finally(() => {
+            initialSessionFetched = true;
+            if (isMounted) setLoading(false);
+          });
+      } else {
         initialSessionFetched = true;
         if (isMounted) setLoading(false);
-      });
+      }
+    }).catch((err) => {
+      console.timeEnd("Supabase: getSession");
+      console.log("Paso 3 - ERROR: getSession() falló con:", err);
+      console.error("Error getting session on mount:", err);
+      initialSessionFetched = true;
+      if (isMounted) setLoading(false);
+    });
 
     // Listen for auth changes
     console.log("Paso 4: Registrando listener onAuthStateChange");
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) {
         console.log("Paso 5 (Desmontado): onAuthStateChange disparado pero componente desmontado");
         return;
@@ -237,78 +245,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      try {
-        if (event === "SIGNED_OUT") {
-          setUser(null);
-          setProfile(null);
-        } else {
-          setUser(currentUser);
-          if (currentUser) {
-           
-            await fetchProfile(currentUser);
-          } else {
-            setProfile(null);
-          }
+      // If SIGNED_OUT, clean state immediately and return
+      if (event === "SIGNED_OUT") {
+        setUserAndRef(null);
+        setProfileAndRef(null);
+        if (isMounted) {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error("Error in onAuthStateChange handler:", error);
-      } finally {
+        return;
+      }
+
+      // Update user state immediately (non-blocking)
+      setUserAndRef(currentUser);
+
+      // Rule 1: Do not reload profile on TOKEN_REFRESHED if profile is already loaded in memory and matches the user
+      if (event === "TOKEN_REFRESHED" && profileRef.current && currentUser && profileRef.current.user_id === currentUser.id) {
+        console.log("Paso 5e: TOKEN_REFRESHED recibido. El perfil ya existe en memoria y coincide con el usuario. Omitiendo fetchProfile()");
+        if (isMounted) {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Rule 2 & 3: Do not use await fetchProfile() directly in the callback. Run it in a decoupled way
+      // so this callback ends immediately, freeing the Supabase token refresh execution path.
+      if (currentUser) {
+        console.log("Paso 5f: Ejecutando fetchProfile() desacoplado para evento:", event);
+        setTimeout(() => {
+          if (!isMounted) return;
+          // Only fetch if still mounted and user matches
+          if (userRef.current?.id === currentUser.id) {
+            // Rule 4 & 5: Check again if profile already exists in memory and matches the user
+            if (profileRef.current && profileRef.current.user_id === currentUser.id) {
+              console.log("Paso 5g (Desacoplado): Omitiendo fetchProfile porque el perfil ya está cargado para este usuario");
+              setLoading(false);
+              return;
+            }
+            fetchProfile(currentUser).catch((err) => {
+              console.error("Error fetching profile asynchronously:", err);
+            });
+          }
+        }, 0);
+      } else {
+        setProfileAndRef(null);
         if (isMounted) {
           setLoading(false);
         }
       }
     });
 
-    // Proactive session verification and token refresh on tab focus or visibility change
-    const handleActiveTab = async () => {
-      if (!isMounted) return;
-      if (document.visibilityState === "visible") {
-        console.log("Tab focused or active. Verifying and refreshing Supabase session...");
-        try {
-          const { data: { session }, error: sessionError } = await withTimeout(
-            supabase.auth.getSession(),
-            6000,
-            "Timeout checking session on tab focus"
-          );
-
-          if (sessionError) {
-            console.error("Session verification error on tab focus:", sessionError);
-            return;
-          }
-
-          if (session?.user) {
-            console.log("Session validated successfully on active focus:", session.user.email);
-            setUser(session.user);
-            const p = await withTimeout(
-              db.perfiles.getByUserId(session.user.id),
-              5000,
-              "Timeout getting profile on active focus"
-            );
-            if (p && isMounted) {
-              setProfile(p);
-              if (p.empresa_id) {
-                setActiveCompanyId(p.empresa_id);
-              }
-              if (p.rol) {
-                setActiveUserRole(p.rol);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Exception checking session on tab active focus:", err);
-        }
-      }
-    };
-
-    window.addEventListener("focus", handleActiveTab);
-    document.addEventListener("visibilitychange", handleActiveTab);
-
     return () => {
       console.log("Paso 28: Desmontando AuthProvider, desuscribiendo listener");
       isMounted = false;
       subscription.unsubscribe();
-      window.removeEventListener("focus", handleActiveTab);
-      document.removeEventListener("visibilitychange", handleActiveTab);
     };
   }, []);
 
@@ -367,7 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           user_id: userId,
           nombre: nombre // update with their preferred name
         });
-        setProfile(updated);
+        setProfileAndRef(updated);
         if (updated && updated.empresa_id) {
           setActiveCompanyId(updated.empresa_id);
         }
@@ -433,7 +422,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         }
 
-        setProfile(finalProfile);
+        setProfileAndRef(finalProfile);
         setActiveCompanyId(empresaId);
       }
 
@@ -448,8 +437,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await supabase.auth.signOut();
-      setUser(null);
-      setProfile(null);
+      setUserAndRef(null);
+      setProfileAndRef(null);
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
@@ -461,7 +450,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!profile) throw new Error("No authenticated profile found.");
     try {
       const updated = await db.perfiles.update(profile.id, data);
-      setProfile(updated);
+      setProfileAndRef(updated);
       return updated;
     } catch (error) {
       console.error("Error updating profile:", error);

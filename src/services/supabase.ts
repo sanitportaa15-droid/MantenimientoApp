@@ -7,107 +7,129 @@ const supabaseKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 console.log("SUPABASE URL:", supabaseUrl);
 console.log("SUPABASE KEY:", supabaseKey?.substring(0, 20));
 
-// Combine two AbortSignals to respect both the original signal and our timeout signal
-const combineSignals = (signal1?: AbortSignal, signal2?: AbortSignal): AbortSignal | undefined => {
-  if (!signal1) return signal2;
-  if (!signal2) return signal1;
-  
-  const controller = new AbortController();
-  
-  const onAbort = () => {
-    controller.abort();
-    cleanup();
-  };
-  
-  const cleanup = () => {
-    signal1.removeEventListener('abort', onAbort);
-    signal2.removeEventListener('abort', onAbort);
-  };
-  
-  if (signal1.aborted || signal2.aborted) {
-    controller.abort();
-    return controller.signal;
-  }
-  
-  signal1.addEventListener('abort', onAbort);
-  signal2.addEventListener('abort', onAbort);
-  
-  return controller.signal;
-};
-
-const DEFAULT_TIMEOUT_MS = 15000; // 15 seconds
-
-const customFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  let attempts = 0;
-  const maxAttempts = 2; // Retry once
-
-  const executeWithTimeout = async (): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, DEFAULT_TIMEOUT_MS);
-
-    const mergedInit = {
-      ...init,
-      signal: combineSignals(init?.signal, controller.signal)
-    };
-
-    try {
-      const response = await fetch(input, mergedInit as any);
-      return response;
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        throw new Error("La consulta de base de datos tardó demasiado (Timeout). Comprueba tu conexión a internet.");
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  };
-
-  while (attempts < maxAttempts) {
-    attempts++;
-    try {
-      const response = await executeWithTimeout();
-      
-      // If unauthorized (e.g. JWT expired), try to force getSession to refresh token, then retry the request once
-      if (response.status === 401 && attempts < maxAttempts) {
-        console.warn("Recibido error 401 (Sesión expirada). Intentando renovar token...");
-        try {
-          if (typeof supabase !== 'undefined' && supabase && supabase.auth) {
-            await supabase.auth.getSession();
-          }
-        } catch (refreshErr) {
-          console.error("Error al refrescar sesión durante el reintento:", refreshErr);
-        }
-        continue;
-      }
-      
-      return response;
-    } catch (err: any) {
-      if (attempts >= maxAttempts) {
-        throw err;
-      }
-      console.warn(`La consulta de Supabase falló (intento ${attempts}/${maxAttempts}), reintentando... Error:`, err);
-      // Wait a bit before retrying
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-
-  throw new Error("No se pudo conectar con la base de datos después de múltiples reintentos.");
-};
-
-export const supabase = createClient<Database>(
+const rawSupabase = createClient<Database>(
   supabaseUrl || "https://placeholder.supabase.co",
-  supabaseKey || "placeholder-key",
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    },
-    global: {
-      fetch: customFetch
-    }
-  }
+  supabaseKey || "placeholder-key"
 );
+
+// Wrapper for Query Builders to log exact queries
+function wrapBuilder(builder: any, tableName: string, querySteps: string[] = []): any {
+  return new Proxy(builder, {
+    get(target, prop, receiver) {
+      if (prop === 'then' && typeof target[prop] === 'function') {
+        const originalThen = target[prop];
+        return function(onfulfilled: any, onrejected: any) {
+          const startTime = performance.now();
+          const screen = window.location.pathname;
+          const queryString = `${tableName}.${querySteps.join('.')}`;
+          console.log(`[QUERY_START] Pantalla: ${screen} | Consulta: ${queryString}`);
+          
+          return originalThen.call(target, 
+            (res: any) => {
+              const duration = (performance.now() - startTime).toFixed(1);
+              if (res && res.error) {
+                console.error(`[QUERY_ERROR] Pantalla: ${screen} | Consulta: ${queryString} | Duración: ${duration}ms | Error:`, res.error);
+              } else {
+                console.log(`[QUERY_SUCCESS] Pantalla: ${screen} | Consulta: ${queryString} | Duración: ${duration}ms`);
+              }
+              if (onfulfilled) return onfulfilled(res);
+              return res;
+            },
+            (err: any) => {
+              const duration = (performance.now() - startTime).toFixed(1);
+              console.error(`[QUERY_FAILED] Pantalla: ${screen} | Consulta: ${queryString} | Duración: ${duration}ms | Excepción:`, err);
+              if (onrejected) return onrejected(err);
+              throw err;
+            }
+          );
+        };
+      }
+
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value === 'function') {
+        return function(...args: any[]) {
+          const argStr = args.map(a => {
+            if (typeof a === 'object') {
+              try {
+                return JSON.stringify(a);
+              } catch (e) {
+                return '[Object]';
+              }
+            }
+            return String(a);
+          }).join(', ');
+          const step = `${String(prop)}(${argStr})`;
+          const result = value.apply(target, args);
+          if (result && (typeof result === 'object' || typeof result === 'function')) {
+            return wrapBuilder(result, tableName, [...querySteps, step]);
+          }
+          return result;
+        };
+      }
+      return value;
+    }
+  });
+}
+
+// Wrapper for auth to log sessions and state changes
+const wrappedAuth = new Proxy(rawSupabase.auth, {
+  get(target, prop, receiver) {
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value === 'function') {
+      return function(...args: any[]) {
+        const startTime = performance.now();
+        const screen = window.location.pathname;
+        const authCall = `auth.${String(prop)}`;
+        console.log(`[AUTH_START] Pantalla: ${screen} | Llamada: ${authCall}`);
+        
+        if (prop === 'onAuthStateChange') {
+          const originalCallback = args[0];
+          args[0] = function(event: any, session: any) {
+            console.log(`[AUTH_EVENT] Pantalla: ${screen} | Evento: ${event} | Usuario: ${session?.user?.email || 'ninguno'}`);
+            return originalCallback(event, session);
+          };
+        }
+
+        const result = value.apply(target, args);
+        
+        if (result instanceof Promise) {
+          return result.then(
+            (res: any) => {
+              const duration = (performance.now() - startTime).toFixed(1);
+              if (res && res.error) {
+                console.error(`[AUTH_ERROR] Pantalla: ${screen} | Llamada: ${authCall} | Duración: ${duration}ms | Error:`, res.error);
+              } else {
+                console.log(`[AUTH_SUCCESS] Pantalla: ${screen} | Llamada: ${authCall} | Duración: ${duration}ms`);
+              }
+              return res;
+            },
+            (err: any) => {
+              const duration = (performance.now() - startTime).toFixed(1);
+              console.error(`[AUTH_FAILED] Pantalla: ${screen} | Llamada: ${authCall} | Duración: ${duration}ms | Excepción:`, err);
+              throw err;
+            }
+          );
+        }
+        
+        return result;
+      };
+    }
+    return value;
+  }
+});
+
+// Main Supabase client proxy to intercept all calls
+export const supabase = new Proxy(rawSupabase, {
+  get(target, prop, receiver) {
+    if (prop === 'from') {
+      return function(tableName: string) {
+        const builder = rawSupabase.from(tableName);
+        return wrapBuilder(builder, tableName);
+      };
+    }
+    if (prop === 'auth') {
+      return wrappedAuth;
+    }
+    return Reflect.get(target, prop, receiver);
+  }
+}) as any;
