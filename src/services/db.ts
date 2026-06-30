@@ -69,19 +69,25 @@ let activeCompanyId: string | null = null;
 let activeUserRole: string | null = null;
 
 export function setActiveCompanyId(id: string) {
+  console.log("Paso 26: setActiveCompanyId llamado con id:", id);
   activeCompanyId = id;
 }
 
 export function getActiveCompanyId(): string {
-  return activeCompanyId || "d1a58a74-9f93-4e8c-8c08-0123456789ab";
+  const id = activeCompanyId || "d1a58a74-9f93-4e8c-8c08-0123456789ab";
+  console.log("Paso 26b: getActiveCompanyId llamado. Retornando:", id);
+  return id;
 }
 
 export function setActiveUserRole(role: string) {
+  console.log("Paso 27: setActiveUserRole llamado con role:", role);
   activeUserRole = role;
 }
 
 export function getActiveUserRole(): string {
-  return activeUserRole || "Solo lectura";
+  const role = activeUserRole || "Solo lectura";
+  console.log("Paso 27b: getActiveUserRole llamado. Retornando:", role);
+  return role;
 }
 
 export function checkWritePermission() {
@@ -1574,18 +1580,33 @@ export const db = {
   empresa_identidad: {
     async get() {
       try {
+        console.log("Paso 19: Iniciando db.empresa_identidad.get()");
+        console.time("Supabase: db.empresa_identidad.get");
         let query = (supabase.from("empresa_identidad") as any).select("*");
         const activeId = getActiveCompanyId();
         if (activeId && activeId !== "default") {
           query = query.eq("id", activeId);
         }
         const { data, error } = await query;
-        if (error) throw error;
+        console.timeEnd("Supabase: db.empresa_identidad.get");
+        if (error) {
+          console.log("Paso 20 - ERROR: db.empresa_identidad.get() falló con:", error);
+          throw error;
+        }
+        console.log("Paso 20: db.empresa_identidad.get() consulta principal resuelta con:", data);
         if (data && data.length > 0) {
           return data[0] as EmpresaIdentidad;
         }
         if (activeId && activeId !== "default") {
-          const { data: fallbackData } = await (supabase.from("empresa_identidad") as any).select("*");
+          console.log("Paso 21: Iniciando db.empresa_identidad.get() fallback query");
+          console.time("Supabase: db.empresa_identidad.get (fallback)");
+          const { data: fallbackData, error: fallbackError } = await (supabase.from("empresa_identidad") as any).select("*");
+          console.timeEnd("Supabase: db.empresa_identidad.get (fallback)");
+          if (fallbackError) {
+            console.log("Paso 22 - ERROR: db.empresa_identidad.get() fallback falló con:", fallbackError);
+          } else {
+            console.log("Paso 22: db.empresa_identidad.get() fallback resuelto con:", fallbackData);
+          }
           if (fallbackData && fallbackData.length > 0) {
             return fallbackData[0] as EmpresaIdentidad;
           }
@@ -1611,7 +1632,14 @@ export const db = {
       };
       
       try {
-        const { data: existing } = await (supabase.from("empresa_identidad") as any).select("id").maybeSingle();
+        console.log("Paso 23: Iniciando db.empresa_identidad.save() con record:", record);
+        console.time("Supabase: db.empresa_identidad.save");
+        const { data: existing, error: existingError } = await (supabase.from("empresa_identidad") as any).select("id").maybeSingle();
+        if (existingError) {
+          console.log("Paso 24 - ERROR: db.empresa_identidad.save() buscando existente falló con:", existingError);
+        } else {
+          console.log("Paso 24: db.empresa_identidad.save() comprobación existente resuelta con:", existing);
+        }
         let result;
         if (existing) {
           const { data, error } = await (supabase.from("empresa_identidad") as any)
@@ -1629,8 +1657,11 @@ export const db = {
           if (error) throw error;
           result = data;
         }
+        console.log("Paso 25: db.empresa_identidad.save() guardado resuelto con:", result);
+        console.timeEnd("Supabase: db.empresa_identidad.save");
         return result as EmpresaIdentidad;
       } catch (err) {
+        console.timeEnd("Supabase: db.empresa_identidad.save");
         console.error("Error saving company identity to Supabase:", err);
         throw err;
       }
@@ -1639,11 +1670,18 @@ export const db = {
   perfiles: {
     async getAll() {
       try {
+        console.log("Inside db.ts: getAll perfiles");
+        console.time("Supabase - Query: getAll perfiles");
         const { data, error } = await supabase.from("perfiles")
           .select("*")
           .eq("empresa_id", getActiveCompanyId())
           .order("nombre");
-        if (error) throw error;
+        console.timeEnd("Supabase - Query: getAll perfiles");
+        if (error) {
+          console.log("Inside db.ts: getAll perfiles ERROR:", error);
+          throw error;
+        }
+        console.log("Inside db.ts: getAll perfiles resultado:", data);
         return data as Perfil[];
       } catch (err) {
         console.error("Error al obtener perfiles:", err);
@@ -1652,11 +1690,18 @@ export const db = {
     },
     async getByUserId(userId: string) {
       try {
+        console.log("Inside db.ts: getByUserId para userId:", userId);
+        console.time("Supabase - Query: getByUserId");
         const { data, error } = await supabase.from("perfiles")
           .select("*")
           .eq("user_id", userId)
           .limit(1);
-        if (error) throw error;
+        console.timeEnd("Supabase - Query: getByUserId");
+        if (error) {
+          console.log("Inside db.ts: getByUserId ERROR:", error);
+          throw error;
+        }
+        console.log("Inside db.ts: getByUserId resultado:", data);
         return (data && data.length > 0 ? data[0] : null) as Perfil | null;
       } catch (err) {
         console.error("Error al obtener perfil por user_id:", err);
@@ -1665,11 +1710,18 @@ export const db = {
     },
     async getByEmail(email: string) {
       try {
+        console.log("Inside db.ts: getByEmail para email:", email);
+        console.time("Supabase - Query: getByEmail");
         const { data, error } = await supabase.from("perfiles")
           .select("*")
           .eq("email", email.trim().toLowerCase())
           .limit(1);
-        if (error) throw error;
+        console.timeEnd("Supabase - Query: getByEmail");
+        if (error) {
+          console.log("Inside db.ts: getByEmail ERROR:", error);
+          throw error;
+        }
+        console.log("Inside db.ts: getByEmail resultado:", data);
         return (data && data.length > 0 ? data[0] : null) as Perfil | null;
       } catch (err) {
         console.error("Error al obtener perfil por email:", err);
@@ -1678,6 +1730,8 @@ export const db = {
     },
     async create(perfil: Omit<Perfil, 'id' | 'created_at'> & { id?: string }) {
       try {
+        console.log("Inside db.ts: create perfil:", perfil);
+        console.time("Supabase - Query: create perfil");
         const { data, error } = await (supabase.from("perfiles") as any)
           .insert({
             ...perfil,
@@ -1686,7 +1740,12 @@ export const db = {
           })
           .select()
           .single();
-        if (error) throw error;
+        console.timeEnd("Supabase - Query: create perfil");
+        if (error) {
+          console.log("Inside db.ts: create perfil ERROR:", error);
+          throw error;
+        }
+        console.log("Inside db.ts: create perfil resultado:", data);
         return data as Perfil;
       } catch (err) {
         console.error("Error al crear perfil:", err);
@@ -1695,6 +1754,8 @@ export const db = {
     },
     async update(id: string, perfil: Partial<Omit<Perfil, 'id' | 'created_at'>>) {
       try {
+        console.log("Inside db.ts: update perfil id:", id, "con datos:", perfil);
+        console.time("Supabase - Query: update perfil");
         const updateData = { ...perfil };
         if (updateData.email) {
           updateData.email = updateData.email.trim().toLowerCase();
@@ -1704,7 +1765,12 @@ export const db = {
           .eq("id", id)
           .select()
           .single();
-        if (error) throw error;
+        console.timeEnd("Supabase - Query: update perfil");
+        if (error) {
+          console.log("Inside db.ts: update perfil ERROR:", error);
+          throw error;
+        }
+        console.log("Inside db.ts: update perfil resultado:", data);
         return data as Perfil;
       } catch (err) {
         console.error("Error al actualizar perfil:", err);

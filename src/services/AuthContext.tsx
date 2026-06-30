@@ -40,31 +40,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sync user profile from database
   const fetchProfile = async (u: User) => {
     setError(null);
+    console.log("Paso 6: Iniciando fetchProfile para usuario ID:", u.id, "Email:", u.email);
     try {
       const getProfileTask = (async () => {
         // 1. Get profile by user_id
+        console.log("Paso 7: Ejecutando db.perfiles.getByUserId para id:", u.id);
         console.time("Supabase: db.perfiles.getByUserId");
         let p;
         try {
           p = await db.perfiles.getByUserId(u.id);
+          console.log("Paso 8: db.perfiles.getByUserId resuelto con perfil:", p);
+        } catch (error) {
+          console.log("Paso 8 - ERROR: db.perfiles.getByUserId falló con:", error);
+          throw error;
         } finally {
           console.timeEnd("Supabase: db.perfiles.getByUserId");
         }
         
         // 2. If no profile exists, check if there's an invitation or profile by email
         if (!p && u.email) {
+          console.log("Paso 9: Ejecutando db.perfiles.getByEmail para email:", u.email);
           console.time("Supabase: db.perfiles.getByEmail");
           try {
             p = await db.perfiles.getByEmail(u.email);
+            console.log("Paso 10: db.perfiles.getByEmail resuelto con perfil:", p);
+          } catch (error) {
+            console.log("Paso 10 - ERROR: db.perfiles.getByEmail falló con:", error);
+            throw error;
           } finally {
             console.timeEnd("Supabase: db.perfiles.getByEmail");
           }
 
           if (p) {
             // Link invited/existing profile to this newly authenticated user
+            console.log("Paso 11: Ejecutando db.perfiles.update para vincular perfil id:", p.id);
             console.time("Supabase: db.perfiles.update (Link existing profile)");
             try {
               p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
+              console.log("Paso 12: db.perfiles.update resuelto con perfil:", p);
+            } catch (error) {
+              console.log("Paso 12 - ERROR: db.perfiles.update falló con:", error);
+              throw error;
             } finally {
               console.timeEnd("Supabase: db.perfiles.update (Link existing profile)");
             }
@@ -76,9 +92,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!p && u.email) {
           let targetCompanyId = "d1a58a74-9f93-4e8c-8c08-0123456789ab"; // default ID
           try {
+            console.log("Paso 13: Ejecutando consulta de empresa_identidad en fetchProfile");
             console.time("Supabase: select * from empresa_identidad");
-            const { data: companies } = await (supabase.from("empresa_identidad") as any).select("*");
+            const { data: companies, error: companiesError } = await (supabase.from("empresa_identidad") as any).select("*");
             console.timeEnd("Supabase: select * from empresa_identidad");
+
+            if (companiesError) {
+              console.log("Paso 14 - ERROR: select * from empresa_identidad falló con:", companiesError);
+            } else {
+              console.log("Paso 14: Consulta de empresa_identidad resuelta con:", companies);
+            }
 
             if (companies && companies.length > 0) {
               // Find one with "ganpor" in its name
@@ -93,10 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
           } catch (e) {
-            console.timeEnd("Supabase: select * from empresa_identidad");
+            console.log("Paso 14 - ERROR EXCEPCIÓN: select * from empresa_identidad lanzó:", e);
             console.error("Error finding existing GanPor company:", e);
           }
 
+          console.log("Paso 15: Ejecutando db.perfiles.create para aprovisionar perfil para usuario id:", u.id);
           console.time("Supabase: db.perfiles.create (Provision profile)");
           try {
             p = await db.perfiles.create({
@@ -107,6 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               rol: "Administrador",
               activo: true
             });
+            console.log("Paso 16: db.perfiles.create resuelto con perfil:", p);
+          } catch (error) {
+            console.log("Paso 16 - ERROR: db.perfiles.create falló con:", error);
+            throw error;
           } finally {
             console.timeEnd("Supabase: db.perfiles.create (Provision profile)");
           }
@@ -114,18 +142,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return p;
       })();
 
-      // Apply a 5 seconds timeout to the entire profile fetch process
-      const p = await withTimeout(
-        getProfileTask,
-        5000,
-        "La consulta de perfil tardó demasiado tiempo. Por favor verifica tu conexión de red o vuelve a intentar."
-      );
+      const p = await getProfileTask;
 
       if (!p) {
         throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
       }
 
       setProfile(p);
+      console.log("Paso 17: fetchProfile finalizado con éxito. Perfil cargado:", p);
       
       // Sync active company and role in db services to make sure queries load correct tenant and enforce permissions
       if (p.empresa_id) {
@@ -135,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveUserRole(p.rol);
       }
     } catch (err: any) {
+      console.log("Paso 18 - ERROR GLOBAL en fetchProfile:", err);
       console.error("Error fetching user profile:", err);
       setError(err?.message || "Ocurrió un error inesperado al verificar tu sesión.");
       setProfile(null);
@@ -143,38 +168,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let initialSessionFetched = false;
 
     // Check active session on mount
+    console.log("Paso 1: Iniciando getSession() en el mount de AuthContext");
+    console.time("Supabase: getSession");
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
+      console.timeEnd("Supabase: getSession");
+      if (!isMounted) {
+        console.log("Paso 2 (Desmontado): getSession() resuelto pero componente desmontado");
+        return;
+      }
       const currentUser = session?.user ?? null;
+      console.log("Paso 2: getSession() resuelto con usuario:", currentUser ? currentUser.email : "ninguno", "ID:", currentUser ? currentUser.id : "ninguno");
       setUser(currentUser);
       if (currentUser) {
         fetchProfile(currentUser)
           .catch((err) => console.error("Error fetching profile on mount:", err))
           .finally(() => {
+            initialSessionFetched = true;
             if (isMounted) setLoading(false);
           });
       } else {
+        initialSessionFetched = true;
         if (isMounted) setLoading(false);
       }
     }).catch((err) => {
+      console.timeEnd("Supabase: getSession");
+      console.log("Paso 3 - ERROR: getSession() falló con:", err);
       console.error("Error getting session on mount:", err);
+      initialSessionFetched = true;
       if (isMounted) setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!isMounted) return;
+    console.log("Paso 4: Registrando listener onAuthStateChange");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) {
+        console.log("Paso 5 (Desmontado): onAuthStateChange disparado pero componente desmontado");
+        return;
+      }
       const currentUser = session?.user ?? null;
+      console.log("Paso 5: onAuthStateChange disparado con evento:", event, "usuario:", currentUser ? currentUser.email : "ninguno");
       
+      // Ignore INITIAL_SESSION as it's fully handled by getSession()
+      if (event === "INITIAL_SESSION") {
+        console.log("Paso 5b: Ignorando INITIAL_SESSION en onAuthStateChange porque ya lo maneja getSession()");
+        return;
+      }
+
+      // Ignore SIGNED_IN during initial mount load if getSession is still running
+      if (event === "SIGNED_IN" && !initialSessionFetched) {
+        console.log("Paso 5c: Ignorando SIGNED_IN inicial en onAuthStateChange porque getSession() está en progreso");
+        return;
+      }
+
+      // Handle only expected events: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED
+      const allowedEvents = ["SIGNED_IN", "SIGNED_OUT", "TOKEN_REFRESHED", "USER_UPDATED"];
+      if (!allowedEvents.includes(event)) {
+        console.log("Paso 5d: Ignorando evento no permitido:", event);
+        return;
+      }
+
       try {
-        setUser(currentUser);
-        if (currentUser) {
-          setLoading(true);
-          await fetchProfile(currentUser);
-        } else {
+        if (event === "SIGNED_OUT") {
+          setUser(null);
           setProfile(null);
+        } else {
+          setUser(currentUser);
+          if (currentUser) {
+            setLoading(true);
+            await fetchProfile(currentUser);
+          } else {
+            setProfile(null);
+          }
         }
       } catch (error) {
         console.error("Error in onAuthStateChange handler:", error);
@@ -186,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      console.log("Paso 28: Desmontando AuthProvider, desuscribiendo listener");
       isMounted = false;
       subscription.unsubscribe();
     };
