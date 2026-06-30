@@ -43,14 +43,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const getProfileTask = (async () => {
         // 1. Get profile by user_id
-        let p = await db.perfiles.getByUserId(u.id);
+        console.time("Supabase: db.perfiles.getByUserId");
+        let p;
+        try {
+          p = await db.perfiles.getByUserId(u.id);
+        } finally {
+          console.timeEnd("Supabase: db.perfiles.getByUserId");
+        }
         
         // 2. If no profile exists, check if there's an invitation or profile by email
         if (!p && u.email) {
-          p = await db.perfiles.getByEmail(u.email);
+          console.time("Supabase: db.perfiles.getByEmail");
+          try {
+            p = await db.perfiles.getByEmail(u.email);
+          } finally {
+            console.timeEnd("Supabase: db.perfiles.getByEmail");
+          }
+
           if (p) {
             // Link invited/existing profile to this newly authenticated user
-            p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
+            console.time("Supabase: db.perfiles.update (Link existing profile)");
+            try {
+              p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
+            } finally {
+              console.timeEnd("Supabase: db.perfiles.update (Link existing profile)");
+            }
           }
         }
 
@@ -59,7 +76,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!p && u.email) {
           let targetCompanyId = "d1a58a74-9f93-4e8c-8c08-0123456789ab"; // default ID
           try {
+            console.time("Supabase: select * from empresa_identidad");
             const { data: companies } = await (supabase.from("empresa_identidad") as any).select("*");
+            console.timeEnd("Supabase: select * from empresa_identidad");
+
             if (companies && companies.length > 0) {
               // Find one with "ganpor" in its name
               const ganporComp = companies.find((c: any) => 
@@ -73,17 +93,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
           } catch (e) {
+            console.timeEnd("Supabase: select * from empresa_identidad");
             console.error("Error finding existing GanPor company:", e);
           }
 
-          p = await db.perfiles.create({
-            user_id: u.id,
-            empresa_id: targetCompanyId,
-            nombre: u.email.split("@")[0],
-            email: u.email,
-            rol: "Administrador",
-            activo: true
-          });
+          console.time("Supabase: db.perfiles.create (Provision profile)");
+          try {
+            p = await db.perfiles.create({
+              user_id: u.id,
+              empresa_id: targetCompanyId,
+              nombre: u.email.split("@")[0],
+              email: u.email,
+              rol: "Administrador",
+              activo: true
+            });
+          } finally {
+            console.timeEnd("Supabase: db.perfiles.create (Provision profile)");
+          }
         }
         return p;
       })();

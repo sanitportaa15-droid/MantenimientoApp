@@ -1655,9 +1655,9 @@ export const db = {
         const { data, error } = await supabase.from("perfiles")
           .select("*")
           .eq("user_id", userId)
-          .maybeSingle();
+          .limit(1);
         if (error) throw error;
-        return data as Perfil | null;
+        return (data && data.length > 0 ? data[0] : null) as Perfil | null;
       } catch (err) {
         console.error("Error al obtener perfil por user_id:", err);
         return null;
@@ -1668,9 +1668,9 @@ export const db = {
         const { data, error } = await supabase.from("perfiles")
           .select("*")
           .eq("email", email.trim().toLowerCase())
-          .maybeSingle();
+          .limit(1);
         if (error) throw error;
-        return data as Perfil | null;
+        return (data && data.length > 0 ? data[0] : null) as Perfil | null;
       } catch (err) {
         console.error("Error al obtener perfil por email:", err);
         return null;
