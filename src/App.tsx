@@ -97,13 +97,7 @@ function AppContent() {
 }
 
 export default function App() {
-  useEffect(() => {
-    // Seed default configurations on app load
-    db.configuracion.seed().catch(console.error);
-    db.insumos.seed().then(() => {
-      db.insumos.migratePezoneras().catch(console.error);
-    }).catch(console.error);
-  }, []);
+
 
   return (
     <AuthProvider>
