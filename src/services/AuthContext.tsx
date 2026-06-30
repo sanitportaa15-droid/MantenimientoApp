@@ -142,7 +142,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return p;
       })();
 
-      const p = await getProfileTask;
+      const p = await withTimeout(
+        getProfileTask,
+        12000,
+        "La consulta de perfil tardó demasiado tiempo. Por favor, reintenta."
+      );
 
       if (!p) {
         throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
@@ -175,33 +179,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check active session on mount
     console.log("Paso 1: Iniciando getSession() en el mount de AuthContext");
     console.time("Supabase: getSession");
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.timeEnd("Supabase: getSession");
-      if (!isMounted) {
-        console.log("Paso 2 (Desmontado): getSession() resuelto pero componente desmontado");
-        return;
-      }
-      const currentUser = session?.user ?? null;
-      console.log("Paso 2: getSession() resuelto con usuario:", currentUser ? currentUser.email : "ninguno", "ID:", currentUser ? currentUser.id : "ninguno");
-      setUser(currentUser);
-      if (currentUser) {
-        fetchProfile(currentUser)
-          .catch((err) => console.error("Error fetching profile on mount:", err))
-          .finally(() => {
-            initialSessionFetched = true;
-            if (isMounted) setLoading(false);
-          });
-      } else {
+    withTimeout(supabase.auth.getSession(), 8000, "Timeout al obtener la sesión de Supabase en el inicio")
+      .then(({ data: { session } }) => {
+        console.timeEnd("Supabase: getSession");
+        if (!isMounted) {
+          console.log("Paso 2 (Desmontado): getSession() resuelto pero componente desmontado");
+          return;
+        }
+        const currentUser = session?.user ?? null;
+        console.log("Paso 2: getSession() resuelto con usuario:", currentUser ? currentUser.email : "ninguno", "ID:", currentUser ? currentUser.id : "ninguno");
+        setUser(currentUser);
+        if (currentUser) {
+          fetchProfile(currentUser)
+            .catch((err) => console.error("Error fetching profile on mount:", err))
+            .finally(() => {
+              initialSessionFetched = true;
+              if (isMounted) setLoading(false);
+            });
+        } else {
+          initialSessionFetched = true;
+          if (isMounted) setLoading(false);
+        }
+      }).catch((err) => {
+        console.timeEnd("Supabase: getSession");
+        console.log("Paso 3 - ERROR: getSession() falló con:", err);
+        console.error("Error getting session on mount:", err);
         initialSessionFetched = true;
         if (isMounted) setLoading(false);
-      }
-    }).catch((err) => {
-      console.timeEnd("Supabase: getSession");
-      console.log("Paso 3 - ERROR: getSession() falló con:", err);
-      console.error("Error getting session on mount:", err);
-      initialSessionFetched = true;
-      if (isMounted) setLoading(false);
-    });
+      });
 
     // Listen for auth changes
     console.log("Paso 4: Registrando listener onAuthStateChange");
@@ -254,10 +259,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Proactive session verification and token refresh on tab focus or visibility change
+    const handleActiveTab = async () => {
+      if (!isMounted) return;
+      if (document.visibilityState === "visible") {
+        console.log("Tab focused or active. Verifying and refreshing Supabase session...");
+        try {
+          const { data: { session }, error: sessionError } = await withTimeout(
+            supabase.auth.getSession(),
+            6000,
+            "Timeout checking session on tab focus"
+          );
+
+          if (sessionError) {
+            console.error("Session verification error on tab focus:", sessionError);
+            return;
+          }
+
+          if (session?.user) {
+            console.log("Session validated successfully on active focus:", session.user.email);
+            setUser(session.user);
+            const p = await withTimeout(
+              db.perfiles.getByUserId(session.user.id),
+              5000,
+              "Timeout getting profile on active focus"
+            );
+            if (p && isMounted) {
+              setProfile(p);
+              if (p.empresa_id) {
+                setActiveCompanyId(p.empresa_id);
+              }
+              if (p.rol) {
+                setActiveUserRole(p.rol);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Exception checking session on tab active focus:", err);
+        }
+      }
+    };
+
+    window.addEventListener("focus", handleActiveTab);
+    document.addEventListener("visibilitychange", handleActiveTab);
+
     return () => {
       console.log("Paso 28: Desmontando AuthProvider, desuscribiendo listener");
       isMounted = false;
       subscription.unsubscribe();
+      window.removeEventListener("focus", handleActiveTab);
+      document.removeEventListener("visibilitychange", handleActiveTab);
     };
   }, []);
 
