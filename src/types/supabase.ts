@@ -618,9 +618,43 @@ export interface Database {
           created_at?: string
         }
       }
+      perfiles: {
+        Row: {
+          id: string
+          user_id: string | null
+          empresa_id: string
+          nombre: string
+          email: string
+          rol: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          activo: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          empresa_id?: string
+          nombre: string
+          email: string
+          rol?: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          activo?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          empresa_id?: string
+          nombre?: string
+          email?: string
+          rol?: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          activo?: boolean
+          created_at?: string
+        }
+      }
     }
   }
 }
+
+export type Perfil = Database['public']['Tables']['perfiles']['Row'];
 
 export type LavadoConfiguracion = Database['public']['Tables']['lavado_configuraciones']['Row'];
 export type LavadoHistorial = Database['public']['Tables']['lavado_historial']['Row'];

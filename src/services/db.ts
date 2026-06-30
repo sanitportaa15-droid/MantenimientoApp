@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial, EmpresaIdentidad } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial, EmpresaIdentidad, Perfil } from "../types/supabase";
 
 
 export function normalizeMaintenanceName(name: string): string {
@@ -65,10 +65,46 @@ export function normalizeMaintenanceName(name: string): string {
   return cleanMaintKeys[normalized] || name.trim();
 }
 
+let activeCompanyId: string | null = null;
+let activeUserRole: string | null = null;
+
+export function setActiveCompanyId(id: string) {
+  activeCompanyId = id;
+}
+
+export function getActiveCompanyId(): string {
+  return activeCompanyId || "d1a58a74-9f93-4e8c-8c08-0123456789ab";
+}
+
+export function setActiveUserRole(role: string) {
+  activeUserRole = role;
+}
+
+export function getActiveUserRole(): string {
+  return activeUserRole || "Solo lectura";
+}
+
+export function checkWritePermission() {
+  const role = getActiveUserRole();
+  if (role === "Solo lectura") {
+    throw new Error("Permiso denegado: Su cuenta tiene rol de 'Solo lectura' y no tiene permisos de modificación.");
+  }
+}
+
+export function checkDeletePermission() {
+  const role = getActiveUserRole();
+  if (role === "Solo lectura" || role === "Técnico") {
+    throw new Error("Permiso denegado: Su cuenta no tiene permisos para eliminar registros.");
+  }
+}
+
 export const db = {
   clientes: {
     async getAll() {
-      const { data, error } = await supabase.from("clientes").select("*").order("nombre");
+      const { data, error } = await supabase.from("clientes")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener clientes:", error);
         throw error;
@@ -76,7 +112,11 @@ export const db = {
       return data as Cliente[];
     },
     async getById(id: string) {
-      const { data, error } = await supabase.from("clientes").select("*").eq("id", id).single();
+      const { data, error } = await supabase.from("clientes")
+        .select("*")
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .single();
       if (error) {
         console.error("Error al obtener cliente por ID:", error);
         throw error;
@@ -85,7 +125,7 @@ export const db = {
     },
     async create(cliente: Database['public']['Tables']['clientes']['Insert']) {
       const { data, error } = await (supabase.from("clientes") as any)
-        .insert(cliente)
+        .insert({ ...cliente, empresa_id: getActiveCompanyId() })
         .select()
         .single();
       
@@ -96,7 +136,10 @@ export const db = {
       return data as Cliente;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("clientes").delete().eq("id", id);
+      const { error } = await supabase.from("clientes")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando cliente:", error);
         throw error;
@@ -106,6 +149,7 @@ export const db = {
       const { data, error } = await (supabase.from("clientes") as any)
         .update(cliente)
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       
@@ -118,7 +162,10 @@ export const db = {
   },
   tambos: {
     async getAll() {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(nombre), ficha_tecnica(*), insumos:pezonera_id(*)").order("nombre");
+      const { data, error } = await (supabase.from("tambos") as any)
+        .select("*, clientes(nombre), ficha_tecnica(*), insumos:pezonera_id(*)")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener tambos:", error);
         throw error;
@@ -126,7 +173,10 @@ export const db = {
       return data as any[];
     },
     async getByCliente(clienteId: string) {
-      const { data, error } = await (supabase.from("tambos") as any).select("*").eq("cliente_id", clienteId);
+      const { data, error } = await (supabase.from("tambos") as any)
+        .select("*")
+        .eq("cliente_id", clienteId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener tambos por cliente:", error);
         throw error;
@@ -134,7 +184,11 @@ export const db = {
       return data as Tambo[];
     },
     async getById(id: string) {
-      const { data, error } = await (supabase.from("tambos") as any).select("*, clientes(*), ficha_tecnica(*), insumos:pezonera_id(*)").eq("id", id).single();
+      const { data, error } = await (supabase.from("tambos") as any)
+        .select("*, clientes(*), ficha_tecnica(*), insumos:pezonera_id(*)")
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .single();
       if (error) {
         console.error("Error al obtener tambo por ID:", error);
         throw error;
@@ -142,7 +196,10 @@ export const db = {
       return data as (Tambo & { clientes: Cliente, ficha_tecnica: FichaTecnica | null, insumos: Insumo | null });
     },
     async create(tambo: Database['public']['Tables']['tambos']['Insert']) {
-      const { data, error } = await (supabase.from("tambos") as any).insert(tambo).select().single();
+      const { data, error } = await (supabase.from("tambos") as any)
+        .insert({ ...tambo, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando tambo:", error);
         throw error;
@@ -153,6 +210,7 @@ export const db = {
       const { data, error } = await (supabase.from("tambos") as any)
         .update(tambo)
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       
@@ -166,6 +224,7 @@ export const db = {
       const { data, error } = await (supabase.from("configuracion") as any)
         .select("valor")
         .eq("clave", `tambo_mantenimientos_${tamboId}`)
+        .eq("empresa_id", getActiveCompanyId())
         .maybeSingle();
       
       const defaultMaintNames = [
@@ -201,55 +260,77 @@ export const db = {
     async setMantenimientosActivos(tamboId: string, tipos: string[]) {
       const clave = `tambo_mantenimientos_${tamboId}`;
       const valor = JSON.stringify(tipos);
+      const activeEmpId = getActiveCompanyId();
       
       const { data: existing } = await (supabase.from("configuracion") as any)
         .select("id")
         .eq("clave", clave)
+        .eq("empresa_id", activeEmpId)
         .maybeSingle();
       
       if (existing) {
-        await (supabase.from("configuracion") as any).update({ valor }).eq("clave", clave);
+        await (supabase.from("configuracion") as any)
+          .update({ valor })
+          .eq("clave", clave)
+          .eq("empresa_id", activeEmpId);
       } else {
         await (supabase.from("configuracion") as any).insert({ 
           clave, 
           valor, 
-          descripcion: `Mantenimientos activos para tambo ${tamboId}` 
+          descripcion: `Mantenimientos activos para tambo ${tamboId}`,
+          empresa_id: activeEmpId
         });
       }
     },
     async delete(id: string) {
+      const activeEmpId = getActiveCompanyId();
       // 1. Delete associated configuracion (e.g., custom active maintenance keys)
       try {
         const key = `tambo_mantenimientos_${id}`;
-        await supabase.from("configuracion").delete().eq("clave", key);
+        await supabase.from("configuracion")
+          .delete()
+          .eq("clave", key)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting tambo maintenance configuracion:", e);
       }
 
       // 2. Delete from ficha_tecnica
       try {
-        await supabase.from("ficha_tecnica").delete().eq("tambo_id", id);
+        await supabase.from("ficha_tecnica")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting ficha_tecnica for tambo:", e);
       }
 
       // 3. Delete from tambo_insumos
       try {
-        await supabase.from("tambo_insumos").delete().eq("tambo_id", id);
+        await supabase.from("tambo_insumos")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting tambo_insumos for tambo:", e);
       }
 
       // 4. Delete from tambo_componentes
       try {
-        await supabase.from("tambo_componentes").delete().eq("tambo_id", id);
+        await supabase.from("tambo_componentes")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting tambo_componentes for tambo:", e);
       }
 
       // 5. Delete from lavado_configuraciones (local and supabase)
       try {
-        await supabase.from("lavado_configuraciones").delete().eq("tambo_id", id);
+        await supabase.from("lavado_configuraciones")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting lavado_configuraciones for tambo:", e);
       }
@@ -263,7 +344,10 @@ export const db = {
 
       // 6. Delete from lavado_historial (local and supabase)
       try {
-        await supabase.from("lavado_historial").delete().eq("tambo_id", id);
+        await supabase.from("lavado_historial")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting lavado_historial for tambo:", e);
       }
@@ -277,20 +361,29 @@ export const db = {
 
       // 7. Delete from reclamos
       try {
-        await supabase.from("reclamos").delete().eq("tambo_id", id);
+        await supabase.from("reclamos")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting reclamos for tambo:", e);
       }
 
       // 8. Delete from mantenimientos
       try {
-        await supabase.from("mantenimientos").delete().eq("tambo_id", id);
+        await supabase.from("mantenimientos")
+          .delete()
+          .eq("tambo_id", id)
+          .eq("empresa_id", activeEmpId);
       } catch (e) {
         console.warn("Error deleting mantenimientos for tambo:", e);
       }
 
       // 9. Delete the tambo itself
-      const { error } = await supabase.from("tambos").delete().eq("id", id);
+      const { error } = await supabase.from("tambos")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", activeEmpId);
       if (error) {
         console.error("Error al eliminar el tambo:", error);
         throw error;
@@ -306,7 +399,11 @@ export const db = {
   },
   mantenimientos: {
     async getByTambo(tamboId: string) {
-      const { data, error } = await (supabase.from("mantenimientos") as any).select("*").eq("tambo_id", tamboId).order("fecha", { ascending: false });
+      const { data, error } = await (supabase.from("mantenimientos") as any)
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId())
+        .order("fecha", { ascending: false });
       if (error) {
         console.error("Error al obtener mantenimientos:", error);
         throw error;
@@ -318,7 +415,10 @@ export const db = {
       })) as Mantenimiento[];
     },
     async getAll() {
-      const { data, error } = await (supabase.from("mantenimientos") as any).select("*, tambos(nombre)").order("fecha", { ascending: false });
+      const { data, error } = await (supabase.from("mantenimientos") as any)
+        .select("*, tambos(nombre)")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("fecha", { ascending: false });
       if (error) {
         console.error("Error al obtener todos los mantenimientos:", error);
         throw error;
@@ -332,7 +432,8 @@ export const db = {
     async create(mantenimiento: Database['public']['Tables']['mantenimientos']['Insert']) {
       const normalizedMantenimiento = {
         ...mantenimiento,
-        tipo: mantenimiento.tipo ? normalizeMaintenanceName(mantenimiento.tipo) : mantenimiento.tipo
+        tipo: mantenimiento.tipo ? normalizeMaintenanceName(mantenimiento.tipo) : mantenimiento.tipo,
+        empresa_id: getActiveCompanyId()
       };
       const { data, error } = await (supabase.from("mantenimientos") as any).insert(normalizedMantenimiento).select().single();
       if (error) {
@@ -345,9 +446,11 @@ export const db = {
       } as Mantenimiento;
     },
     async createMany(mantenimientos: Database['public']['Tables']['mantenimientos']['Insert'][]) {
+      const activeEmpId = getActiveCompanyId();
       const normalizedMantenimientos = mantenimientos.map(m => ({
         ...m,
-        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : m.tipo
+        tipo: m.tipo ? normalizeMaintenanceName(m.tipo) : m.tipo,
+        empresa_id: activeEmpId
       }));
       const { data, error } = await (supabase.from("mantenimientos") as any).insert(normalizedMantenimientos).select();
       if (error) {
@@ -368,6 +471,7 @@ export const db = {
       const { data, error } = await (supabase.from("mantenimientos") as any)
         .update(normalizedUpdate)
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       
@@ -382,7 +486,11 @@ export const db = {
     },
     async deleteByType(tamboId: string, tipo: string) {
       const cleanTipo = normalizeMaintenanceName(tipo);
-      const { error } = await supabase.from("mantenimientos").delete().eq("tambo_id", tamboId).or(`tipo.eq."${tipo}",tipo.eq."${cleanTipo}"`);
+      const { error } = await supabase.from("mantenimientos")
+        .delete()
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId())
+        .or(`tipo.eq."${tipo}",tipo.eq."${cleanTipo}"`);
       if (error) {
         console.error("Error eliminando mantenimientos por tipo:", error);
         throw error;
@@ -400,6 +508,7 @@ export const db = {
     async getAll() {
       const { data, error } = await (supabase.from("configuracion") as any)
         .select("*")
+        .eq("empresa_id", getActiveCompanyId())
         .not("clave", "ilike", "tambo_mantenimientos_%");
       if (error) {
         console.error("Error al obtener configuraciones:", error);
@@ -408,7 +517,9 @@ export const db = {
       return data as Configuracion[];
     },
     async getAllWithHidden() {
-      const { data, error } = await (supabase.from("configuracion") as any).select("*");
+      const { data, error } = await (supabase.from("configuracion") as any)
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener todas las configuraciones:", error);
         throw error;
@@ -419,6 +530,7 @@ export const db = {
       const { data, error } = await (supabase.from("configuracion") as any)
         .update({ valor })
         .eq("clave", clave)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       
@@ -456,12 +568,17 @@ export const db = {
         "colectores_meses"
       ];
 
+      const activeEmpId = getActiveCompanyId();
       // Remove old keys
-      await (supabase.from("configuracion") as any).delete().in("clave", oldKeys);
+      await (supabase.from("configuracion") as any)
+        .delete()
+        .eq("empresa_id", activeEmpId)
+        .in("clave", oldKeys);
       
+      const configsWithEmpresa = defaultConfigs.map(c => ({ ...c, empresa_id: activeEmpId }));
       const { error } = await (supabase.from("configuracion") as any).upsert(
-        defaultConfigs,
-        { onConflict: 'clave', ignoreDuplicates: true }
+        configsWithEmpresa,
+        { onConflict: 'clave,empresa_id', ignoreDuplicates: true }
       );
       if (error) console.error("Error al sembrar configuraciones por defecto:", error);
     },
@@ -477,6 +594,7 @@ export const db = {
     async getAll(activeOnly = false) {
       let query = (supabase.from("reclamos") as any)
         .select("*, tambos(nombre, clientes(nombre))")
+        .eq("empresa_id", getActiveCompanyId())
         .order("fecha_reclamo", { ascending: false });
       
       if (activeOnly) {
@@ -494,6 +612,7 @@ export const db = {
       let query = (supabase.from("reclamos") as any)
         .select("*")
         .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId())
         .order("fecha_reclamo", { ascending: false });
       
       if (activeOnly) {
@@ -511,6 +630,7 @@ export const db = {
       const { data, error } = await (supabase.from("reclamos") as any)
         .select("*, tambos(*, clientes(*))")
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .single();
       if (error) {
         console.error("Error al obtener reclamo por ID:", error);
@@ -520,7 +640,7 @@ export const db = {
     },
     async create(reclamo: Database['public']['Tables']['reclamos']['Insert']) {
       const { data, error } = await (supabase.from("reclamos") as any)
-        .insert(reclamo)
+        .insert({ ...reclamo, empresa_id: getActiveCompanyId() })
         .select()
         .single();
       if (error) {
@@ -533,6 +653,7 @@ export const db = {
       const { data, error } = await (supabase.from("reclamos") as any)
         .update(reclamo)
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       if (error) {
@@ -542,7 +663,10 @@ export const db = {
       return data as Reclamo;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("reclamos").delete().eq("id", id);
+      const { error } = await supabase.from("reclamos")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando reclamo:", error);
         throw error;
@@ -558,7 +682,10 @@ export const db = {
   },
   tipos_reparacion: {
     async getAll() {
-      const { data, error } = await supabase.from("tipos_reparacion").select("*").order("nombre");
+      const { data, error } = await supabase.from("tipos_reparacion")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener tipos de reparación:", error);
         throw error;
@@ -566,7 +693,10 @@ export const db = {
       return data as TipoReparacion[];
     },
     async create(tipo: Database['public']['Tables']['tipos_reparacion']['Insert']) {
-      const { data, error } = await (supabase.from("tipos_reparacion") as any).insert(tipo).select().single();
+      const { data, error } = await (supabase.from("tipos_reparacion") as any)
+        .insert({ ...tipo, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando tipo de reparación:", error);
         throw error;
@@ -574,7 +704,12 @@ export const db = {
       return data as TipoReparacion;
     },
     async update(id: string, tipo: Partial<Database['public']['Tables']['tipos_reparacion']['Update']>) {
-      const { data, error } = await (supabase.from("tipos_reparacion") as any).update(tipo).eq("id", id).select().single();
+      const { data, error } = await (supabase.from("tipos_reparacion") as any)
+        .update(tipo)
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
       if (error) {
         console.error("Error actualizando tipo de reparación:", error);
         throw error;
@@ -582,7 +717,10 @@ export const db = {
       return data as TipoReparacion;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("tipos_reparacion").delete().eq("id", id);
+      const { error } = await supabase.from("tipos_reparacion")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando tipo de reparación:", error);
         throw error;
@@ -599,9 +737,13 @@ export const db = {
         { nombre: 'Revisión general', descripcion: 'Chequeo general del sistema' },
       ];
       
-      const { data: existing } = await supabase.from("tipos_reparacion").select("nombre");
+      const activeEmpId = getActiveCompanyId();
+      const { data: existing } = await supabase.from("tipos_reparacion")
+        .select("nombre")
+        .eq("empresa_id", activeEmpId);
       if (existing && existing.length === 0) {
-        const { error } = await (supabase.from("tipos_reparacion") as any).insert(defaultTypes);
+        const typesWithEmpresa = defaultTypes.map(t => ({ ...t, empresa_id: activeEmpId }));
+        const { error } = await (supabase.from("tipos_reparacion") as any).insert(typesWithEmpresa);
         if (error) console.error("Error al sembrar tipos de reparación por defecto:", error);
       }
     },
@@ -615,7 +757,10 @@ export const db = {
   },
   tipos_mantenimiento: {
     async getAll() {
-      const { data, error } = await supabase.from("tipos_mantenimiento").select("*").order("nombre");
+      const { data, error } = await supabase.from("tipos_mantenimiento")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener tipos de mantenimiento:", error);
         throw error;
@@ -661,7 +806,10 @@ export const db = {
       return baseList;
     },
     async create(tipo: Database['public']['Tables']['tipos_mantenimiento']['Insert']) {
-      const { data, error } = await (supabase.from("tipos_mantenimiento") as any).insert(tipo).select().single();
+      const { data, error } = await (supabase.from("tipos_mantenimiento") as any)
+        .insert({ ...tipo, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando tipo de mantenimiento:", error);
         throw error;
@@ -669,7 +817,12 @@ export const db = {
       return data as TipoMantenimiento;
     },
     async update(id: string, tipo: Partial<Database['public']['Tables']['tipos_mantenimiento']['Update']>) {
-      const { data, error } = await (supabase.from("tipos_mantenimiento") as any).update(tipo).eq("id", id).select().single();
+      const { data, error } = await (supabase.from("tipos_mantenimiento") as any)
+        .update(tipo)
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
       if (error) {
         console.error("Error actualizando tipo de mantenimiento:", error);
         throw error;
@@ -677,7 +830,10 @@ export const db = {
       return data as TipoMantenimiento;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("tipos_mantenimiento").delete().eq("id", id);
+      const { error } = await supabase.from("tipos_mantenimiento")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando tipo de mantenimiento:", error);
         throw error;
@@ -699,9 +855,13 @@ export const db = {
         { nombre: "Kit de colector de leche", frecuencia_meses: 12, descripcion: "Mantenimiento de colectores" }
       ];
       
-      const { data: existing } = await supabase.from("tipos_mantenimiento").select("nombre");
+      const activeEmpId = getActiveCompanyId();
+      const { data: existing } = await supabase.from("tipos_mantenimiento")
+        .select("nombre")
+        .eq("empresa_id", activeEmpId);
       if (existing && existing.length === 0) {
-        const { error } = await (supabase.from("tipos_mantenimiento") as any).insert(defaultTypes);
+        const typesWithEmpresa = defaultTypes.map(t => ({ ...t, empresa_id: activeEmpId }));
+        const { error } = await (supabase.from("tipos_mantenimiento") as any).insert(typesWithEmpresa);
         if (error) console.error("Error al sembrar tipos de mantenimiento por defecto:", error);
       }
     },
@@ -715,7 +875,10 @@ export const db = {
   },
   prioridades_reclamo: {
     async getAll() {
-      const { data, error } = await supabase.from("prioridades_reclamo").select("*").order("nombre");
+      const { data, error } = await supabase.from("prioridades_reclamo")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener prioridades:", error);
         throw error;
@@ -723,7 +886,10 @@ export const db = {
       return data as PrioridadReclamo[];
     },
     async create(prioridad: Database['public']['Tables']['prioridades_reclamo']['Insert']) {
-      const { data, error } = await (supabase.from("prioridades_reclamo") as any).insert(prioridad).select().single();
+      const { data, error } = await (supabase.from("prioridades_reclamo") as any)
+        .insert({ ...prioridad, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando prioridad:", error);
         throw error;
@@ -731,7 +897,12 @@ export const db = {
       return data as PrioridadReclamo;
     },
     async update(id: string, prioridad: Partial<Database['public']['Tables']['prioridades_reclamo']['Update']>) {
-      const { data, error } = await (supabase.from("prioridades_reclamo") as any).update(prioridad).eq("id", id).select().single();
+      const { data, error } = await (supabase.from("prioridades_reclamo") as any)
+        .update(prioridad)
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
       if (error) {
         console.error("Error actualizando prioridad:", error);
         throw error;
@@ -739,7 +910,10 @@ export const db = {
       return data as PrioridadReclamo;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("prioridades_reclamo").delete().eq("id", id);
+      const { error } = await supabase.from("prioridades_reclamo")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando prioridad:", error);
         throw error;
@@ -752,16 +926,23 @@ export const db = {
         { nombre: "Alta" },
         { nombre: "Urgente" }
       ];
-      const { data: existing } = await supabase.from("prioridades_reclamo").select("nombre");
+      const activeEmpId = getActiveCompanyId();
+      const { data: existing } = await supabase.from("prioridades_reclamo")
+        .select("nombre")
+        .eq("empresa_id", activeEmpId);
       if (existing && existing.length === 0) {
-        const { error } = await (supabase.from("prioridades_reclamo") as any).insert(defaults);
+        const prioritiesWithEmpresa = defaults.map(p => ({ ...p, empresa_id: activeEmpId }));
+        const { error } = await (supabase.from("prioridades_reclamo") as any).insert(prioritiesWithEmpresa);
         if (error) console.error("Error al sembrar prioridades por defecto:", error);
       }
     }
   },
   estados_reclamo: {
     async getAll() {
-      const { data, error } = await supabase.from("estados_reclamo").select("*").order("nombre");
+      const { data, error } = await supabase.from("estados_reclamo")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener estados:", error);
         throw error;
@@ -769,7 +950,10 @@ export const db = {
       return data as EstadoReclamo[];
     },
     async create(estado: Database['public']['Tables']['estados_reclamo']['Insert']) {
-      const { data, error } = await (supabase.from("estados_reclamo") as any).insert(estado).select().single();
+      const { data, error } = await (supabase.from("estados_reclamo") as any)
+        .insert({ ...estado, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando estado:", error);
         throw error;
@@ -777,7 +961,12 @@ export const db = {
       return data as EstadoReclamo;
     },
     async update(id: string, estado: Partial<Database['public']['Tables']['estados_reclamo']['Update']>) {
-      const { data, error } = await (supabase.from("estados_reclamo") as any).update(estado).eq("id", id).select().single();
+      const { data, error } = await (supabase.from("estados_reclamo") as any)
+        .update(estado)
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
       if (error) {
         console.error("Error actualizando estado:", error);
         throw error;
@@ -785,7 +974,10 @@ export const db = {
       return data as EstadoReclamo;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("estados_reclamo").delete().eq("id", id);
+      const { error } = await supabase.from("estados_reclamo")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando estado:", error);
         throw error;
@@ -798,16 +990,23 @@ export const db = {
         { nombre: "En proceso" },
         { nombre: "Resuelto" }
       ];
-      const { data: existing } = await supabase.from("estados_reclamo").select("nombre");
+      const activeEmpId = getActiveCompanyId();
+      const { data: existing } = await supabase.from("estados_reclamo")
+        .select("nombre")
+        .eq("empresa_id", activeEmpId);
       if (existing && existing.length === 0) {
-        const { error } = await (supabase.from("estados_reclamo") as any).insert(defaults);
+        const statesWithEmpresa = defaults.map(e => ({ ...e, empresa_id: activeEmpId }));
+        const { error } = await (supabase.from("estados_reclamo") as any).insert(statesWithEmpresa);
         if (error) console.error("Error al sembrar estados por defecto:", error);
       }
     }
   },
   insumos: {
     async getAll() {
-      const { data, error } = await supabase.from("insumos").select("*").order("nombre");
+      const { data, error } = await supabase.from("insumos")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener insumos:", error);
         throw error;
@@ -818,6 +1017,7 @@ export const db = {
       const { data, error } = await supabase.from("insumos")
         .select("*")
         .eq("tipo", "consumible")
+        .eq("empresa_id", getActiveCompanyId())
         .order("nombre");
       
       if (error) {
@@ -838,7 +1038,10 @@ export const db = {
       return unique;
     },
     async create(insumo: Database['public']['Tables']['insumos']['Insert']) {
-      const { data, error } = await (supabase.from("insumos") as any).insert(insumo).select().single();
+      const { data, error } = await (supabase.from("insumos") as any)
+        .insert({ ...insumo, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando insumo:", error);
         throw error;
@@ -846,7 +1049,12 @@ export const db = {
       return data as Insumo;
     },
     async update(id: string, insumo: Partial<Database['public']['Tables']['insumos']['Update']>) {
-      const { data, error } = await (supabase.from("insumos") as any).update(insumo).eq("id", id).select().single();
+      const { data, error } = await (supabase.from("insumos") as any)
+        .update(insumo)
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
       if (error) {
         console.error("Error actualizando insumo:", error);
         throw error;
@@ -854,7 +1062,10 @@ export const db = {
       return data as Insumo;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("insumos").delete().eq("id", id);
+      const { error } = await supabase.from("insumos")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando insumo:", error);
         throw error;
@@ -872,9 +1083,13 @@ export const db = {
         { nombre: "Bujes", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 },
         { nombre: "Diafragma de brazos", tipo: "repuesto", usa_brazos: true, cantidad_por_bajada: 1 }
       ];
-      const { data: existing } = await supabase.from("insumos").select("nombre");
+      const activeEmpId = getActiveCompanyId();
+      const { data: existing } = await supabase.from("insumos")
+        .select("nombre")
+        .eq("empresa_id", activeEmpId);
       if (existing && existing.length === 0) {
-        const { error } = await (supabase.from("insumos") as any).insert(defaultInsumos);
+        const insumosWithEmpresa = defaultInsumos.map(i => ({ ...i, empresa_id: activeEmpId }));
+        const { error } = await (supabase.from("insumos") as any).insert(insumosWithEmpresa);
         if (error) console.error("Error al sembrar insumos por defecto:", error);
       }
     },
@@ -887,6 +1102,8 @@ export const db = {
           return;
         }
 
+        const activeEmpId = getActiveCompanyId();
+
         // 1. Get all from pezoneras table
         const { data: oldPezoneras } = await supabase.from("pezoneras").select("*");
         if (!oldPezoneras || oldPezoneras.length === 0) return;
@@ -897,6 +1114,7 @@ export const db = {
           const { data: existing } = await supabase.from("insumos")
             .select("id")
             .eq("nombre", nombre)
+            .eq("empresa_id", activeEmpId)
             .maybeSingle();
           
           if (!existing) {
@@ -904,13 +1122,16 @@ export const db = {
               nombre,
               tipo: "consumible",
               usa_brazos: true,
-              cantidad_por_bajada: 4
+              cantidad_por_bajada: 4,
+              empresa_id: activeEmpId
             });
           }
         }
 
         // 3. Update tambos pezonera_id to point to insumos
-        const { data: tambos } = await supabase.from("tambos").select("id, pezonera_id");
+        const { data: tambos } = await supabase.from("tambos")
+          .select("id, pezonera_id")
+          .eq("empresa_id", activeEmpId);
         if (tambos) {
           for (const t of (tambos as any[])) {
             if (t.pezonera_id) {
@@ -918,9 +1139,16 @@ export const db = {
               const { data: oldP } = await supabase.from("pezoneras").select("nombre").eq("id", t.pezonera_id).maybeSingle();
               if (oldP) {
                 const nombre = (oldP as any).nombre.startsWith("Pezonera") ? (oldP as any).nombre : `Pezonera ${(oldP as any).nombre}`;
-                const { data: newI } = await supabase.from("insumos").select("id").eq("nombre", nombre).maybeSingle();
+                const { data: newI } = await supabase.from("insumos")
+                  .select("id")
+                  .eq("nombre", nombre)
+                  .eq("empresa_id", activeEmpId)
+                  .maybeSingle();
                 if (newI) {
-                  await (supabase.from("tambos") as any).update({ pezonera_id: (newI as any).id }).eq("id", t.id);
+                  await (supabase.from("tambos") as any)
+                    .update({ pezonera_id: (newI as any).id })
+                    .eq("id", t.id)
+                    .eq("empresa_id", activeEmpId);
                 }
               }
             }
@@ -934,7 +1162,10 @@ export const db = {
   },
   tambo_insumos: {
     async getByTambo(tamboId: string) {
-      const { data, error } = await supabase.from("tambo_insumos").select("*, insumos(*)").eq("tambo_id", tamboId);
+      const { data, error } = await supabase.from("tambo_insumos")
+        .select("*, insumos(*)")
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener insumos del tambo:", error);
         throw error;
@@ -942,7 +1173,9 @@ export const db = {
       return data as (TamboInsumo & { insumos: Insumo })[];
     },
     async createMany(tamboInsumos: Database['public']['Tables']['tambo_insumos']['Insert'][]) {
-      const { data, error } = await (supabase.from("tambo_insumos") as any).insert(tamboInsumos).select();
+      const activeEmpId = getActiveCompanyId();
+      const mapped = tamboInsumos.map(item => ({ ...item, empresa_id: activeEmpId }));
+      const { data, error } = await (supabase.from("tambo_insumos") as any).insert(mapped).select();
       if (error) {
         console.error("Error guardando insumos del tambo:", error);
         throw error;
@@ -950,7 +1183,10 @@ export const db = {
       return data as TamboInsumo[];
     },
     async deleteByTambo(tamboId: string) {
-      const { error } = await supabase.from("tambo_insumos").delete().eq("tambo_id", tamboId);
+      const { error } = await supabase.from("tambo_insumos")
+        .delete()
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando insumos del tambo:", error);
         throw error;
@@ -962,6 +1198,7 @@ export const db = {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
         .select("*")
         .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId())
         .maybeSingle();
       if (error) {
         console.error("Error al obtener ficha técnica:", error);
@@ -971,23 +1208,26 @@ export const db = {
     },
     async create(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
       try {
+        const activeEmpId = getActiveCompanyId();
         const { data: existing } = await supabase.from("ficha_tecnica")
           .select("*")
           .eq("tambo_id", ficha.tambo_id)
+          .eq("empresa_id", activeEmpId)
           .maybeSingle();
         
         if (existing) {
           return existing as FichaTecnica;
         }
 
+        const fichaWithEmp = { ...ficha, empresa_id: activeEmpId };
         const { data, error } = await (supabase.from("ficha_tecnica") as any)
-          .insert(ficha)
+          .insert(fichaWithEmp)
           .select()
           .single();
         if (error) {
           // If insert failed due to concurrent race, retry as upsert
           const { data: upsertData, error: upsertError } = await (supabase.from("ficha_tecnica") as any)
-            .upsert(ficha, { onConflict: "tambo_id" })
+            .upsert(fichaWithEmp, { onConflict: "tambo_id" })
             .select()
             .single();
           if (upsertError) throw upsertError;
@@ -1003,6 +1243,7 @@ export const db = {
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
         .update(ficha)
         .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
         .select()
         .single();
       if (error) {
@@ -1012,8 +1253,9 @@ export const db = {
       return data as FichaTecnica;
     },
     async upsert(ficha: Database['public']['Tables']['ficha_tecnica']['Insert']) {
+      const fichaWithEmp = { ...ficha, empresa_id: getActiveCompanyId() };
       const { data, error } = await (supabase.from("ficha_tecnica") as any)
-        .upsert(ficha, { onConflict: "tambo_id" })
+        .upsert(fichaWithEmp, { onConflict: "tambo_id" })
         .select()
         .single();
       if (error) {
@@ -1023,7 +1265,9 @@ export const db = {
       return data as FichaTecnica;
     },
     async getAll() {
-      const { data, error } = await supabase.from("ficha_tecnica").select("*");
+      const { data, error } = await supabase.from("ficha_tecnica")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener todas las fichas técnicas:", error);
         throw error;
@@ -1033,7 +1277,10 @@ export const db = {
   },
   componentes: {
     async getAll() {
-      const { data, error } = await supabase.from("componentes").select("*").order("nombre");
+      const { data, error } = await supabase.from("componentes")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("nombre");
       if (error) {
         console.error("Error al obtener catálogo de componentes:", error);
         throw error;
@@ -1041,7 +1288,10 @@ export const db = {
       return data as Componente[];
     },
     async create(componente: Database['public']['Tables']['componentes']['Insert']) {
-      const { data, error } = await (supabase.from("componentes") as any).insert(componente).select().single();
+      const { data, error } = await (supabase.from("componentes") as any)
+        .insert({ ...componente, empresa_id: getActiveCompanyId() })
+        .select()
+        .single();
       if (error) {
         console.error("Error guardando componente en catálogo:", error);
         throw error;
@@ -1049,7 +1299,10 @@ export const db = {
       return data as Componente;
     },
     async delete(id: string) {
-      const { error } = await supabase.from("componentes").delete().eq("id", id);
+      const { error } = await supabase.from("componentes")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando componente del catálogo:", error);
         throw error;
@@ -1058,7 +1311,9 @@ export const db = {
   },
   tambo_componentes: {
     async getAll() {
-      const { data, error } = await supabase.from("tambo_componentes").select("*, componentes(*)");
+      const { data, error } = await supabase.from("tambo_componentes")
+        .select("*, componentes(*)")
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener todos los componentes de tambos:", error);
         throw error;
@@ -1066,7 +1321,10 @@ export const db = {
       return data as (TamboComponente & { componentes: Componente })[];
     },
     async getByTambo(tamboId: string) {
-      const { data, error } = await supabase.from("tambo_componentes").select("*, componentes(*)").eq("tambo_id", tamboId);
+      const { data, error } = await supabase.from("tambo_componentes")
+        .select("*, componentes(*)")
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener componentes del tambo:", error);
         throw error;
@@ -1074,7 +1332,9 @@ export const db = {
       return data as (TamboComponente & { componentes: Componente })[];
     },
     async createMany(tamboComponentes: Database['public']['Tables']['tambo_componentes']['Insert'][]) {
-      const { data, error } = await (supabase.from("tambo_componentes") as any).insert(tamboComponentes).select();
+      const activeEmpId = getActiveCompanyId();
+      const mapped = tamboComponentes.map(item => ({ ...item, empresa_id: activeEmpId }));
+      const { data, error } = await (supabase.from("tambo_componentes") as any).insert(mapped).select();
       if (error) {
         console.error("Error guardando componentes del tambo:", error);
         throw error;
@@ -1082,7 +1342,10 @@ export const db = {
       return data as TamboComponente[];
     },
     async deleteByTambo(tamboId: string) {
-      const { error } = await supabase.from("tambo_componentes").delete().eq("tambo_id", tamboId);
+      const { error } = await supabase.from("tambo_componentes")
+        .delete()
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando componentes del tambo:", error);
         throw error;
@@ -1092,7 +1355,10 @@ export const db = {
   // Keep old componentes for backward compatibility if needed, but we should migrate
   old_componentes: {
     async getByTambo(tamboId: string) {
-      const { data, error } = await supabase.from("componentes").select("*").eq("tambo_id", tamboId);
+      const { data, error } = await supabase.from("componentes")
+        .select("*")
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener componentes:", error);
         throw error;
@@ -1100,7 +1366,9 @@ export const db = {
       return data as any[];
     },
     async createMany(componentes: any[]) {
-      const { data, error } = await (supabase.from("componentes") as any).insert(componentes).select();
+      const activeEmpId = getActiveCompanyId();
+      const mapped = componentes.map(item => ({ ...item, empresa_id: activeEmpId }));
+      const { data, error } = await (supabase.from("componentes") as any).insert(mapped).select();
       if (error) {
         console.error("Error guardando componentes:", error);
         throw error;
@@ -1108,21 +1376,29 @@ export const db = {
       return data as any[];
     },
     async deleteByTambo(tamboId: string) {
-      const { error } = await supabase.from("componentes").delete().eq("tambo_id", tamboId);
+      const { error } = await supabase.from("componentes")
+        .delete()
+        .eq("tambo_id", tamboId)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando componentes:", error);
         throw error;
       }
     },
     async deleteById(id: string) {
-      const { error } = await supabase.from("componentes").delete().eq("id", id);
+      const { error } = await supabase.from("componentes")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error eliminando componente:", error);
         throw error;
       }
     },
     async getAll() {
-      const { data, error } = await supabase.from("componentes").select("*");
+      const { data, error } = await supabase.from("componentes")
+        .select("*")
+        .eq("empresa_id", getActiveCompanyId());
       if (error) {
         console.error("Error al obtener todos los componentes:", error);
         throw error;
@@ -1133,7 +1409,9 @@ export const db = {
   lavado_configuraciones: {
     async getAll() {
       try {
-        const { data, error } = await supabase.from("lavado_configuraciones").select("*");
+        const { data, error } = await supabase.from("lavado_configuraciones")
+          .select("*")
+          .eq("empresa_id", getActiveCompanyId());
         if (error) throw error;
         return data as LavadoConfiguracion[];
       } catch (err) {
@@ -1143,7 +1421,11 @@ export const db = {
     },
     async getByTambo(tamboId: string) {
       try {
-        const { data, error } = await supabase.from("lavado_configuraciones").select("*").eq("tambo_id", tamboId).maybeSingle();
+        const { data, error } = await supabase.from("lavado_configuraciones")
+          .select("*")
+          .eq("tambo_id", tamboId)
+          .eq("empresa_id", getActiveCompanyId())
+          .maybeSingle();
         if (error) throw error;
         if (data) return data as LavadoConfiguracion;
         
@@ -1157,15 +1439,18 @@ export const db = {
     },
     async create(config: Omit<LavadoConfiguracion, 'id' | 'created_at'>) {
       try {
+        const activeEmpId = getActiveCompanyId();
         const { data: existing } = await supabase.from("lavado_configuraciones")
           .select("*")
           .eq("tambo_id", config.tambo_id)
+          .eq("empresa_id", activeEmpId)
           .maybeSingle();
 
         if (existing) {
           const { data, error } = await (supabase.from("lavado_configuraciones") as any)
             .update(config)
             .eq("id", (existing as any).id)
+            .eq("empresa_id", activeEmpId)
             .select()
             .single();
           if (error) throw error;
@@ -1174,7 +1459,7 @@ export const db = {
 
         const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
         const createdAt = new Date().toISOString();
-        const newConfigRecord = { id: newId, created_at: createdAt, ...config };
+        const newConfigRecord = { id: newId, created_at: createdAt, ...config, empresa_id: activeEmpId };
 
         const { data, error } = await (supabase.from("lavado_configuraciones") as any)
           .insert(newConfigRecord)
@@ -1203,7 +1488,12 @@ export const db = {
     },
     async update(id: string, config: Partial<Omit<LavadoConfiguracion, 'id' | 'created_at'>>) {
       try {
-        const { data, error } = await (supabase.from("lavado_configuraciones") as any).update(config).eq("id", id).select().single();
+        const { data, error } = await (supabase.from("lavado_configuraciones") as any)
+          .update(config)
+          .eq("id", id)
+          .eq("empresa_id", getActiveCompanyId())
+          .select()
+          .single();
         if (error) throw error;
         return data as LavadoConfiguracion;
       } catch (err) {
@@ -1220,7 +1510,10 @@ export const db = {
     },
     async delete(id: string) {
       try {
-        const { error } = await supabase.from("lavado_configuraciones").delete().eq("id", id);
+        const { error } = await supabase.from("lavado_configuraciones")
+          .delete()
+          .eq("id", id)
+          .eq("empresa_id", getActiveCompanyId());
         if (error) throw error;
       } catch (err) {
         console.warn("Utilizando Local Storage para eliminación de lavado_configuraciones.", err);
@@ -1233,7 +1526,10 @@ export const db = {
   lavado_historial: {
     async getAll() {
       try {
-        const { data, error } = await supabase.from("lavado_historial").select("*").order("fecha", { ascending: false });
+        const { data, error } = await supabase.from("lavado_historial")
+          .select("*")
+          .eq("empresa_id", getActiveCompanyId())
+          .order("fecha", { ascending: false });
         if (error) throw error;
         return data as LavadoHistorial[];
       } catch (err) {
@@ -1243,9 +1539,10 @@ export const db = {
       }
     },
     async create(hist: Omit<LavadoHistorial, 'id' | 'created_at'>) {
+      const activeEmpId = getActiveCompanyId();
       const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2) + Date.now().toString(36));
       const createdAt = new Date().toISOString();
-      const newHistRecord = { id: newId, created_at: createdAt, ...hist };
+      const newHistRecord = { id: newId, created_at: createdAt, ...hist, empresa_id: activeEmpId };
       try {
         const { data, error } = await (supabase.from("lavado_historial") as any).insert(newHistRecord).select().single();
         if (error) throw error;
@@ -1253,14 +1550,18 @@ export const db = {
       } catch (err) {
         console.warn("Utilizando Local Storage para inserción de lavado_historial.", err);
         const locals = getLocalHistorial();
-        locals.push(newHistRecord);
+        const { empresa_id, ...localRecord } = newHistRecord as any;
+        locals.push(localRecord);
         saveLocalHistorial(locals);
         return newHistRecord as LavadoHistorial;
       }
     },
     async delete(id: string) {
       try {
-        const { error } = await supabase.from("lavado_historial").delete().eq("id", id);
+        const { error } = await supabase.from("lavado_historial")
+          .delete()
+          .eq("id", id)
+          .eq("empresa_id", getActiveCompanyId());
         if (error) throw error;
       } catch (err) {
         console.warn("Utilizando Local Storage para eliminación en historial.", err);
@@ -1273,10 +1574,21 @@ export const db = {
   empresa_identidad: {
     async get() {
       try {
-        const { data, error } = await (supabase.from("empresa_identidad") as any).select("*");
+        let query = (supabase.from("empresa_identidad") as any).select("*");
+        const activeId = getActiveCompanyId();
+        if (activeId && activeId !== "default") {
+          query = query.eq("id", activeId);
+        }
+        const { data, error } = await query;
         if (error) throw error;
         if (data && data.length > 0) {
           return data[0] as EmpresaIdentidad;
+        }
+        if (activeId && activeId !== "default") {
+          const { data: fallbackData } = await (supabase.from("empresa_identidad") as any).select("*");
+          if (fallbackData && fallbackData.length > 0) {
+            return fallbackData[0] as EmpresaIdentidad;
+          }
         }
         return defaultEmpresa;
       } catch (err) {
@@ -1320,6 +1632,93 @@ export const db = {
         return result as EmpresaIdentidad;
       } catch (err) {
         console.error("Error saving company identity to Supabase:", err);
+        throw err;
+      }
+    }
+  },
+  perfiles: {
+    async getAll() {
+      try {
+        const { data, error } = await supabase.from("perfiles")
+          .select("*")
+          .eq("empresa_id", getActiveCompanyId())
+          .order("nombre");
+        if (error) throw error;
+        return data as Perfil[];
+      } catch (err) {
+        console.error("Error al obtener perfiles:", err);
+        return [];
+      }
+    },
+    async getByUserId(userId: string) {
+      try {
+        const { data, error } = await supabase.from("perfiles")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error) throw error;
+        return data as Perfil | null;
+      } catch (err) {
+        console.error("Error al obtener perfil por user_id:", err);
+        return null;
+      }
+    },
+    async getByEmail(email: string) {
+      try {
+        const { data, error } = await supabase.from("perfiles")
+          .select("*")
+          .eq("email", email.trim().toLowerCase())
+          .maybeSingle();
+        if (error) throw error;
+        return data as Perfil | null;
+      } catch (err) {
+        console.error("Error al obtener perfil por email:", err);
+        return null;
+      }
+    },
+    async create(perfil: Omit<Perfil, 'id' | 'created_at'> & { id?: string }) {
+      try {
+        const { data, error } = await (supabase.from("perfiles") as any)
+          .insert({
+            ...perfil,
+            email: perfil.email.trim().toLowerCase(),
+            empresa_id: perfil.empresa_id || getActiveCompanyId()
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return data as Perfil;
+      } catch (err) {
+        console.error("Error al crear perfil:", err);
+        throw err;
+      }
+    },
+    async update(id: string, perfil: Partial<Omit<Perfil, 'id' | 'created_at'>>) {
+      try {
+        const updateData = { ...perfil };
+        if (updateData.email) {
+          updateData.email = updateData.email.trim().toLowerCase();
+        }
+        const { data, error } = await (supabase.from("perfiles") as any)
+          .update(updateData)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data as Perfil;
+      } catch (err) {
+        console.error("Error al actualizar perfil:", err);
+        throw err;
+      }
+    },
+    async delete(id: string) {
+      try {
+        const { error } = await (supabase.from("perfiles") as any)
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+      } catch (err) {
+        console.error("Error al eliminar perfil:", err);
         throw err;
       }
     }

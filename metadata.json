@@ -1,5 +1,6 @@
 {
   "name": "Sistema de Mantenimiento",
-  "description": "Sistema profesional de gestión de mantenimiento para equipos de ordeñe.",
-  "requestFramePermissions": []
+  "description": "Sistema profesional SaaS de gestión de mantenimiento para equipos de ordeñe con roles y autenticación multiempresa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

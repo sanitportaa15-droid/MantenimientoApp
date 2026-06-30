@@ -3,12 +3,17 @@ import { db } from "../services/db";
 import { Cliente } from "../types/supabase";
 import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2, Edit2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../services/AuthContext";
 
 export default function ClientsPage() {
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const isReadOnly = profile?.rol === "Solo lectura";
+  const isTecnico = profile?.rol === "Técnico";
 
   useEffect(() => {
     loadClientes();
@@ -62,10 +67,12 @@ export default function ClientsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Clientes</h2>
           <p className="text-zinc-500 mt-1">Gestión de establecimientos y propietarios.</p>
         </div>
-        <Link to="/clientes/nuevo" className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20">
-          <Plus className="w-5 h-5" />
-          Nuevo Cliente
-        </Link>
+        {!isReadOnly && (
+          <Link to="/clientes/nuevo" className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20">
+            <Plus className="w-5 h-5" />
+            Nuevo Cliente
+          </Link>
+        )}
       </div>
 
       <div className="relative">
@@ -86,9 +93,11 @@ export default function ClientsPage() {
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
                 <Users className="text-emerald-400 w-6 h-6" />
               </div>
-              <Link to={`/tambos/nuevo?clienteId=${cliente.id}`} className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:underline">
-                + Agregar Tambo
-              </Link>
+              {!isReadOnly && (
+                <Link to={`/tambos/nuevo?clienteId=${cliente.id}`} className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:underline">
+                  + Agregar Tambo
+                </Link>
+              )}
             </div>
 
             <h3 className="text-xl font-bold mb-4 group-hover:text-emerald-400 transition-colors">{cliente.nombre}</h3>
@@ -117,21 +126,25 @@ export default function ClientsPage() {
             <div className="mt-6 pt-6 border-t border-white/5 flex justify-between items-center">
               <span className="text-xs text-zinc-500 font-medium">Registrado: {new Date(cliente.created_at).toLocaleDateString()}</span>
               <div className="flex items-center gap-2">
-                <Link 
-                  to={`/clientes/editar/${cliente.id}`}
-                  className="p-2 hover:bg-white/5 text-zinc-600 hover:text-emerald-400 rounded-lg transition-colors"
-                  title="Editar cliente"
-                >
-                  <Edit2 className="w-5 h-5" />
-                </Link>
-                <button 
-                  onClick={() => handleDelete(cliente.id, cliente.nombre)}
-                  disabled={deletingId === cliente.id}
-                  className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors disabled:opacity-50"
-                  title="Eliminar cliente"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                {!isReadOnly && (
+                  <Link 
+                    to={`/clientes/editar/${cliente.id}`}
+                    className="p-2 hover:bg-white/5 text-zinc-600 hover:text-emerald-400 rounded-lg transition-colors"
+                    title="Editar cliente"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </Link>
+                )}
+                {!isReadOnly && !isTecnico && (
+                  <button 
+                    onClick={() => handleDelete(cliente.id, cliente.nombre)}
+                    disabled={deletingId === cliente.id}
+                    className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors disabled:opacity-50"
+                    title="Eliminar cliente"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
                 <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
                   <ChevronRight className="w-5 h-5 text-zinc-600" />
                 </button>

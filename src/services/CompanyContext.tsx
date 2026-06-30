@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { db } from "./db";
+import { db, setActiveCompanyId } from "./db";
 import { EmpresaIdentidad } from "../types/supabase";
+import { useAuth } from "./AuthContext";
 
 interface CompanyContextType {
   company: EmpresaIdentidad;
@@ -24,6 +25,7 @@ const defaultEmpresa: EmpresaIdentidad = {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
+  const { profile } = useAuth();
   const [company, setCompany] = useState<EmpresaIdentidad>(defaultEmpresa);
   const [loading, setLoading] = useState(true);
 
@@ -31,6 +33,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await db.empresa_identidad.get();
       setCompany(data);
+      if (data && data.id) {
+        setActiveCompanyId(data.id);
+      }
     } catch (error) {
       console.error("Error loading company identity:", error);
     } finally {
@@ -45,6 +50,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         id: company.id === "default" ? undefined : company.id
       });
       setCompany(updated);
+      if (updated && updated.id) {
+        setActiveCompanyId(updated.id);
+      }
       return updated;
     } catch (error) {
       console.error("Error updating company identity:", error);
@@ -54,7 +62,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshCompany();
-  }, []);
+  }, [profile?.empresa_id]);
 
   useEffect(() => {
     if (company?.nombre) {
