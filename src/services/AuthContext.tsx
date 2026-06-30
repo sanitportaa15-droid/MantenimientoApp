@@ -149,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setProfile(p);
+      setLoading(false);
       console.log("Paso 17: fetchProfile finalizado con éxito. Perfil cargado:", p);
       
       // Sync active company and role in db services to make sure queries load correct tenant and enforce permissions
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Error fetching user profile:", err);
       setError(err?.message || "Ocurrió un error inesperado al verificar tu sesión.");
       setProfile(null);
+      setLoading(false);
     }
   };
 
@@ -237,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(currentUser);
           if (currentUser) {
-            setLoading(true);
+           
             await fetchProfile(currentUser);
           } else {
             setProfile(null);
