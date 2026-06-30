@@ -1788,6 +1788,163 @@ export const db = {
         throw err;
       }
     }
+  },
+  ordenesTrabajo: {
+    async getAll() {
+      const { data, error } = await supabase.from("ordenes_trabajo")
+        .select("*, clientes(nombre), tambos(nombre)")
+        .eq("empresa_id", getActiveCompanyId())
+        .order("numero", { ascending: false });
+      if (error) {
+        console.error("Error al obtener ordenes de trabajo:", error);
+        throw error;
+      }
+      return data as any[];
+    },
+    async getById(id: string) {
+      const { data, error } = await supabase.from("ordenes_trabajo")
+        .select("*, clientes(*), tambos(*)")
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .single();
+      if (error) {
+        console.error("Error al obtener orden de trabajo por ID:", error);
+        throw error;
+      }
+      return data as any;
+    },
+    async getItems(ordenId: string) {
+      const { data, error } = await supabase.from("orden_trabajo_items")
+        .select("*")
+        .eq("orden_id", ordenId)
+        .order("componente");
+      if (error) {
+        console.error("Error al obtener items de orden de trabajo:", error);
+        throw error;
+      }
+      return data as any[];
+    },
+    async create(orden: any, items: any[]) {
+      checkWritePermission();
+      // 1. Get next sequence number
+      const { data: existing, error: countError } = await supabase.from("ordenes_trabajo")
+        .select("numero")
+        .eq("empresa_id", getActiveCompanyId());
+      
+      let nextNum = 1;
+      if (existing && existing.length > 0) {
+        // Find highest number
+        const numbers = existing.map(o => {
+          const m = o.numero.match(/\d+/);
+          return m ? parseInt(m[0], 10) : 0;
+        });
+        nextNum = Math.max(...numbers, 0) + 1;
+      }
+      
+      const numero = `OT-${String(nextNum).padStart(4, "0")}`;
+
+      // 2. Insert order
+      const { data: createdOrden, error: ordenError } = await supabase.from("ordenes_trabajo")
+        .insert({
+          ...orden,
+          numero,
+          empresa_id: getActiveCompanyId(),
+          estado: orden.estado || "Pendiente"
+        })
+        .select()
+        .single();
+
+      if (ordenError) {
+        console.error("Error al crear orden de trabajo:", ordenError);
+        throw ordenError;
+      }
+
+      // 3. Insert items
+      if (items && items.length > 0) {
+        const itemsToInsert = items.map(item => ({
+          ...item,
+          orden_id: createdOrden.id
+        }));
+        const { error: itemsError } = await supabase.from("orden_trabajo_items")
+          .insert(itemsToInsert);
+        if (itemsError) {
+          console.error("Error al crear items de orden de trabajo:", itemsError);
+          // try to clean up order to avoid orphan records
+          await supabase.from("ordenes_trabajo").delete().eq("id", createdOrden.id);
+          throw itemsError;
+        }
+      }
+
+      return createdOrden;
+    },
+    async update(id: string, updates: any) {
+      checkWritePermission();
+      const { data, error } = await supabase.from("ordenes_trabajo")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
+      if (error) {
+        console.error("Error al actualizar orden de trabajo:", error);
+        throw error;
+      }
+      return data;
+    },
+    async updateItem(itemId: string, updates: any) {
+      checkWritePermission();
+      const { data, error } = await supabase.from("orden_trabajo_items")
+        .update(updates)
+        .eq("id", itemId)
+        .select()
+        .single();
+      if (error) {
+        console.error("Error al actualizar item de orden de trabajo:", error);
+        throw error;
+      }
+      return data;
+    },
+    async delete(id: string) {
+      checkDeletePermission();
+      const { error } = await supabase.from("ordenes_trabajo")
+        .delete()
+        .eq("id", id)
+        .eq("empresa_id", getActiveCompanyId());
+      if (error) {
+        console.error("Error al eliminar orden de trabajo:", error);
+        throw error;
+      }
+      return true;
+    },
+    async finalize(ordenId: string, itemsUpdates: { id: string, realizado: boolean, observaciones: string }[]) {
+      checkWritePermission();
+      
+      // Update each item first
+      for (const item of itemsUpdates) {
+        const { error: itemErr } = await supabase.from("orden_trabajo_items")
+          .update({ realizado: item.realizado, observaciones: item.observaciones })
+          .eq("id", item.id);
+        if (itemErr) {
+          console.error("Error al actualizar item para finalización:", itemErr);
+          throw itemErr;
+        }
+      }
+
+      // Update order status to Finalizada
+      const { data: updatedOrden, error: ordenErr } = await supabase.from("ordenes_trabajo")
+        .update({ estado: "Finalizada", updated_at: new Date().toISOString() })
+        .eq("id", ordenId)
+        .eq("empresa_id", getActiveCompanyId())
+        .select()
+        .single();
+
+      if (ordenErr) {
+        console.error("Error al finalizar orden:", ordenErr);
+        throw ordenErr;
+      }
+
+      return updatedOrden;
+    }
   }
 };
 

@@ -59,6 +59,17 @@ export default function TamboDetailPage() {
   const [isEditDateModalOpen, setIsEditDateModalOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<MaintenanceStatus | null>(null);
 
+  // Work Order generation states
+  const [isWorkOrderModalOpen, setIsWorkOrderModalOpen] = useState(false);
+  const [workOrderStep, setWorkOrderStep] = useState(1); // 1 = Config/Params, 2 = Preview
+  const [includeUpcoming, setIncludeUpcoming] = useState(true);
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
+  const [assignedTech, setAssignedTech] = useState("");
+  const [orderPriority, setOrderPriority] = useState("Media");
+  const [orderNotes, setOrderNotes] = useState("");
+  const [tecnicos, setTecnicos] = useState<any[]>([]);
+  const [isCreatingWorkOrder, setIsCreatingWorkOrder] = useState(false);
+
   // Technical Sheet Form State
   const [fichaForm, setFichaForm] = useState<Partial<FichaTecnica & { bajadas: number, vacas_en_ordene: number, ordenes_por_dia: number }>>({});
   const [isSavingFicha, setIsSavingFicha] = useState(false);
@@ -116,6 +127,13 @@ export default function TamboDetailPage() {
       setAllMaintTypes(allMaintTypesData);
       setTamboComponentes(tamboCompsData);
       setTamboInsumos(tamboInsumosData);
+
+      try {
+        const perfilesData = await db.perfiles.getAll();
+        setTecnicos(perfilesData || []);
+      } catch (err) {
+        console.error("Error loading perfiles for technicians:", err);
+      }
       
       const technicalData = {
         ...tamboData,
@@ -505,6 +523,17 @@ export default function TamboDetailPage() {
           >
             <FileText className="w-4 h-4" />
             Generar Reporte PDF
+          </button>
+          <button 
+            type="button"
+            onClick={() => {
+              setWorkOrderStep(1);
+              setIsWorkOrderModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold transition-colors"
+          >
+            <ClipboardList className="w-4 h-4" />
+            Generar Orden de Trabajo
           </button>
           <button 
             onClick={() => setIsModalOpen(true)}
@@ -905,6 +934,355 @@ export default function TamboDetailPage() {
             loadData();
           }}
         />
+      )}
+
+      {isWorkOrderModalOpen && tambo && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-white/10 rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-6">
+            
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <div className="flex items-center gap-3">
+                <ClipboardList className="w-6 h-6 text-emerald-400" />
+                <h3 className="text-xl font-bold text-white">Generar Orden de Trabajo</h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsWorkOrderModalOpen(false);
+                  setWorkOrderStep(1);
+                }}
+                className="text-zinc-500 hover:text-white transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Step indicators */}
+            <div className="flex items-center gap-4 text-xs font-mono border-b border-white/5 pb-4">
+              <span className={cn(
+                "px-2.5 py-1 rounded-lg font-bold",
+                workOrderStep === 1 ? "bg-emerald-500 text-black" : "bg-zinc-800 text-zinc-400"
+              )}>
+                1. Parámetros de Selección
+              </span>
+              <span className="text-zinc-600">→</span>
+              <span className={cn(
+                "px-2.5 py-1 rounded-lg font-bold",
+                workOrderStep === 2 ? "bg-emerald-500 text-black" : "bg-zinc-800 text-zinc-400"
+              )}>
+                2. Vista Previa de Documento
+              </span>
+            </div>
+
+            {/* Calculations of order items */}
+            {(() => {
+              const includedItems = statuses.filter(s => {
+                if (s.status === "verde" || s.status === "gris") return false;
+                if (onlyOverdue) {
+                  return s.status === "rojo";
+                }
+                if (s.status === "rojo") return true;
+                if (s.status === "amarillo") {
+                  return includeUpcoming;
+                }
+                return false;
+              }).map(s => ({
+                componente: s.tipo,
+                trabajo: s.tipo === "Cambio de pezoneras" ? "Sustitución de pezoneras" : `Mantenimiento preventivo de ${s.tipo}`,
+                prioridad: s.status === "rojo" ? "Alta" : "Media",
+                vencimiento: s.proximaFecha || null,
+                observaciones: s.status === "rojo" 
+                  ? `VENCIDO (Días excedidos: ${s.diasRestantes !== null ? Math.abs(s.diasRestantes) : ""})` 
+                  : `Próximo a vencer (${s.diasRestantes !== null ? s.diasRestantes : ""} días restantes)`
+              }));
+
+              if (workOrderStep === 1) {
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      
+                      {/* Configuration checks */}
+                      <div className="bg-[#151515] p-5 rounded-2xl border border-white/5 space-y-4">
+                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Filtros de Análisis</h4>
+                        
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={!onlyOverdue}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setOnlyOverdue(!checked);
+                            }}
+                            className="mt-1 h-4.5 w-4.5 rounded border-white/10 bg-black text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="text-sm font-semibold text-white">Incluir Próximos Vencimientos</span>
+                            <p className="text-xs text-zinc-500 mt-0.5">Analiza los mantenimientos que vencerán en los próximos 30 días.</p>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={onlyOverdue}
+                            onChange={(e) => setOnlyOverdue(e.target.checked)}
+                            className="mt-1 h-4.5 w-4.5 rounded border-white/10 bg-black text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="text-sm font-semibold text-white">Incluir únicamente Vencidos</span>
+                            <p className="text-xs text-zinc-500 mt-0.5">Excluye cualquier mantenimiento que aún esté vigente, enfocándose solo en lo atrasado.</p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Technical Assignment & Priority */}
+                      <div className="bg-[#151515] p-5 rounded-2xl border border-white/5 space-y-4">
+                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Asignación y Prioridad</h4>
+                        
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-400">Técnico Asignado</label>
+                          <select
+                            value={assignedTech}
+                            onChange={(e) => setAssignedTech(e.target.value)}
+                            className="w-full bg-black border border-white/5 rounded-xl px-3 py-2.5 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">-- No asignado (Elegir más tarde) --</option>
+                            {tecnicos.map(t => (
+                              <option key={t.id} value={t.nombre || t.email}>{t.nombre || t.email} ({t.rol || "Técnico"})</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs text-zinc-400">Prioridad General de la Orden</label>
+                          <select
+                            value={orderPriority}
+                            onChange={(e) => setOrderPriority(e.target.value)}
+                            className="w-full bg-black border border-white/5 rounded-xl px-3 py-2.5 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="Baja">Baja</option>
+                            <option value="Media">Media</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Urgente">Urgente</option>
+                          </select>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* General observations */}
+                    <div className="space-y-1">
+                      <label className="text-xs text-zinc-400">Observaciones o Notas Adicionales para el Técnico</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Escribe aquí las instrucciones de trabajo específicas, fallas recurrentes, o prioridades..."
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        className="w-full bg-black border border-white/5 rounded-2xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500 placeholder:text-zinc-600"
+                      />
+                    </div>
+
+                    {/* List of analyzed items included */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        Trabajos Analizados para Incluir ({includedItems.length})
+                      </h4>
+                      
+                      {includedItems.length === 0 ? (
+                        <div className="p-6 bg-[#151515] border border-white/5 rounded-2xl text-center space-y-2">
+                          <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto animate-pulse" />
+                          <p className="text-sm text-white font-bold">Sin elementos vencidos ni próximos a vencer</p>
+                          <p className="text-xs text-zinc-500">
+                            El estado de mantenimiento técnico para este tambo está completamente al día. No hay trabajos que requieran acción inmediata.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto space-y-2 border border-white/5 rounded-2xl p-3 bg-black/40">
+                          {includedItems.map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-[#121212] rounded-xl border border-white/5 text-xs">
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-white">{it.componente}</p>
+                                <p className="text-zinc-500">Trabajo: {it.trabajo}</p>
+                              </div>
+                              <div className="text-right space-y-0.5">
+                                <span className={cn(
+                                  "px-2 py-0.5 rounded text-[10px] font-bold",
+                                  it.prioridad === "Alta" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400"
+                                )}>
+                                  {it.prioridad}
+                                </span>
+                                <p className="text-[10px] text-zinc-500 mt-0.5">{it.observaciones}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer buttons */}
+                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/5">
+                      <button
+                        onClick={() => setIsWorkOrderModalOpen(false)}
+                        className="bg-zinc-950 hover:bg-zinc-900 border border-white/5 text-zinc-300 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        disabled={includedItems.length === 0}
+                        onClick={() => setWorkOrderStep(2)}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-black disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20"
+                      >
+                        Ver Vista Previa
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              }
+
+              // Step 2: Document Preview representation
+              return (
+                <div className="space-y-6">
+                  <div className="bg-white text-zinc-900 p-6 rounded-2xl shadow-xl border border-zinc-200 font-sans text-xs space-y-6 max-h-[50vh] overflow-y-auto">
+                    
+                    {/* Fake PDF header */}
+                    <div className="flex justify-between items-start border-b pb-4 border-zinc-200">
+                      <div>
+                        <h4 className="text-sm font-bold tracking-tight text-zinc-950 uppercase">{company.nombre || "GanPor"}</h4>
+                        <p className="text-[10px] text-zinc-500">Sistemas de Mantenimiento de Ordeño</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-zinc-950">ORDEN DE TRABAJO (PREVISUALIZACIÓN)</p>
+                        <p className="font-mono text-emerald-600 font-bold text-[10px] mt-0.5">NÚMERO: OT-AUTO</p>
+                        <p className="text-zinc-500 text-[10px]">Fecha: {formatDate(new Date().toISOString())}</p>
+                      </div>
+                    </div>
+
+                    {/* Fake PDF Details */}
+                    <div className="grid grid-cols-2 gap-4 text-[11px] bg-zinc-50 p-3 rounded-xl border border-zinc-200">
+                      <div>
+                        <p className="font-bold text-zinc-800">CLIENTE / PRODUCTOR:</p>
+                        <p className="font-bold text-zinc-950">{tambo.clientes.nombre}</p>
+                        <p className="text-zinc-500">Tel: {tambo.clientes.telefono || "-"}</p>
+                        <p className="text-zinc-500">Ubicación: {tambo.clientes.ubicacion || "-"}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-zinc-800">ESTABLECIMIENTO / TAMBO:</p>
+                        <p className="font-bold text-zinc-950">{tambo.nombre}</p>
+                        <p className="text-zinc-500">Bajadas (Unidades): {tambo.bajadas || "-"}</p>
+                        <p className="text-zinc-500">Técnico Asignado: <strong>{assignedTech || "No asignado aún"}</strong></p>
+                      </div>
+                    </div>
+
+                    {/* Fake PDF Items Table */}
+                    <div className="space-y-2">
+                      <p className="font-bold text-zinc-800 text-[11px]">TRABAJOS Y COMPONENTES REQUERIDOS:</p>
+                      <table className="w-full text-left border-collapse border border-zinc-200 rounded text-[10px]">
+                        <thead>
+                          <tr className="bg-zinc-100 border-b border-zinc-200 text-zinc-700 font-bold">
+                            <th className="p-2">Equipo / Componente</th>
+                            <th className="p-2">Trabajo Requerido</th>
+                            <th className="p-2">Prioridad</th>
+                            <th className="p-2">Vencimiento</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-200 text-zinc-800">
+                          {includedItems.map((it, idx) => (
+                            <tr key={idx}>
+                              <td className="p-2 font-bold">{it.componente}</td>
+                              <td className="p-2">{it.trabajo}</td>
+                              <td className="p-2 uppercase font-bold text-amber-600">{it.prioridad}</td>
+                              <td className="p-2 font-mono">{it.vencimiento ? formatDate(it.vencimiento) : "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Fake PDF Notes */}
+                    {orderNotes && (
+                      <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-zinc-700">
+                        <p className="font-bold text-zinc-800 mb-1 text-[10px] uppercase">Observaciones Adicionales:</p>
+                        <p className="text-zinc-600 leading-relaxed whitespace-pre-line">{orderNotes}</p>
+                      </div>
+                    )}
+
+                    {/* Fake PDF Signatures */}
+                    <div className="grid grid-cols-2 gap-8 pt-6">
+                      <div className="text-center space-y-2">
+                        <div className="border-b border-zinc-300 w-32 mx-auto h-6" />
+                        <p className="text-[10px] font-bold text-zinc-700">Firma del productor</p>
+                      </div>
+                      <div className="text-center space-y-2">
+                        <div className="border-b border-zinc-300 w-32 mx-auto h-6" />
+                        <p className="text-[10px] font-bold text-zinc-700">Firma del técnico</p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Actions footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                    <button
+                      disabled={isCreatingWorkOrder}
+                      onClick={() => setWorkOrderStep(1)}
+                      className="bg-zinc-950 hover:bg-zinc-900 border border-white/5 text-zinc-300 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                    >
+                      Volver y Modificar
+                    </button>
+                    
+                    <button
+                      disabled={isCreatingWorkOrder}
+                      onClick={async () => {
+                        try {
+                          setIsCreatingWorkOrder(true);
+                          
+                          const newOrderObj = {
+                            cliente_id: tambo.cliente_id,
+                            tambo_id: tambo.id,
+                            fecha: new Date().toISOString().split("T")[0],
+                            prioridad: orderPriority,
+                            tecnico_asignado: assignedTech || "No asignado",
+                            observaciones: orderNotes
+                          };
+
+                          const created = await db.ordenesTrabajo.create(newOrderObj, includedItems);
+                          
+                          setIsWorkOrderModalOpen(false);
+                          setWorkOrderStep(1);
+                          setOrderNotes("");
+                          setAssignedTech("");
+                          
+                          // Quick prompt to navigate directly
+                          if (confirm(`¡Orden de Trabajo generada con éxito!\n¿Desea abrir el detalle de la Orden de Trabajo para imprimirla o descargar el PDF?`)) {
+                            navigate(`/ordenes/${created.id}`);
+                          } else {
+                            loadData(); // reload status
+                          }
+                        } catch (err: any) {
+                          console.error("Error creating work order:", err);
+                          alert(err?.message || "Ocurrió un error al intentar crear la orden de trabajo en Supabase.");
+                        } finally {
+                          setIsCreatingWorkOrder(false);
+                        }
+                      }}
+                      className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-black px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                    >
+                      {isCreatingWorkOrder ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          Guardando en Supabase...
+                        </>
+                      ) : (
+                        "Confirmar y Generar Orden de Trabajo"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
       )}
     </div>
   );

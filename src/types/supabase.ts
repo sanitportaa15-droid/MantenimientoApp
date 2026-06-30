@@ -650,6 +650,88 @@ export interface Database {
           created_at?: string
         }
       }
+      ordenes_trabajo: {
+        Row: {
+          id: string
+          empresa_id: string
+          numero: string
+          cliente_id: string
+          tambo_id: string
+          fecha: string
+          estado: string
+          observaciones: string | null
+          prioridad: string
+          tecnico_asignado: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          empresa_id?: string
+          numero: string
+          cliente_id: string
+          tambo_id: string
+          fecha?: string
+          estado?: string
+          observaciones?: string | null
+          prioridad?: string
+          tecnico_asignado?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          empresa_id?: string
+          numero?: string
+          cliente_id?: string
+          tambo_id?: string
+          fecha?: string
+          estado?: string
+          observaciones?: string | null
+          prioridad?: string
+          tecnico_asignado?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      orden_trabajo_items: {
+        Row: {
+          id: string
+          orden_id: string
+          mantenimiento_id: string | null
+          componente: string
+          trabajo: string
+          vencimiento: string | null
+          prioridad: string
+          observaciones: string | null
+          realizado: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          orden_id: string
+          mantenimiento_id?: string | null
+          componente: string
+          trabajo: string
+          vencimiento?: string | null
+          prioridad?: string
+          observaciones?: string | null
+          realizado?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          orden_id?: string
+          mantenimiento_id?: string | null
+          componente?: string
+          trabajo?: string
+          vencimiento?: string | null
+          prioridad?: string
+          observaciones?: string | null
+          realizado?: boolean
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -658,6 +740,9 @@ export type Perfil = Database['public']['Tables']['perfiles']['Row'];
 
 export type LavadoConfiguracion = Database['public']['Tables']['lavado_configuraciones']['Row'];
 export type LavadoHistorial = Database['public']['Tables']['lavado_historial']['Row'];
+
+export type OrdenTrabajo = Database['public']['Tables']['ordenes_trabajo']['Row'];
+export type OrdenTrabajoItem = Database['public']['Tables']['orden_trabajo_items']['Row'];
 
 
 export type Cliente = Database['public']['Tables']['clientes']['Row'];

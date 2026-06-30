@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
 import { Tambo, Configuracion, TipoMantenimiento } from "../types/supabase";
-import { Droplets, Search, Plus, MapPin, User, Trash2, AlertTriangle, X } from "lucide-react";
+import { Droplets, Search, Plus, MapPin, User, Trash2, AlertTriangle, X, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { calculateMaintenanceStatus, getGeneralStatus, Status } from "../utils/calculations";
 import { cn } from "../utils/ui";
 
 export default function TambosPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tambos, setTambos] = useState<(Tambo & { clienteNombre: string, status: Status })[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [deletingTambo, setDeletingTambo] = useState<(Tambo & { clienteNombre: string }) | null>(null);
@@ -30,6 +31,7 @@ export default function TambosPage() {
   async function loadTambos() {
     try {
       setLoading(true);
+      setError(null);
       const [tambosData, configs, allMaintTypes, allMantenimientos] = await Promise.all([
         db.tambos.getAll(),
         db.configuracion.getAllWithHidden(),
@@ -53,8 +55,9 @@ export default function TambosPage() {
       });
 
       setTambos(tambosWithStatus);
-    } catch (error) {
-      console.error("Error loading tambos:", error);
+    } catch (err: any) {
+      console.error("Error loading tambos:", err);
+      setError(err?.message || "Error al intentar cargar los tambos. Por favor, verifica tu sesión o conexión.");
     } finally {
       setLoading(false);
     }
@@ -91,6 +94,26 @@ export default function TambosPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center max-w-md mx-auto p-8 bg-[#0f0f0f] border border-white/5 rounded-3xl space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20">
+          <AlertCircle className="w-6 h-6 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white mb-2">Error al cargar tambos</h3>
+          <p className="text-zinc-400 text-sm leading-relaxed">{error}</p>
+        </div>
+        <button 
+          onClick={loadTambos}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+        >
+          Reintentar consulta
+        </button>
       </div>
     );
   }

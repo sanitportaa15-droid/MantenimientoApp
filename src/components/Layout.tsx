@@ -16,7 +16,8 @@ import {
   Package,
   Sparkles,
   LogOut,
-  Shield
+  Shield,
+  ClipboardList
 } from "lucide-react";
 import { cn } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
@@ -44,6 +45,7 @@ export default function Layout({ children }: LayoutProps) {
   navItems.push(
     { name: "Tambos", path: "/tambos", icon: Droplets },
     { name: "Próximos", path: "/proximos", icon: Calendar },
+    { name: "Órdenes de Trabajo", path: "/ordenes", icon: ClipboardList },
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Lavado", path: "/lavado", icon: Sparkles },

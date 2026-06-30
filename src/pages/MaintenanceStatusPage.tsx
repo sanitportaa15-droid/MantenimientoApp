@@ -7,7 +7,8 @@ import {
   XCircle, 
   HelpCircle,
   Search,
-  Filter
+  Filter,
+  AlertCircle
 } from "lucide-react";
 import { db, normalizeMaintenanceName } from "../services/db";
 import { calculateMaintenanceStatus, Status } from "../utils/calculations";
@@ -51,12 +52,16 @@ export default function MaintenanceStatusPage() {
   const filterStatus = searchParams.get("status") as Status | null;
   
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function loadData() {
       try {
+        setLoading(true);
+        setError(null);
         const [tambos, configs, allMaintTypes, allMantenimientos] = await Promise.all([
           db.tambos.getAll(),
           db.configuracion.getAllWithHidden(),
@@ -91,8 +96,9 @@ export default function MaintenanceStatusPage() {
         }
 
         setData(allStatuses);
-      } catch (error) {
-        console.error("Error loading maintenance status data:", error);
+      } catch (err: any) {
+        console.error("Error loading maintenance status data:", err);
+        setError(err?.message || "Error al intentar cargar el estado de mantenimientos. Verifica tu conexión o vuelve a iniciar sesión.");
       } finally {
         setLoading(false);
       }
@@ -118,7 +124,7 @@ export default function MaintenanceStatusPage() {
       configSubscription.unsubscribe();
       maintTypesSubscription.unsubscribe();
     };
-  }, [filterStatus]);
+  }, [filterStatus, retryCount]);
 
   const filteredData = useMemo(() => {
     return data.filter(item => 
@@ -141,6 +147,26 @@ export default function MaintenanceStatusPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center max-w-md mx-auto p-8 bg-[#0f0f0f] border border-white/5 rounded-3xl space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20">
+          <AlertCircle className="w-6 h-6 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white mb-2">Error al cargar datos</h3>
+          <p className="text-zinc-400 text-sm leading-relaxed">{error}</p>
+        </div>
+        <button 
+          onClick={() => setRetryCount(prev => prev + 1)}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+        >
+          Reintentar consulta
+        </button>
       </div>
     );
   }

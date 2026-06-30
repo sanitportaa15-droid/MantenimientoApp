@@ -9,7 +9,8 @@ import {
   ArrowRight,
   HelpCircle,
   MessageSquare,
-  Wrench
+  Wrench,
+  AlertCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db, normalizeMaintenanceName } from "../services/db";
@@ -50,6 +51,8 @@ function getActiveMaintenanceNames(tamboId: string, configs: Configuracion[]): s
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [stats, setStats] = useState({
     clientes: 0,
     tambos: 0,
@@ -69,6 +72,8 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadDashboard() {
       try {
+        setLoading(true);
+        setError(null);
         const [clientes, tambos, configs, reclamos, allMaintTypes, allMantenimientos] = await Promise.all([
           db.clientes.getAll(),
           db.tambos.getAll(),
@@ -135,8 +140,9 @@ export default function Dashboard() {
 
         setRecentReclamos(reclamos.filter(r => r.estado !== ReclamoEstado.RESUELTO).slice(0, 3));
         setTambosList(tambosWithStatus);
-      } catch (error) {
-        console.error("Error loading dashboard:", error);
+      } catch (err: any) {
+        console.error("Error loading dashboard:", err);
+        setError(err?.message || "Error al cargar la información del panel. Comprueba tu conexión o vuelve a iniciar sesión.");
       } finally {
         setLoading(false);
       }
@@ -172,12 +178,32 @@ export default function Dashboard() {
       tambosSubscription.unsubscribe();
       reclamosSubscription.unsubscribe();
     };
-  }, []);
+  }, [retryCount]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center max-w-md mx-auto p-8 bg-[#0f0f0f] border border-white/5 rounded-3xl space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20">
+          <AlertCircle className="w-6 h-6 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white mb-2">Error al cargar el panel</h3>
+          <p className="text-zinc-400 text-sm leading-relaxed">{error}</p>
+        </div>
+        <button 
+          onClick={() => setRetryCount(prev => prev + 1)}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+        >
+          Reintentar consulta
+        </button>
       </div>
     );
   }

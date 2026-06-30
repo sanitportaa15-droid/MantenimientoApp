@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
 import { Cliente } from "../types/supabase";
-import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2, Edit2 } from "lucide-react";
+import { Users, Phone, Mail, MapPin, Plus, Search, ChevronRight, Trash2, Edit2, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../services/AuthContext";
 
 export default function ClientsPage() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -22,10 +23,12 @@ export default function ClientsPage() {
   async function loadClientes() {
     try {
       setLoading(true);
+      setError(null);
       const data = await db.clientes.getAll();
       setClientes(data);
-    } catch (error) {
-      console.error("Error loading clients:", error);
+    } catch (err: any) {
+      console.error("Error loading clients:", err);
+      setError(err?.message || "Error de conexión o sesión expirada al intentar cargar los clientes.");
     } finally {
       setLoading(false);
     }
@@ -56,6 +59,26 @@ export default function ClientsPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center max-w-md mx-auto p-8 bg-[#0f0f0f] border border-white/5 rounded-3xl space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20">
+          <AlertCircle className="w-6 h-6 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white mb-2">Error al cargar clientes</h3>
+          <p className="text-zinc-400 text-sm leading-relaxed">{error}</p>
+        </div>
+        <button 
+          onClick={loadClientes}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+        >
+          Reintentar consulta
+        </button>
       </div>
     );
   }

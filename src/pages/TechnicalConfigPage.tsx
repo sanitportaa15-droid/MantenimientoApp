@@ -25,7 +25,8 @@ import {
   ChevronRight,
   Droplets,
   Calendar,
-  Building
+  Building,
+  AlertCircle
 } from "lucide-react";
 import { cn, formatDate } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
@@ -36,6 +37,7 @@ type ConfigTab = "equipos" | "parametros" | "mantenimientos" | "reparaciones" | 
 export default function TechnicalConfigPage() {
   const [activeTab, setActiveTab] = useState<ConfigTab>("equipos");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Global Data states
   const [configs, setConfigs] = useState<Configuracion[]>([]);
@@ -71,6 +73,7 @@ export default function TechnicalConfigPage() {
   async function loadAllData() {
     try {
       setLoading(true);
+      setError(null);
       // Seed defaults
       await Promise.all([
         db.configuracion.seed(),
@@ -101,8 +104,9 @@ export default function TechnicalConfigPage() {
         values[c.id] = c.valor;
       });
       setEditValues(values);
-    } catch (error) {
-      console.error("Error loading technical config:", error);
+    } catch (err: any) {
+      console.error("Error loading technical config:", err);
+      setError(err?.message || "Error al cargar las configuraciones técnicas. Verifica tu conexión o vuelve a iniciar sesión.");
     } finally {
       setLoading(false);
     }
@@ -289,6 +293,26 @@ export default function TechnicalConfigPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center max-w-md mx-auto p-8 bg-[#0f0f0f] border border-white/5 rounded-3xl space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-400 border border-red-500/20">
+          <AlertCircle className="w-6 h-6 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white mb-2">Error de Configuración</h3>
+          <p className="text-zinc-400 text-sm leading-relaxed">{error}</p>
+        </div>
+        <button 
+          onClick={loadAllData}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+        >
+          Reintentar consulta
+        </button>
       </div>
     );
   }
