@@ -1148,7 +1148,7 @@ export default function TamboDetailPage() {
                     {/* Fake PDF header */}
                     <div className="flex justify-between items-start border-b pb-4 border-zinc-200">
                       <div>
-                        <h4 className="text-sm font-bold tracking-tight text-zinc-950 uppercase">{company.nombre || "GanPor"}</h4>
+                        <h4 className="text-sm font-bold tracking-tight text-zinc-950 uppercase">{company.nombre || "Sistema"}</h4>
                         <p className="text-[10px] text-zinc-500">Sistemas de Mantenimiento de Ordeño</p>
                       </div>
                       <div className="text-right">

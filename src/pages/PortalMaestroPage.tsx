@@ -1244,7 +1244,7 @@ export default function PortalMaestroPage() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-white">Superadministradores del Portal Maestro</h2>
-                    <p className="text-zinc-400 text-sm mt-1">Gestión de accesos y credenciales de los Superadministradores de GanPor SaaS.</p>
+                    <p className="text-zinc-400 text-sm mt-1">Gestión de accesos y credenciales de los Superadministradores del sistema SaaS.</p>
                   </div>
                   <button
                     onClick={() => {
@@ -1595,7 +1595,7 @@ export default function PortalMaestroPage() {
                 <input
                   type="email"
                   required
-                  placeholder="superadmin@ganpor.com"
+                  placeholder="superadmin@sistema.com"
                   value={superAdminEmail}
                   onChange={(e) => setSuperAdminEmail(e.target.value)}
                   className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"

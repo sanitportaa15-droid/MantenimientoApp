@@ -115,11 +115,11 @@ function AppContent() {
             <AlertCircle className="w-8 h-8" />
           </div>
           <h2 className="text-xl font-bold text-white mb-3">Suscripción Suspendida</h2>
-          <p className="text-zinc-400 text-sm mb-2 leading-relaxed">
-            La licencia de servicio para la empresa <strong className="text-white">{company?.nombre}</strong> se encuentra inactiva, suspendida o cancelada.
+          <p className="text-zinc-400 text-sm mb-4 leading-relaxed">
+            La licencia de servicio de su empresa se encuentra inactiva, suspendida o cancelada.
           </p>
-          <p className="text-zinc-500 text-xs mb-8">
-            Comuníquese con administración o el soporte técnico de GanPor para reactivar su cuenta y conservar su acceso.
+          <p className="text-zinc-500 text-sm mb-8 leading-relaxed">
+            Comuníquese con el administrador de su cuenta o con el soporte técnico del sistema para reactivar su licencia y recuperar el acceso.
           </p>
           <button
             onClick={() => logout()}

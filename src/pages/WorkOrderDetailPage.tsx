@@ -277,10 +277,12 @@ export default function WorkOrderDetailPage() {
             {company.logo_url ? (
               <img src={company.logo_url} alt={company.nombre} className="w-14 h-14 object-contain" />
             ) : (
-              <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-black font-extrabold text-xl">GP</div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-black font-extrabold text-xl">
+                {company.nombre?.slice(0, 2).toUpperCase() || "EM"}
+              </div>
             )}
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-950">{company.nombre || "GanPor"}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-zinc-950">{company.nombre || "Sistema"}</h1>
               <p className="text-xs text-zinc-500">Mantenimiento de Sistemas de Ordeño</p>
             </div>
           </div>
