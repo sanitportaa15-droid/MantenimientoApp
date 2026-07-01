@@ -44,7 +44,7 @@ import {
   Cell 
 } from "recharts";
 
-type TabType = "dashboard" | "empresas" | "licencias" | "usuarios" | "estadisticas" | "configuracion";
+type TabType = "dashboard" | "empresas" | "licencias" | "usuarios" | "estadisticas" | "superadmins";
 
 export default function PortalMaestroPage() {
   const { user, profile, logout } = useAuth();
@@ -147,6 +147,7 @@ export default function PortalMaestroPage() {
 
       // Count profiles per company
       profs.forEach(p => {
+        if (p.rol === "Superadmin") return; // Exclude superadmins from company stats
         if (p.empresa_id && statsMap[p.empresa_id]) {
           statsMap[p.empresa_id].usersCount += 1;
           
@@ -557,6 +558,8 @@ export default function PortalMaestroPage() {
   });
 
   const filteredProfiles = profiles.filter(p => {
+    // Exclude superadministrators from the global company users table
+    if (p.rol === "Superadmin") return false;
     const matchesSearch = p.nombre.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
                           p.email.toLowerCase().includes(userSearchQuery.toLowerCase());
     const matchesRole = roleFilter === "" || p.role === roleFilter || p.rol === roleFilter;
@@ -587,8 +590,8 @@ export default function PortalMaestroPage() {
               { id: "empresas", name: "Empresas", icon: Building2 },
               { id: "licencias", name: "Licencias y Planes", icon: Calendar },
               { id: "usuarios", name: "Usuarios Globales", icon: Users },
-              { id: "estadisticas", name: "Estadísticas", icon: BarChart3 },
-              { id: "configuracion", name: "Configuración", icon: Settings }
+              { id: "superadmins", name: "Superadministradores", icon: ShieldCheck },
+              { id: "estadisticas", name: "Estadísticas", icon: BarChart3 }
             ].map(item => {
               const isActive = activeTab === item.id;
               return (
@@ -1235,12 +1238,12 @@ export default function PortalMaestroPage() {
               </div>
             )}
 
-            {/* ==================== 6. TAB: CONFIGURACIÓN (SUPERADMINISTRADORES) ==================== */}
-            {activeTab === "configuracion" && (
+            {/* ==================== 6. TAB: SUPERADMINISTRADORES ==================== */}
+            {activeTab === "superadmins" && (
               <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Configuración del Portal Maestro</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-white">Superadministradores del Portal Maestro</h2>
                     <p className="text-zinc-400 text-sm mt-1">Gestión de accesos y credenciales de los Superadministradores de GanPor SaaS.</p>
                   </div>
                   <button

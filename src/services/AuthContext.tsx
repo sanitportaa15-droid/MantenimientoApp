@@ -193,7 +193,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         if (isSA) {
-          finalProfile = { ...finalProfile, rol: "Superadmin" as const, empresa_id: null };
+          // Self-heal: If in-database profile still has an enterprise or incorrect role, update it!
+          if (finalProfile.empresa_id !== null || finalProfile.rol !== "Superadmin") {
+            const healedProfile = { ...finalProfile, rol: "Superadmin" as const, empresa_id: null };
+            db.perfiles.update(finalProfile.id, { empresa_id: null, rol: "Superadmin" }).catch(err => {
+              console.error("Error auto-sanando perfil del Superadmin en base de datos:", err);
+            });
+            finalProfile = healedProfile;
+          } else {
+            finalProfile = { ...finalProfile, rol: "Superadmin" as const, empresa_id: null };
+          }
         }
       }
 
@@ -354,6 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
+      localStorage.removeItem("activeCompanyId");
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -486,6 +496,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setLoading(true);
     try {
+      localStorage.removeItem("activeCompanyId");
+      setActiveCompanyId("default");
       await supabase.auth.signOut();
       setUserAndRef(null);
       setProfileAndRef(null);
