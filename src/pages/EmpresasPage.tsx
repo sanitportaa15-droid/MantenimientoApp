@@ -19,7 +19,8 @@ import {
   RefreshCw,
   Clock,
   Layers,
-  Lock
+  Lock,
+  Users
 } from "lucide-react";
 
 // Temporary non-persistent Supabase client to register users without replacing current session
@@ -38,6 +39,9 @@ export default function EmpresasPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // SaaS metric stats per company
+  const [saasStats, setSaasStats] = useState<Record<string, { usersCount: number; tambosCount: number; clientesCount: number; lastAccess: string | null }>>({});
 
   // Modals / Forms States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -73,9 +77,58 @@ export default function EmpresasPage() {
     try {
       const data = await db.empresa_identidad.getAll();
       setCompanies(data);
+
+      // Load SaaS-wide stats for Superadmin
+      const allProfiles = await db.perfiles.getAllGlobal();
+      const allTambos = await db.tambos.getAllGlobal();
+      const allClientes = await db.clientes.getAllGlobal();
+
+      // We will group these stats by company id
+      const statsMap: Record<string, { usersCount: number; tambosCount: number; clientesCount: number; lastAccess: string | null }> = {};
+
+      // Initialize stats for each company
+      data.forEach(c => {
+        statsMap[c.id] = {
+          usersCount: 0,
+          tambosCount: 0,
+          clientesCount: 0,
+          lastAccess: null
+        };
+      });
+
+      // Count profiles & find latest access
+      allProfiles.forEach(p => {
+        if (p.empresa_id && statsMap[p.empresa_id]) {
+          statsMap[p.empresa_id].usersCount += 1;
+          
+          if (p.ultimo_acceso) {
+            const pAccess = new Date(p.ultimo_acceso);
+            const currentLastAccess = statsMap[p.empresa_id].lastAccess;
+            if (!currentLastAccess || pAccess > new Date(currentLastAccess)) {
+              statsMap[p.empresa_id].lastAccess = p.ultimo_acceso;
+            }
+          }
+        }
+      });
+
+      // Count tambos
+      allTambos.forEach(t => {
+        if (t.empresa_id && statsMap[t.empresa_id]) {
+          statsMap[t.empresa_id].tambosCount += 1;
+        }
+      });
+
+      // Count clientes
+      allClientes.forEach(cl => {
+        if (cl.empresa_id && statsMap[cl.empresa_id]) {
+          statsMap[cl.empresa_id].clientesCount += 1;
+        }
+      });
+
+      setSaasStats(statsMap);
     } catch (err: any) {
       console.error(err);
-      setError("No se pudieron cargar las empresas.");
+      setError("No se pudieron cargar las empresas o sus métricas estadísticas.");
     } finally {
       setLoading(false);
     }
@@ -323,6 +376,8 @@ export default function EmpresasPage() {
             <thead>
               <tr className="border-b border-white/5 bg-black/20 text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 <th className="p-4 pl-6">Empresa</th>
+                <th className="p-4">Métricas del Sistema</th>
+                <th className="p-4">Último Acceso</th>
                 <th className="p-4">Plan / Licencia</th>
                 <th className="p-4">Estado</th>
                 <th className="p-4">Vencimiento</th>
@@ -332,14 +387,14 @@ export default function EmpresasPage() {
             <tbody className="divide-y divide-white/5 text-sm text-zinc-300">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">
+                  <td colSpan={7} className="p-8 text-center text-zinc-500">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-500" />
-                    Cargando empresas...
+                    Cargando empresas y métricas del sistema...
                   </td>
                 </tr>
               ) : filteredCompanies.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-500">
+                  <td colSpan={7} className="p-8 text-center text-zinc-500">
                     No se encontraron empresas registradas.
                   </td>
                 </tr>
@@ -370,6 +425,37 @@ export default function EmpresasPage() {
                             <div className="text-xs text-zinc-500 mt-0.5 font-mono">ID: {c.id}</div>
                           </div>
                         </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col gap-1 text-xs">
+                          <div className="flex items-center gap-1.5 text-zinc-300">
+                            <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                            <span>{saasStats[c.id]?.usersCount || 0} Usuarios</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-zinc-300">
+                            <Building2 className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                            <span>{saasStats[c.id]?.tambosCount || 0} Tambos</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-zinc-300">
+                            <Layers className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                            <span>{saasStats[c.id]?.clientesCount || 0} Clientes</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {saasStats[c.id]?.lastAccess ? (
+                          <div className="flex flex-col gap-0.5 text-xs text-zinc-300 font-mono">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <span>{new Date(saasStats[c.id].lastAccess!).toLocaleDateString()}</span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 pl-4.5">
+                              {new Date(saasStats[c.id].lastAccess!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-500 font-mono">Sin accesos</span>
+                        )}
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">

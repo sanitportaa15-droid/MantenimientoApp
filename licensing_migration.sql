@@ -45,5 +45,8 @@ END $$;
 -- Permitir que empresa_id sea nullable para que el Superadministrador no tenga que pertenecer a una empresa
 ALTER TABLE perfiles ALTER COLUMN empresa_id DROP NOT NULL;
 
--- 3) REFRESCAR CACHÉ DE POSTGREST (OBLIGATORIO PARA SUPABASE)
+-- 3) AGREGAR COLUMNA DE ÚLTIMO ACCESO A LA TABLA perfiles
+ALTER TABLE perfiles ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMPTZ;
+
+-- 4) REFRESCAR CACHÉ DE POSTGREST (OBLIGATORIO PARA SUPABASE)
 NOTIFY pgrst, 'reload schema';

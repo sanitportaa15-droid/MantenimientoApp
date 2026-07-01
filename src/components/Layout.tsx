@@ -18,11 +18,13 @@ import {
   LogOut,
   Shield,
   ClipboardList,
-  Building2
+  Building2,
+  ArrowLeft
 } from "lucide-react";
 import { cn } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
 import { useAuth } from "../services/AuthContext";
+import { setActiveCompanyId } from "../services/db";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -31,8 +33,17 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
-  const { company } = useCompany();
-  const { profile, logout } = useAuth();
+  const { company, refreshCompany } = useCompany();
+  const { profile, isSuperAdmin, logout } = useAuth();
+
+  const handleExitInspection = async () => {
+    localStorage.removeItem("activeCompanyId");
+    setActiveCompanyId("default");
+    await refreshCompany();
+    window.location.href = "/admin";
+  };
+
+  const isInspecting = isSuperAdmin && company && company.id !== "default" && company.id !== "d1a58a74-9f93-4e8c-8c08-0123456789ab";
 
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -50,7 +61,7 @@ export default function Layout({ children }: LayoutProps) {
     navItems.push({ name: "Usuarios", path: "/usuarios", icon: Shield });
   }
 
-  if (profile?.rol === "Superadmin") {
+  if (profile?.rol === "Superadmin" && !isInspecting) {
     navItems.push({ name: "Empresas", path: "/empresas", icon: Building2 });
   }
 
@@ -60,7 +71,23 @@ export default function Layout({ children }: LayoutProps) {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans flex flex-col">
+      {isInspecting && (
+        <div className="bg-emerald-500 text-black px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-bold shrink-0 shadow-lg relative z-50">
+          <span className="flex items-center gap-2">
+            <Building2 className="w-4.5 h-4.5" />
+            <span>MODO INSPECCIÓN MULTIEMPRESA: Viendo datos de {company.nombre}</span>
+          </span>
+          <button
+            onClick={handleExitInspection}
+            className="bg-black hover:bg-zinc-900 text-white px-3 py-1.5 rounded-xl transition-all font-semibold flex items-center gap-1.5 text-xs shadow-md"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Volver al Portal Maestro
+          </button>
+        </div>
+      )}
+
       {/* Mobile Header */}
       <header className="lg:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#0f0f0f] sticky top-0 z-50">
         <div className="flex items-center gap-2">

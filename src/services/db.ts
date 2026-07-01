@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial, EmpresaIdentidad, Perfil } from "../types/supabase";
+import { Cliente, Tambo, Mantenimiento, Configuracion, Database, Reclamo, TipoReparacion, TipoMantenimiento, PrioridadReclamo, EstadoReclamo, ReclamoEstado, Insumo, FichaTecnica, Componente, TamboComponente, TamboInsumo, LavadoConfiguracion, LavadoHistorial, EmpresaIdentidad, Perfil, SuperAdministrador } from "../types/supabase";
 
 
 export function normalizeMaintenanceName(name: string): string {
@@ -117,6 +117,15 @@ export const db = {
       }
       return data as Cliente[];
     },
+    async getAllGlobal() {
+      const { data, error } = await supabase.from("clientes")
+        .select("id, empresa_id");
+      if (error) {
+        console.error("Error al obtener clientes global:", error);
+        throw error;
+      }
+      return data as any[];
+    },
     async getById(id: string) {
       const { data, error } = await supabase.from("clientes")
         .select("*")
@@ -174,6 +183,15 @@ export const db = {
         .order("nombre");
       if (error) {
         console.error("Error al obtener tambos:", error);
+        throw error;
+      }
+      return data as any[];
+    },
+    async getAllGlobal() {
+      const { data, error } = await (supabase.from("tambos") as any)
+        .select("id, empresa_id");
+      if (error) {
+        console.error("Error al obtener tambos global:", error);
         throw error;
       }
       return data as any[];
@@ -1717,7 +1735,23 @@ export const db = {
       if (error) throw error;
       return data as Perfil[];
     },
-    async createGlobal(perfil: Omit<Perfil, 'id' | 'created_at'> & { id?: string }) {
+    async getAllGlobal() {
+      const { data, error } = await supabase.from("perfiles")
+        .select("*")
+        .order("nombre");
+      if (error) throw error;
+      return data as Perfil[];
+    },
+    async updateUltimoAcceso(id: string) {
+      const { data, error } = await (supabase.from("perfiles") as any)
+        .update({ ultimo_acceso: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Perfil;
+    },
+    async createGlobal(perfil: Omit<Perfil, 'id' | 'created_at' | 'ultimo_acceso'> & { id?: string; ultimo_acceso?: string | null }) {
       const { data, error } = await (supabase.from("perfiles") as any)
         .insert({
           ...perfil,
@@ -1788,7 +1822,7 @@ export const db = {
         return null;
       }
     },
-    async create(perfil: Omit<Perfil, 'id' | 'created_at'> & { id?: string }) {
+    async create(perfil: Omit<Perfil, 'id' | 'created_at' | 'ultimo_acceso'> & { id?: string; ultimo_acceso?: string | null }) {
       try {
         console.log("Inside db.ts: create perfil:", perfil);
         console.time("Supabase - Query: create perfil");
@@ -1845,6 +1879,87 @@ export const db = {
         if (error) throw error;
       } catch (err) {
         console.error("Error al eliminar perfil:", err);
+        throw err;
+      }
+    }
+  },
+  super_administradores: {
+    async getByUserId(userId: string) {
+      try {
+        const { data, error } = await supabase.from("super_administradores")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("activo", true)
+          .maybeSingle();
+        if (error) throw error;
+        return data as SuperAdministrador | null;
+      } catch (err) {
+        console.error("Error al obtener superadministrador por user_id:", err);
+        return null;
+      }
+    },
+    async getByEmail(email: string) {
+      try {
+        const { data, error } = await supabase.from("super_administradores")
+          .select("*")
+          .eq("email", email.trim().toLowerCase())
+          .eq("activo", true)
+          .maybeSingle();
+        if (error) throw error;
+        return data as SuperAdministrador | null;
+      } catch (err) {
+        console.error("Error al obtener superadministrador por email:", err);
+        return null;
+      }
+    },
+    async getAll() {
+      try {
+        const { data, error } = await supabase.from("super_administradores")
+          .select("*")
+          .order("email");
+        if (error) throw error;
+        return data as SuperAdministrador[];
+      } catch (err) {
+        console.error("Error al obtener superadministradores:", err);
+        return [];
+      }
+    },
+    async create(email: string) {
+      try {
+        const { data, error } = await supabase.from("super_administradores")
+          .insert({ email: email.trim().toLowerCase(), activo: true })
+          .select()
+          .single();
+        if (error) throw error;
+        return data as SuperAdministrador;
+      } catch (err) {
+        console.error("Error al crear superadministrador:", err);
+        throw err;
+      }
+    },
+    async update(id: string, updates: Partial<SuperAdministrador>) {
+      try {
+        const { data, error } = await supabase.from("super_administradores")
+          .update(updates)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data as SuperAdministrador;
+      } catch (err) {
+        console.error("Error al actualizar superadministrador:", err);
+        throw err;
+      }
+    },
+    async delete(id: string) {
+      try {
+        const { error } = await supabase.from("super_administradores")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+        return true;
+      } catch (err) {
+        console.error("Error al eliminar superadministrador:", err);
         throw err;
       }
     }

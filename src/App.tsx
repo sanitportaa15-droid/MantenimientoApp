@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
@@ -26,10 +26,12 @@ import { AuthProvider, useAuth } from "./services/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import UsersPage from "./pages/UsersPage";
 import EmpresasPage from "./pages/EmpresasPage";
+import PortalMaestroPage from "./pages/PortalMaestroPage";
 
 function AppContent() {
-  const { user, profile, loading: authLoading, error, logout, retryFetchProfile } = useAuth();
+  const { user, profile, isSuperAdmin, loading: authLoading, error, logout, retryFetchProfile } = useAuth();
   const { company, loading: companyLoading } = useCompany();
+  const location = useLocation();
 
   if (authLoading || companyLoading) {
     return (
@@ -70,6 +72,28 @@ function AppContent() {
 
   if (!user) {
     return <AuthPage />;
+  }
+
+  const isInspecting = isSuperAdmin && company && company.id !== "default" && company.id !== "d1a58a74-9f93-4e8c-8c08-0123456789ab";
+
+  // Redirect non-Superadmin away from /admin
+  if (!isSuperAdmin && location.pathname.startsWith("/admin")) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Redirect Superadmin to /admin if logged in, not inspecting, and not already on /admin
+  if (isSuperAdmin && !isInspecting && !location.pathname.startsWith("/admin")) {
+    return <Navigate to="/admin" replace />;
+  }
+
+  // Render isolated Portal Maestro for Superadmin when not inspecting
+  if (isSuperAdmin && !isInspecting && location.pathname.startsWith("/admin")) {
+    return (
+      <Routes>
+        <Route path="/admin" element={<PortalMaestroPage />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
+      </Routes>
+    );
   }
 
   // SaaS License Suspension/Cancellation Guard

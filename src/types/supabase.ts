@@ -633,6 +633,29 @@ export interface Database {
           activa?: boolean
         }
       }
+      super_administradores: {
+        Row: {
+          id: string
+          user_id: string | null
+          email: string
+          activo: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          email: string
+          activo?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          email?: string
+          activo?: boolean
+          created_at?: string
+        }
+      }
       perfiles: {
         Row: {
           id: string
@@ -643,6 +666,7 @@ export interface Database {
           rol: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo: boolean
           created_at: string
+          ultimo_acceso: string | null
         }
         Insert: {
           id?: string
@@ -653,6 +677,7 @@ export interface Database {
           rol?: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo?: boolean
           created_at?: string
+          ultimo_acceso?: string | null
         }
         Update: {
           id?: string
@@ -663,6 +688,7 @@ export interface Database {
           rol?: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo?: boolean
           created_at?: string
+          ultimo_acceso?: string | null
         }
       }
       ordenes_trabajo: {
@@ -752,6 +778,7 @@ export interface Database {
 }
 
 export type Perfil = Database['public']['Tables']['perfiles']['Row'];
+export type SuperAdministrador = Database['public']['Tables']['super_administradores']['Row'];
 
 export type LavadoConfiguracion = Database['public']['Tables']['lavado_configuraciones']['Row'];
 export type LavadoHistorial = Database['public']['Tables']['lavado_historial']['Row'];

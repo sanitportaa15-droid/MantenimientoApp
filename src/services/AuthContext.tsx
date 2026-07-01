@@ -7,6 +7,7 @@ import { Perfil } from "../types/supabase";
 interface AuthContextType {
   user: User | null;
   profile: Perfil | null;
+  isSuperAdmin: boolean;
   loading: boolean;
   error: string | null;
   clearError: () => void;
@@ -34,6 +35,7 @@ const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, errorMessage: s
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Perfil | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +57,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     console.log("Paso 6: Iniciando fetchProfile para usuario ID:", u.id, "Email:", u.email);
     try {
+      let isSA = false;
+      try {
+        let superAdminRec = await db.super_administradores.getByUserId(u.id);
+        if (!superAdminRec && u.email) {
+          superAdminRec = await db.super_administradores.getByEmail(u.email);
+          if (superAdminRec && !superAdminRec.user_id && u.id) {
+            await db.super_administradores.update(superAdminRec.id, { user_id: u.id });
+          }
+        }
+        isSA = !!superAdminRec;
+      } catch (err) {
+        console.warn("No se pudo verificar el estado de Superadmin:", err);
+      }
+      setIsSuperAdmin(isSA);
+
       const getProfileTask = (async () => {
         // 1. Get profile by user_id
         console.log("Paso 7: Ejecutando db.perfiles.getByUserId para id:", u.id);
@@ -102,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 3. Fallback: If absolutely no profile exists, auto-provision a profile
         // connected to the existing "GanPor" company to ensure no broken state
-        if (!p && u.email) {
+        if (!p && u.email && !isSA) {
           let targetCompanyId = "d1a58a74-9f93-4e8c-8c08-0123456789ab"; // default ID
           try {
             console.log("Paso 13: Ejecutando consulta de empresa_identidad en fetchProfile");
@@ -156,21 +173,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })();
 
       const p = await getProfileTask;
+      let finalProfile: Perfil | null = p;
 
-      if (!p) {
-        throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
+      if (!finalProfile) {
+        if (isSA) {
+          finalProfile = {
+            id: "superadmin-profile",
+            user_id: u.id,
+            empresa_id: null,
+            nombre: u.email?.split("@")[0] || "Superadmin",
+            email: u.email || "",
+            rol: "Superadmin",
+            activo: true,
+            created_at: new Date().toISOString(),
+            ultimo_acceso: new Date().toISOString()
+          };
+        } else {
+          throw new Error("No se pudo recuperar ni crear un perfil para este usuario.");
+        }
+      } else {
+        if (isSA) {
+          finalProfile = { ...finalProfile, rol: "Superadmin" as const };
+        }
       }
 
-      setProfileAndRef(p);
+      setProfileAndRef(finalProfile);
       setLoading(false);
-      console.log("Paso 17: fetchProfile finalizado con éxito. Perfil cargado:", p);
+      console.log("Paso 17: fetchProfile finalizado con éxito. Perfil cargado:", finalProfile);
       
-      // Sync active company and role in db services to make sure queries load correct tenant and enforce permissions
-      if (p.empresa_id) {
-        setActiveCompanyId(p.empresa_id);
+      // Update last login timestamp asynchronously
+      if (finalProfile && finalProfile.id !== "superadmin-profile") {
+        db.perfiles.updateUltimoAcceso(finalProfile.id).catch(err => {
+          console.error("Error al actualizar ultimo_acceso del perfil:", err);
+        });
       }
-      if (p.rol) {
-        setActiveUserRole(p.rol);
+
+      // Sync active company and role in db services to make sure queries load correct tenant and enforce permissions
+      if (finalProfile && finalProfile.empresa_id) {
+        setActiveCompanyId(finalProfile.empresa_id);
+      } else if (isSA) {
+        const storedCompanyId = localStorage.getItem("activeCompanyId");
+        if (storedCompanyId) {
+          setActiveCompanyId(storedCompanyId);
+        } else {
+          setActiveCompanyId("default");
+        }
+      }
+      if (finalProfile && finalProfile.rol) {
+        setActiveUserRole(finalProfile.rol);
       }
     } catch (err: any) {
       console.log("Paso 18 - ERROR GLOBAL en fetchProfile:", err);
@@ -469,7 +519,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, error, clearError, login, signUp, logout, updateProfile, retryFetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, isSuperAdmin, loading, error, clearError, login, signUp, logout, updateProfile, retryFetchProfile }}>
       {children}
     </AuthContext.Provider>
   );
