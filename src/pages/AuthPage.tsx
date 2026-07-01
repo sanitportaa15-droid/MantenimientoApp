@@ -261,13 +261,6 @@ export default function AuthPage() {
             )}
           </button>
         </form>
-
-        {/* Footer info */}
-        <div className="text-center mt-6 pt-4 border-t border-white/5">
-          <p className="text-[11px] text-zinc-600 uppercase tracking-widest font-semibold">
-            GanPor Mantenimientos de Tambos
-          </p>
-        </div>
       </div>
     </div>
   );

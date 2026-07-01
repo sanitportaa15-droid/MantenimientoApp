@@ -36,13 +36,6 @@ export default function Layout({ children }: LayoutProps) {
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
     { name: "Clientes", path: "/clientes", icon: Users },
-  ];
-
-  if (profile?.rol === "Administrador") {
-    navItems.push({ name: "Usuarios", path: "/usuarios", icon: Shield });
-  }
-
-  navItems.push(
     { name: "Tambos", path: "/tambos", icon: Droplets },
     { name: "Próximos", path: "/proximos", icon: Calendar },
     { name: "Órdenes de Trabajo", path: "/ordenes", icon: ClipboardList },
@@ -50,7 +43,11 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Lavado", path: "/lavado", icon: Sparkles },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 }
-  );
+  ];
+
+  if (profile?.rol === "Administrador") {
+    navItems.push({ name: "Usuarios", path: "/usuarios", icon: Shield });
+  }
 
   // Close sidebar on mobile when route changes
   useEffect(() => {
@@ -82,10 +79,10 @@ export default function Layout({ children }: LayoutProps) {
       <div className="flex">
         {/* Sidebar */}
         <aside className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-[#0f0f0f] border-r border-white/5 transform transition-transform duration-300 lg:translate-x-0 lg:static lg:inset-auto",
+          "fixed inset-y-0 left-0 z-40 w-64 bg-[#0f0f0f] border-r border-white/5 transform transition-transform duration-300 lg:translate-x-0 lg:fixed lg:h-screen lg:overflow-y-auto",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}>
-          <div className="flex flex-col h-full p-6">
+          <div className="flex flex-col min-h-full p-6">
             <div className="hidden lg:flex items-center gap-3 mb-10">
               {company.logo_url ? (
                 <img src={company.logo_url} alt={company.nombre} className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1 shadow-lg shadow-emerald-500/10" />
@@ -100,32 +97,34 @@ export default function Layout({ children }: LayoutProps) {
               </div>
             </div>
 
-            <nav className="space-y-1 flex-1">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={cn(
-                      "flex items-center justify-between px-4 py-3 rounded-xl transition-all group",
-                      isActive 
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
-                        : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className={cn("w-5 h-5", isActive ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-300")} />
-                      <span className="font-medium">{item.name}</span>
-                    </div>
-                    {isActive && <ChevronRight className="w-4 h-4" />}
-                  </Link>
-                );
-              })}
+            <nav className="space-y-1">
+              {navItems
+                .filter((item) => item.name !== "Próximos")
+                .map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={cn(
+                        "flex items-center justify-between px-4 py-3 rounded-xl transition-all group",
+                        isActive 
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                          : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon className={cn("w-5 h-5", isActive ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-300")} />
+                        <span className="font-medium">{item.name}</span>
+                      </div>
+                      {isActive && <ChevronRight className="w-4 h-4" />}
+                    </Link>
+                  );
+                })}
             </nav>
 
             {profile && (
-              <div className="mt-auto pt-4 border-t border-white/5 space-y-4">
+              <div className="mt-6 pt-4 border-t border-white/5 space-y-4">
                 <div className="flex items-center gap-3 px-2">
                   <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0">
                     {profile.nombre.substring(0, 2).toUpperCase()}
@@ -152,7 +151,7 @@ export default function Layout({ children }: LayoutProps) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen lg:max-w-[calc(100vw-16rem)]">
+        <main className="flex-1 min-h-screen lg:ml-64 lg:max-w-[calc(100vw-16rem)]">
           <div className="p-4 lg:p-8 max-w-7xl mx-auto">
             {children}
           </div>
