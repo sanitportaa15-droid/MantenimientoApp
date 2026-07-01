@@ -89,6 +89,14 @@ export default function PortalMaestroPage() {
   // New superadmin state
   const [superAdminEmail, setSuperAdminEmail] = useState("");
 
+  // Edit User states
+  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<Perfil | null>(null);
+  const [editUserNombre, setEditUserNombre] = useState("");
+  const [editUserEmpresaId, setEditUserEmpresaId] = useState("");
+  const [editUserRol, setEditUserRol] = useState<'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'>("Solo lectura");
+  const [editUserActivo, setEditUserActivo] = useState(true);
+
   // UI Messages
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -370,6 +378,89 @@ export default function PortalMaestroPage() {
     } catch (err) {
       console.error(err);
       setError("Error al cambiar estado de usuario.");
+    }
+  };
+
+  const handleOpenEditUser = (userProfile: Perfil) => {
+    setSelectedUserProfile(userProfile);
+    setEditUserNombre(userProfile.nombre);
+    setEditUserEmpresaId(userProfile.empresa_id || "default");
+    setEditUserRol(userProfile.rol);
+    setEditUserActivo(userProfile.activo);
+    setIsEditUserModalOpen(true);
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserProfile) return;
+    setError(null);
+    setSuccess(null);
+
+    // Count active admins per company BEFORE edit
+    const activeAdminsBefore: Record<string, number> = {};
+    companies.forEach(c => {
+      activeAdminsBefore[c.id] = 0;
+    });
+    profiles.forEach(p => {
+      if (p.activo && p.rol === "Administrador" && p.empresa_id) {
+        activeAdminsBefore[p.empresa_id] = (activeAdminsBefore[p.empresa_id] || 0) + 1;
+      }
+    });
+
+    // Count active admins per company AFTER edit
+    const activeAdminsAfter: Record<string, number> = {};
+    companies.forEach(c => {
+      activeAdminsAfter[c.id] = 0;
+    });
+    profiles.forEach(p => {
+      const isThisUser = p.id === selectedUserProfile.id;
+      const prospectiveCompanyId = isThisUser ? (editUserEmpresaId === "default" ? null : editUserEmpresaId) : p.empresa_id;
+      const prospectiveRol = isThisUser ? editUserRol : p.rol;
+      const prospectiveActivo = isThisUser ? editUserActivo : p.activo;
+
+      if (prospectiveActivo && prospectiveRol === "Administrador" && prospectiveCompanyId) {
+        activeAdminsAfter[prospectiveCompanyId] = (activeAdminsAfter[prospectiveCompanyId] || 0) + 1;
+      }
+    });
+
+    // Count prospective profiles count per company to know which companies actually have users in prospective state
+    const prospectiveProfilesCountPerCompany: Record<string, number> = {};
+    companies.forEach(c => {
+      prospectiveProfilesCountPerCompany[c.id] = 0;
+    });
+    profiles.forEach(p => {
+      const isThisUser = p.id === selectedUserProfile.id;
+      const prospectiveCompanyId = isThisUser ? (editUserEmpresaId === "default" ? null : editUserEmpresaId) : p.empresa_id;
+      if (prospectiveCompanyId) {
+        prospectiveProfilesCountPerCompany[prospectiveCompanyId] = (prospectiveProfilesCountPerCompany[prospectiveCompanyId] || 0) + 1;
+      }
+    });
+
+    // Check if any company is left with 0 active admins while it has at least one user in the prospective state
+    for (const comp of companies) {
+      const hasProspectiveUsers = prospectiveProfilesCountPerCompany[comp.id] > 0;
+      const hasActiveAdminsAfter = activeAdminsAfter[comp.id] > 0;
+
+      if (hasProspectiveUsers && !hasActiveAdminsAfter) {
+        setError(`No se puede guardar: la empresa "${comp.nombre}" debe tener al menos un Administrador activo.`);
+        return;
+      }
+    }
+
+    try {
+      const updatedEmpresaId = editUserEmpresaId === "default" ? null : editUserEmpresaId;
+      await db.perfiles.update(selectedUserProfile.id, {
+        nombre: editUserNombre,
+        empresa_id: updatedEmpresaId,
+        rol: editUserRol,
+        activo: editUserActivo
+      });
+      setSuccess(`Usuario "${editUserNombre}" actualizado correctamente.`);
+      setIsEditUserModalOpen(false);
+      loadAllData();
+    } catch (err: any) {
+      console.error("Error editando usuario:", err);
+      setError(err.message || "Error al actualizar el usuario.");
     }
   };
 
@@ -998,10 +1089,12 @@ export default function PortalMaestroPage() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-white/5 bg-black/20 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                          <th className="p-4 pl-6">Usuario</th>
+                          <th className="p-4 pl-6">Nombre</th>
+                          <th className="p-4">Email</th>
                           <th className="p-4">Empresa</th>
                           <th className="p-4">Rol</th>
                           <th className="p-4">Estado</th>
+                          <th className="p-4">Fecha de Creación</th>
                           <th className="p-4">Último Acceso</th>
                           <th className="p-4 pr-6 text-right">Acciones</th>
                         </tr>
@@ -1009,7 +1102,7 @@ export default function PortalMaestroPage() {
                       <tbody className="divide-y divide-white/5 text-xs text-zinc-300">
                         {filteredProfiles.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="p-8 text-center text-zinc-500">
+                            <td colSpan={8} className="p-8 text-center text-zinc-500">
                               No se encontraron usuarios que coincidan con la búsqueda.
                             </td>
                           </tr>
@@ -1018,12 +1111,14 @@ export default function PortalMaestroPage() {
                             const comp = companies.find(c => c.id === p.empresa_id);
                             return (
                               <tr key={p.id} className="hover:bg-white/2 transition-colors animate-row">
-                                <td className="p-4 pl-6">
-                                  <div className="font-semibold text-white">{p.nombre}</div>
-                                  <div className="text-[10px] text-zinc-500 mt-0.5">{p.email}</div>
+                                <td className="p-4 pl-6 font-semibold text-white">
+                                  {p.nombre}
+                                </td>
+                                <td className="p-4 text-zinc-400 font-mono text-[11px]">
+                                  {p.email}
                                 </td>
                                 <td className="p-4">
-                                  <div className="text-zinc-300 font-medium">{comp ? comp.nombre : "Global / Superadmin"}</div>
+                                  <div className="text-zinc-300 font-medium">{comp ? comp.nombre : "Sin Empresa (Global)"}</div>
                                 </td>
                                 <td className="p-4">
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold font-mono ${
@@ -1038,24 +1133,36 @@ export default function PortalMaestroPage() {
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                                     p.activo ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
                                   }`}>
-                                    {p.activo ? "Activo" : "Bloqueado"}
+                                    {p.activo ? "Activo" : "Inactivo"}
                                   </span>
+                                </td>
+                                <td className="p-4 text-zinc-400 font-mono">
+                                  {p.created_at ? new Date(p.created_at).toLocaleDateString() : "Sin fecha"}
                                 </td>
                                 <td className="p-4 font-mono text-zinc-400">
                                   {p.ultimo_acceso ? new Date(p.ultimo_acceso).toLocaleString() : "Nunca"}
                                 </td>
                                 <td className="p-4 pr-6 text-right">
-                                  <button
-                                    onClick={() => handleToggleUserStatus(p)}
-                                    disabled={p.user_id === user?.id}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                      p.activo
-                                        ? "border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
-                                        : "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10"
-                                    } disabled:opacity-50`}
-                                  >
-                                    {p.activo ? "Bloquear" : "Activar"}
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => handleOpenEditUser(p)}
+                                      className="p-1.5 hover:bg-white/5 text-zinc-400 hover:text-white rounded-lg transition-all"
+                                      title="Editar Usuario"
+                                    >
+                                      <Edit2 className="w-4.5 h-4.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleToggleUserStatus(p)}
+                                      disabled={p.user_id === user?.id}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                        p.activo
+                                          ? "border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
+                                          : "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10"
+                                      } disabled:opacity-50`}
+                                    >
+                                      {p.activo ? "Bloquear" : "Activar"}
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1504,6 +1611,89 @@ export default function PortalMaestroPage() {
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold transition-all"
                 >
                   Pre-autorizar Email
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Modal: Editar Usuario Global */}
+      {isEditUserModalOpen && selectedUserProfile && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl w-full max-w-md p-6 overflow-hidden shadow-2xl animate-fade-in">
+            <h3 className="text-lg font-bold text-white mb-2">Editar Usuario</h3>
+            <p className="text-zinc-500 text-xs mb-4">
+              Modifica los datos globales del perfil de <strong className="text-white">{selectedUserProfile.email}</strong>.
+            </p>
+            <form onSubmit={handleUpdateUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={editUserNombre}
+                  onChange={(e) => setEditUserNombre(e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Empresa</label>
+                <select
+                  value={editUserEmpresaId}
+                  onChange={(e) => setEditUserEmpresaId(e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="default">Sin Empresa (Global)</option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Rol en el Sistema</label>
+                <select
+                  value={editUserRol}
+                  onChange={(e) => setEditUserRol(e.target.value as any)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="Administrador">Administrador</option>
+                  <option value="Supervisor">Supervisor</option>
+                  <option value="Técnico">Técnico</option>
+                  <option value="Solo lectura">Solo lectura</option>
+                  {selectedUserProfile.rol === "Superadmin" && (
+                    <option value="Superadmin">Superadmin (Sin Empresa)</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  id="edit-user-activo"
+                  checked={editUserActivo}
+                  onChange={(e) => setEditUserActivo(e.target.checked)}
+                  disabled={selectedUserProfile.user_id === user?.id}
+                  className="rounded border-zinc-800 text-emerald-500 focus:ring-0 focus:ring-offset-0 bg-zinc-900 disabled:opacity-50"
+                />
+                <label htmlFor="edit-user-activo" className="text-xs font-medium text-zinc-300">Usuario activo para login</label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setIsEditUserModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold transition-all"
+                >
+                  Guardar Cambios
                 </button>
               </div>
             </form>
