@@ -48,17 +48,38 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (profile?.rol === "Administrador") {
+      loadUsers();
+    }
+  }, [profile]);
 
-  if (profile?.rol !== "Administrador") {
+  if (!profile) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertTriangle className="w-16 h-16 text-amber-500 mb-4 animate-bounce" />
-        <h2 className="text-xl font-bold mb-2">Acceso Denegado</h2>
-        <p className="text-zinc-400 max-w-md">
-          Esta pantalla es exclusiva para administradores del sistema. Comuníquese con el administrador de su empresa para solicitar acceso.
-        </p>
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-zinc-500">Verificando permisos...</p>
+      </div>
+    );
+  }
+
+  if (profile.rol !== "Administrador") {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-3">Acceso Denegado</h2>
+          <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+            Esta sección es exclusiva para usuarios con rol de **Administrador**. Comuníquese con el administrador de su empresa para solicitar acceso.
+          </p>
+          <a
+            href="/"
+            className="inline-flex items-center justify-center w-full px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl shadow-lg shadow-emerald-500/10 transition-all text-sm"
+          >
+            Volver al Dashboard
+          </a>
+        </div>
       </div>
     );
   }
