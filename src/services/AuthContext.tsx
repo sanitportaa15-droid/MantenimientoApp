@@ -412,10 +412,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (existingInvite) {
         // Link pre-existing invitation
-        const updated = await db.perfiles.update(existingInvite.id, { 
-          user_id: userId,
-          nombre: nombre // update with their preferred name
-        });
+       const updated = await db.perfiles.update(existingInvite.id, {
+    user_id: userId,
+    nombre: nombre,
+    rol: existingInvite.rol,
+    empresa_id: existingInvite.empresa_id,
+    activo: true
+});
         setProfileAndRef(updated);
         if (updated && updated.empresa_id) {
           setActiveCompanyId(updated.empresa_id);
