@@ -21,15 +21,17 @@ import LavadoPage from "./pages/LavadoPage";
 import WorkOrdersPage from "./pages/WorkOrdersPage";
 import WorkOrderDetailPage from "./pages/WorkOrderDetailPage";
 import { db } from "./services/db";
-import { CompanyProvider } from "./services/CompanyContext";
+import { CompanyProvider, useCompany } from "./services/CompanyContext";
 import { AuthProvider, useAuth } from "./services/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import UsersPage from "./pages/UsersPage";
+import EmpresasPage from "./pages/EmpresasPage";
 
 function AppContent() {
-  const { user, loading, error, logout, retryFetchProfile } = useAuth();
+  const { user, profile, loading: authLoading, error, logout, retryFetchProfile } = useAuth();
+  const { company, loading: companyLoading } = useCompany();
 
-  if (loading) {
+  if (authLoading || companyLoading) {
     return (
       <div className="min-h-screen bg-[#070707] text-zinc-100 flex flex-col items-center justify-center gap-4 font-sans">
         <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-lg shadow-emerald-500/20" />
@@ -70,6 +72,42 @@ function AppContent() {
     return <AuthPage />;
   }
 
+  // SaaS License Suspension/Cancellation Guard
+  const isSuspended = profile?.rol !== "Superadmin" && (
+    company?.estado === "Suspendida" || 
+    company?.estado === "Cancelada" || 
+    company?.activa === false
+  );
+
+  if (isSuspended) {
+    return (
+      <div className="min-h-screen bg-[#070707] text-zinc-100 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden">
+        {/* Background Decorative Blobs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
+
+        <div className="max-w-md w-full bg-[#0f0f0f] border border-white/5 rounded-2xl p-8 text-center shadow-2xl relative z-10">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-3">Suscripción Suspendida</h2>
+          <p className="text-zinc-400 text-sm mb-2 leading-relaxed">
+            La licencia de servicio para la empresa <strong className="text-white">{company?.nombre}</strong> se encuentra inactiva, suspendida o cancelada.
+          </p>
+          <p className="text-zinc-500 text-xs mb-8">
+            Comuníquese con administración o el soporte técnico de GanPor para reactivar su cuenta y conservar su acceso.
+          </p>
+          <button
+            onClick={() => logout()}
+            className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold py-3 px-4 rounded-xl transition-all text-sm border border-white/5"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Layout>
       <Routes>
@@ -78,6 +116,7 @@ function AppContent() {
         <Route path="/clientes/nuevo" element={<NewClientPage />} />
         <Route path="/clientes/editar/:id" element={<NewClientPage />} />
         <Route path="/usuarios" element={<UsersPage />} />
+        <Route path="/empresas" element={<EmpresasPage />} />
         <Route path="/tambos" element={<TambosPage />} />
         <Route path="/tambos/nuevo" element={<NewTamboPage />} />
         <Route path="/tambos/editar/:id" element={<NewTamboPage />} />

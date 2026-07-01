@@ -48,7 +48,7 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    if (profile?.rol === "Administrador") {
+    if (profile?.rol === "Administrador" || profile?.rol === "Superadmin") {
       loadUsers();
     }
   }, [profile]);
@@ -62,7 +62,7 @@ export default function UsersPage() {
     );
   }
 
-  if (profile.rol !== "Administrador") {
+  if (profile.rol !== "Administrador" && profile.rol !== "Superadmin") {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4 text-center">
         <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">

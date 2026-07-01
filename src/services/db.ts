@@ -1629,6 +1629,11 @@ export const db = {
         telefono: empresa.telefono || '',
         direccion: empresa.direccion || '',
         sitio_web: empresa.sitio_web || '',
+        estado: empresa.estado || 'Activa',
+        plan: empresa.plan || 'Gratuito',
+        fecha_inicio: empresa.fecha_inicio || new Date().toISOString(),
+        fecha_vencimiento: empresa.fecha_vencimiento || null,
+        activa: empresa.activa !== undefined ? empresa.activa : true
       };
       
       try {
@@ -1665,9 +1670,64 @@ export const db = {
         console.error("Error saving company identity to Supabase:", err);
         throw err;
       }
+    },
+    async getAll() {
+      const { data, error } = await supabase.from("empresa_identidad").select("*").order("nombre");
+      if (error) throw error;
+      return data as EmpresaIdentidad[];
+    },
+    async create(empresa: Partial<EmpresaIdentidad>) {
+      const { data, error } = await (supabase.from("empresa_identidad") as any)
+        .insert({
+          nombre: empresa.nombre || 'Nueva Empresa',
+          logo_url: empresa.logo_url || null,
+          color_principal: empresa.color_principal || '#10b981',
+          color_secundario: empresa.color_secundario || '#06b6d4',
+          email: empresa.email || '',
+          telefono: empresa.telefono || '',
+          direccion: empresa.direccion || '',
+          sitio_web: empresa.sitio_web || '',
+          estado: empresa.estado || 'Activa',
+          plan: empresa.plan || 'Demo',
+          fecha_inicio: empresa.fecha_inicio || new Date().toISOString(),
+          fecha_vencimiento: empresa.fecha_vencimiento || null,
+          activa: empresa.activa !== undefined ? empresa.activa : true
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmpresaIdentidad;
+    },
+    async update(id: string, empresa: Partial<EmpresaIdentidad>) {
+      const { data, error } = await (supabase.from("empresa_identidad") as any)
+        .update(empresa)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmpresaIdentidad;
     }
   },
   perfiles: {
+    async getByEmpresaId(empresaId: string) {
+      const { data, error } = await supabase.from("perfiles")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .order("nombre");
+      if (error) throw error;
+      return data as Perfil[];
+    },
+    async createGlobal(perfil: Omit<Perfil, 'id' | 'created_at'> & { id?: string }) {
+      const { data, error } = await (supabase.from("perfiles") as any)
+        .insert({
+          ...perfil,
+          email: perfil.email.trim().toLowerCase()
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Perfil;
+    },
     async getAll() {
       try {
         console.log("Inside db.ts: getAll perfiles");

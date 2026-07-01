@@ -17,7 +17,8 @@ import {
   Sparkles,
   LogOut,
   Shield,
-  ClipboardList
+  ClipboardList,
+  Building2
 } from "lucide-react";
 import { cn } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
@@ -45,8 +46,12 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 }
   ];
 
-  if (profile?.rol === "Administrador") {
+  if (profile?.rol === "Administrador" || profile?.rol === "Superadmin") {
     navItems.push({ name: "Usuarios", path: "/usuarios", icon: Shield });
+  }
+
+  if (profile?.rol === "Superadmin") {
+    navItems.push({ name: "Empresas", path: "/empresas", icon: Building2 });
   }
 
   // Close sidebar on mobile when route changes

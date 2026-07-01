@@ -78,43 +78,8 @@ export default function AuthPage() {
             Sistema de Mantenimiento
           </h1>
           <p className="text-zinc-500 text-sm">
-            {isLogin 
-              ? "Inicia sesión para gestionar el mantenimiento de tus tambos" 
-              : "Crea tu cuenta profesional para tu empresa o únete a una"
-            }
+            Inicia sesión para gestionar el mantenimiento de tus tambos
           </p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="grid grid-cols-2 bg-black/40 p-1.5 rounded-xl mb-6 border border-white/5">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(true);
-              setError(null);
-            }}
-            className={`py-2 text-sm font-medium rounded-lg transition-all ${
-              isLogin 
-                ? "bg-emerald-500 text-black shadow-md" 
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(false);
-              setError(null);
-            }}
-            className={`py-2 text-sm font-medium rounded-lg transition-all ${
-              !isLogin 
-                ? "bg-emerald-500 text-black shadow-md" 
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            Registrarse
-          </button>
         </div>
 
         {/* Error Alert */}
@@ -135,28 +100,6 @@ export default function AuthPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name Field (Sign up only) */}
-          {!isLogin && (
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                Nombre Completo
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-500">
-                  <User className="w-5 h-5" />
-                </span>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Juan Pérez"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                />
-              </div>
-            </div>
-          )}
-
           {/* Email Field */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
@@ -204,48 +147,6 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {/* Multi-tenant Company Configuration (Sign up only) */}
-          {!isLogin && (
-            <div className="pt-2 border-t border-white/5 mt-4 space-y-4">
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={isNewCompany}
-                  onChange={(e) => setIsNewCompany(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-500 bg-zinc-900 border-white/10 focus:ring-0 focus:ring-offset-0"
-                />
-                <span className="text-sm font-medium text-zinc-300">
-                  ¿Registrar una nueva empresa?
-                </span>
-              </label>
-
-              {isNewCompany ? (
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    Nombre de la Empresa / Organización
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-500">
-                      <Building2 className="w-5 h-5" />
-                    </span>
-                    <input
-                      type="text"
-                      required={isNewCompany}
-                      placeholder="Ej. Tambo Don Luis"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="w-full bg-black/40 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white/5 rounded-xl p-3 text-xs text-zinc-400 leading-relaxed">
-                  Te registrarás como usuario. Si has recibido una invitación de tu administrador, asegúrate de usar el mismo correo electrónico para asociar tu perfil.
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Submit Button */}
           <button
             type="submit"
@@ -254,10 +155,8 @@ export default function AuthPage() {
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-            ) : isLogin ? (
-              "Iniciar Sesión"
             ) : (
-              "Registrarse"
+              "Iniciar Sesión"
             )}
           </button>
         </form>

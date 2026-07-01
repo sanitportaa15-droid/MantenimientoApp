@@ -592,6 +592,11 @@ export interface Database {
           direccion: string | null
           sitio_web: string | null
           created_at: string
+          estado: 'Activa' | 'Demo' | 'Suspendida' | 'Cancelada'
+          plan: string
+          fecha_inicio: string
+          fecha_vencimiento: string | null
+          activa: boolean
         }
         Insert: {
           id?: string
@@ -604,6 +609,11 @@ export interface Database {
           direccion?: string | null
           sitio_web?: string | null
           created_at?: string
+          estado?: 'Activa' | 'Demo' | 'Suspendida' | 'Cancelada'
+          plan?: string
+          fecha_inicio?: string
+          fecha_vencimiento?: string | null
+          activa?: boolean
         }
         Update: {
           id?: string
@@ -616,36 +626,41 @@ export interface Database {
           direccion?: string | null
           sitio_web?: string | null
           created_at?: string
+          estado?: 'Activa' | 'Demo' | 'Suspendida' | 'Cancelada'
+          plan?: string
+          fecha_inicio?: string
+          fecha_vencimiento?: string | null
+          activa?: boolean
         }
       }
       perfiles: {
         Row: {
           id: string
           user_id: string | null
-          empresa_id: string
+          empresa_id: string | null
           nombre: string
           email: string
-          rol: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          rol: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo: boolean
           created_at: string
         }
         Insert: {
           id?: string
           user_id?: string | null
-          empresa_id?: string
+          empresa_id?: string | null
           nombre: string
           email: string
-          rol?: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          rol?: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo?: boolean
           created_at?: string
         }
         Update: {
           id?: string
           user_id?: string | null
-          empresa_id?: string
+          empresa_id?: string | null
           nombre?: string
           email?: string
-          rol?: 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
+          rol?: 'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'
           activo?: boolean
           created_at?: string
         }
@@ -792,5 +807,10 @@ export interface EmpresaIdentidad {
   direccion: string | null;
   sitio_web: string | null;
   created_at?: string;
+  estado?: 'Activa' | 'Demo' | 'Suspendida' | 'Cancelada';
+  plan?: string;
+  fecha_inicio?: string;
+  fecha_vencimiento?: string | null;
+  activa?: boolean;
 }
 
