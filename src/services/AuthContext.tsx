@@ -193,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         if (isSA) {
-          finalProfile = { ...finalProfile, rol: "Superadmin" as const };
+          finalProfile = { ...finalProfile, rol: "Superadmin" as const, empresa_id: null };
         }
       }
 

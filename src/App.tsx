@@ -74,7 +74,7 @@ function AppContent() {
     return <AuthPage />;
   }
 
-  const isInspecting = isSuperAdmin && company && company.id !== "default" && company.id !== "d1a58a74-9f93-4e8c-8c08-0123456789ab";
+  const isInspecting = isSuperAdmin && company && company.id !== "default" && !!localStorage.getItem("activeCompanyId");
 
   // Redirect non-Superadmin away from /admin
   if (!isSuperAdmin && location.pathname.startsWith("/admin")) {
