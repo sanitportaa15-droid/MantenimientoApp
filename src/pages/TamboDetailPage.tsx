@@ -1437,18 +1437,16 @@ function buildWhatsAppMessage({
   clienteNombre,
   tamboNombre,
   equipos,
-  tipos,
+  mantenimientosDetalles,
   fechaStr,
-  proximaFechaStr,
   observacionesText,
   tecnicoNombre
 }: {
   clienteNombre: string;
   tamboNombre: string;
   equipos: string;
-  tipos: string;
+  mantenimientosDetalles: { tipo: string; proximaFecha: string | null | undefined }[];
   fechaStr: string;
-  proximaFechaStr: string;
   observacionesText: string;
   tecnicoNombre: string;
 }) {
@@ -1456,11 +1454,15 @@ function buildWhatsAppMessage({
   msg += `*Cliente:* ${clienteNombre}\n`;
   msg += `*Tambo:* ${tamboNombre}\n`;
   msg += `*Equipo:* ${equipos}\n`;
-  msg += `*Mantenimiento:* ${tipos}\n`;
-  msg += `*Fecha:* ${fechaStr}\n`;
-  if (proximaFechaStr) {
-    msg += `*Próximo mantenimiento:* ${proximaFechaStr}\n`;
-  }
+  msg += `*Fecha:* ${fechaStr}\n\n`;
+
+  msg += `Mantenimientos realizados y próximos vencimientos:\n\n`;
+  const listItems = mantenimientosDetalles.map(item => {
+    const pFecha = item.proximaFecha ? item.proximaFecha : "No definido";
+    return `* ${item.tipo}\n  → Próximo cambio: ${pFecha}`;
+  }).join("\n\n");
+  msg += `${listItems}\n\n`;
+
   msg += `*Estado:* Al día\n`;
   if (observacionesText) {
     msg += `\n*Observaciones:*\n${observacionesText}\n`;
@@ -1509,23 +1511,24 @@ function MaintenanceModal({
       const [year, month, day] = fecha.split('-').map(Number);
       const formattedFecha = formatDate(new Date(year, month - 1, day));
 
-      const tiposStr = savedRecords.map(r => r.tipo).join(", ");
       const equiposStr = savedRecords.map(r => guessEquipoForMantenimiento(r.tipo, tambo.ficha_tecnica)).join(", ");
-      const nextDatesStr = savedRecords.map(r => calculateNextDate(r.tipo, fecha, tambo, configs, allMaintTypes)).join(", ");
+      const mantenimientosDetalles = savedRecords.map(r => ({
+        tipo: r.tipo,
+        proximaFecha: calculateNextDate(r.tipo, fecha, tambo, configs, allMaintTypes)
+      }));
 
       const msg = buildWhatsAppMessage({
         clienteNombre: tambo.clientes?.nombre || "N/A",
         tamboNombre: tambo.nombre,
         equipos: equiposStr,
-        tipos: tiposStr,
+        mantenimientosDetalles,
         fechaStr: formattedFecha,
-        proximaFechaStr: nextDatesStr,
         observacionesText: observaciones.trim(),
         tecnicoNombre: tecnicoNombre
       });
       setCustomMessage(msg);
     }
-  }, [showShareConfirmation, savedRecords, tecnicoNombre]);
+  }, [showShareConfirmation, savedRecords, tecnicoNombre, fecha, configs, allMaintTypes]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
