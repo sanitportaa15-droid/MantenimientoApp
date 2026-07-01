@@ -23,7 +23,14 @@ import {
   Clock,
   ShieldAlert,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Send,
+  RotateCcw,
+  XCircle,
+  Copy,
+  ExternalLink,
+  CheckCircle,
+  Mail
 } from "lucide-react";
 import { useAuth } from "../services/AuthContext";
 import { useCompany } from "../services/CompanyContext";
@@ -96,6 +103,18 @@ export default function PortalMaestroPage() {
   const [editUserEmpresaId, setEditUserEmpresaId] = useState("");
   const [editUserRol, setEditUserRol] = useState<'Superadmin' | 'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'>("Solo lectura");
   const [editUserActivo, setEditUserActivo] = useState(true);
+
+  // Global user invitation states
+  const [isGlobalInviteModalOpen, setIsGlobalInviteModalOpen] = useState(false);
+  const [globalInviteNombre, setGlobalInviteNombre] = useState("");
+  const [globalInviteEmail, setGlobalInviteEmail] = useState("");
+  const [globalInviteRol, setGlobalInviteRol] = useState<'Administrador' | 'Supervisor' | 'Técnico' | 'Solo lectura'>("Solo lectura");
+  const [globalInviteEmpresaId, setGlobalInviteEmpresaId] = useState("default");
+  const [globalInviteSubmitting, setGlobalInviteSubmitting] = useState(false);
+
+  // Simulated email modal states
+  const [invitedUser, setInvitedUser] = useState<Perfil | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // UI Messages
   const [error, setError] = useState<string | null>(null);
@@ -519,6 +538,83 @@ export default function PortalMaestroPage() {
       console.error("Error eliminando superadmin:", err);
       setError("No se pudo eliminar el superadministrador.");
     }
+  };
+
+  // Global user invitation and reset handlers
+  const handleGlobalInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setGlobalInviteSubmitting(true);
+
+    if (!globalInviteNombre.trim() || !globalInviteEmail.trim()) {
+      setError("Por favor ingrese el nombre y correo electrónico.");
+      setGlobalInviteSubmitting(false);
+      return;
+    }
+
+    try {
+      const emailExists = await db.perfiles.getByEmail(globalInviteEmail.trim());
+      if (emailExists) {
+        throw new Error("Ya existe un usuario o invitación registrada con este correo electrónico.");
+      }
+
+      const targetEmpresaId = globalInviteEmpresaId === "default" ? null : globalInviteEmpresaId;
+
+      const newUser = await db.perfiles.create({
+        nombre: globalInviteNombre.trim(),
+        email: globalInviteEmail.trim().toLowerCase(),
+        rol: globalInviteRol as any,
+        activo: true,
+        empresa_id: targetEmpresaId,
+        user_id: null // Pending activation
+      });
+
+      setSuccess(`Invitación para "${globalInviteNombre.trim()}" creada con éxito.`);
+      setIsGlobalInviteModalOpen(false);
+      loadAllData();
+      
+      // Trigger simulated email mockup display
+      setInvitedUser(newUser);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Error al crear la invitación global.");
+    } finally {
+      setGlobalInviteSubmitting(false);
+    }
+  };
+
+  const handleCancelInvitation = async (id: string, name: string) => {
+    if (!window.confirm(`¿Seguro que desea cancelar la invitación de "${name}"? Se eliminará el registro pendiente.`)) {
+      return;
+    }
+    try {
+      await db.perfiles.delete(id);
+      setSuccess(`Invitación para "${name}" cancelada.`);
+      loadAllData();
+    } catch (err) {
+      console.error("Error al cancelar invitación:", err);
+      setError("No se pudo cancelar la invitación.");
+    }
+  };
+
+  const handleSendPasswordRecovery = async (userProfile: Perfil) => {
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(userProfile.email, {
+        redirectTo: `${window.location.origin}/auth?reset=true`
+      });
+      if (resetErr) throw resetErr;
+      setSuccess(`Se ha enviado la solicitud de recuperación oficial a ${userProfile.email}.`);
+    } catch (err: any) {
+      console.error("Error al enviar recuperación:", err);
+      setError("No se pudo enviar la solicitud de recuperación: " + (err.message || err));
+    }
+  };
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   // Charts data preparation
@@ -1052,9 +1148,25 @@ export default function PortalMaestroPage() {
             {/* ==================== 4. TAB: USUARIOS GLOBALES ==================== */}
             {activeTab === "usuarios" && (
               <div className="space-y-6 animate-fade-in">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-white">Usuarios Globales de SaaS</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Supervisión, deshabilitación y control de perfiles registrados de todas las empresas del ecosistema.</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-white">Usuarios Globales de SaaS</h2>
+                    <p className="text-zinc-400 text-sm mt-1">Supervisión, deshabilitación y control de perfiles registrados de todas las empresas del ecosistema.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setGlobalInviteNombre("");
+                      setGlobalInviteEmail("");
+                      setGlobalInviteRol("Solo lectura");
+                      setGlobalInviteEmpresaId("default");
+                      setIsGlobalInviteModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs rounded-xl shadow-lg shadow-emerald-500/10 transition-all self-start sm:self-auto"
+                    id="btn-global-invite-modal"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Invitar Usuario
+                  </button>
                 </div>
 
                 {/* Filters */}
@@ -1096,7 +1208,7 @@ export default function PortalMaestroPage() {
                           <th className="p-4">Email</th>
                           <th className="p-4">Empresa</th>
                           <th className="p-4">Rol</th>
-                          <th className="p-4">Estado</th>
+                          <th className="p-4">Estado de Activación</th>
                           <th className="p-4">Fecha de Creación</th>
                           <th className="p-4">Último Acceso</th>
                           <th className="p-4 pr-6 text-right">Acciones</th>
@@ -1112,8 +1224,9 @@ export default function PortalMaestroPage() {
                         ) : (
                           filteredProfiles.map(p => {
                             const comp = companies.find(c => c.id === p.empresa_id);
+                            const isPending = !p.user_id;
                             return (
-                              <tr key={p.id} className="hover:bg-white/2 transition-colors animate-row">
+                              <tr key={p.id} className="hover:bg-white/2 transition-colors animate-row" id={`row-global-user-${p.id}`}>
                                 <td className="p-4 pl-6 font-semibold text-white">
                                   {p.nombre}
                                 </td>
@@ -1133,10 +1246,29 @@ export default function PortalMaestroPage() {
                                   </span>
                                 </td>
                                 <td className="p-4">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                    p.activo ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 w-fit ${
+                                    isPending
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                      : p.activo
+                                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                      : "bg-red-500/10 text-red-400 border border-red-500/20"
                                   }`}>
-                                    {p.activo ? "Activo" : "Inactivo"}
+                                    {isPending ? (
+                                      <>
+                                        <Clock className="w-3 h-3" />
+                                        Pendiente de activación
+                                      </>
+                                    ) : p.activo ? (
+                                      <>
+                                        <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                        Activo
+                                      </>
+                                    ) : (
+                                      <>
+                                        <XCircle className="w-3 h-3 text-red-400" />
+                                        Inactivo
+                                      </>
+                                    )}
                                   </span>
                                 </td>
                                 <td className="p-4 text-zinc-400 font-mono">
@@ -1147,23 +1279,55 @@ export default function PortalMaestroPage() {
                                 </td>
                                 <td className="p-4 pr-6 text-right">
                                   <div className="flex items-center justify-end gap-2">
+                                    {isPending ? (
+                                      <>
+                                        <button
+                                          onClick={() => setInvitedUser(p)}
+                                          className="p-1.5 hover:bg-amber-500/10 text-amber-500 rounded-lg transition-all"
+                                          title="Ver / Reenviar invitación por correo"
+                                          id={`btn-global-resend-${p.id}`}
+                                        >
+                                          <Send className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleCancelInvitation(p.id, p.nombre)}
+                                          className="p-1.5 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 rounded-lg transition-all"
+                                          title="Cancelar Invitación"
+                                          id={`btn-global-cancel-${p.id}`}
+                                        >
+                                          <XCircle className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleSendPasswordRecovery(p)}
+                                          className="p-1.5 hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-400 rounded-lg transition-all"
+                                          title="Enviar recuperación de contraseña"
+                                          id={`btn-global-recover-${p.id}`}
+                                        >
+                                          <RotateCcw className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleToggleUserStatus(p)}
+                                          disabled={p.user_id === user?.id}
+                                          className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold border transition-all ${
+                                            p.activo
+                                              ? "border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
+                                              : "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10"
+                                          } disabled:opacity-50`}
+                                        >
+                                          {p.activo ? "Bloquear" : "Activar"}
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       onClick={() => handleOpenEditUser(p)}
                                       className="p-1.5 hover:bg-white/5 text-zinc-400 hover:text-white rounded-lg transition-all"
                                       title="Editar Usuario"
+                                      id={`btn-global-edit-${p.id}`}
                                     >
-                                      <Edit2 className="w-4.5 h-4.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleToggleUserStatus(p)}
-                                      disabled={p.user_id === user?.id}
-                                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                        p.activo
-                                          ? "border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10"
-                                          : "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10"
-                                      } disabled:opacity-50`}
-                                    >
-                                      {p.activo ? "Bloquear" : "Activar"}
+                                      <Edit2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </td>
@@ -1700,6 +1864,199 @@ export default function PortalMaestroPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Modal: Invitar Usuario Global */}
+      {isGlobalInviteModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl w-full max-w-md p-6 overflow-hidden shadow-2xl animate-fade-in relative">
+            <button
+              onClick={() => setIsGlobalInviteModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5 rounded-lg transition-all"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+            
+            <h3 className="text-lg font-bold text-white mb-2">Invitar Usuario Global</h3>
+            <p className="text-zinc-500 text-xs mb-4">
+              Crea un perfil de usuario en estado "Pendiente de activación" asignado a una empresa específica o global.
+            </p>
+            <form onSubmit={handleGlobalInvite} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Juan Pérez"
+                  value={globalInviteNombre}
+                  onChange={(e) => setGlobalInviteNombre(e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="usuario@empresa.com"
+                  value={globalInviteEmail}
+                  onChange={(e) => setGlobalInviteEmail(e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Asignar a Empresa</label>
+                <select
+                  value={globalInviteEmpresaId}
+                  onChange={(e) => setGlobalInviteEmpresaId(e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="default">Sin Empresa (Global)</option>
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">Rol en el Sistema</label>
+                <select
+                  value={globalInviteRol}
+                  onChange={(e) => setGlobalInviteRol(e.target.value as any)}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="Administrador">Administrador (Gestión total de la empresa)</option>
+                  <option value="Supervisor">Supervisor (Parámetros técnicos y configuraciones)</option>
+                  <option value="Técnico">Técnico (Ingreso de registros y mantenimientos)</option>
+                  <option value="Solo lectura">Solo lectura (Reportes y visualizaciones)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setIsGlobalInviteModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={globalInviteSubmitting}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                >
+                  {globalInviteSubmitting ? "Enviando..." : "Crear Invitación"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Modal: Buzón de Correo Simulado para Superadmin */}
+      {invitedUser && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-[#0b0c10] border border-amber-500/30 rounded-3xl shadow-2xl shadow-amber-500/5 overflow-hidden animate-fade-in">
+            {/* Header / Top Ribbon */}
+            <div className="bg-gradient-to-r from-amber-600/20 via-[#12131a] to-amber-600/20 px-6 py-4 border-b border-amber-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Mail className="w-5 h-5" />
+                <span className="text-xs font-bold uppercase tracking-wider font-mono">Portal Maestro - Buzón Simulado</span>
+              </div>
+              <button
+                onClick={() => setInvitedUser(null)}
+                className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-white/5 rounded-lg transition-all"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Simulated Envelope Details */}
+            <div className="p-6 bg-[#12131a]/80 space-y-4 text-xs text-zinc-400 border-b border-white/5">
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">De:</span>
+                <span className="text-zinc-300 font-medium">Portal Maestro SaaS &lt;no-reply@saas-mantenimiento.com&gt;</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">Para:</span>
+                <span className="text-emerald-400 font-mono font-medium">{invitedUser.email}</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">Asunto:</span>
+                <span className="text-white font-bold">🔑 Invitación para unirte al Sistema de Mantenimiento</span>
+              </div>
+            </div>
+
+            {/* Email Body Mockup */}
+            <div className="p-8 bg-black/60 flex flex-col items-center">
+              <div className="w-full max-w-md bg-[#0f111a] border border-white/5 rounded-2xl p-8 space-y-6 text-sm text-zinc-300 shadow-inner">
+                <div className="text-center pb-4 border-b border-white/5">
+                  <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <UserPlus className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Invitación del Administrador SaaS</h3>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  <p>Hola <strong>{invitedUser.nombre}</strong>,</p>
+                  <p className="leading-relaxed">
+                    Un Superadministrador del sistema te ha invitado a formar parte de nuestra plataforma de mantenimiento en la empresa: <strong>{
+                      companies.find(c => c.id === invitedUser.empresa_id)?.nombre || "Sin Empresa (Global)"
+                    }</strong> con el rol de <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-200 rounded font-mono">{invitedUser.rol}</span>.
+                  </p>
+                  <p>
+                    Para activar tu cuenta de usuario y definir tu contraseña segura de ingreso, haz clic en el siguiente enlace:
+                  </p>
+                </div>
+
+                <div className="text-center py-2">
+                  <a
+                    href={`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl shadow-lg shadow-amber-500/10 transition-all text-xs"
+                  >
+                    Establecer Contraseña
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 text-center text-[10px] text-zinc-500 leading-relaxed">
+                  Enlace manual de activación:
+                  <div className="mt-2 p-2 bg-black/50 border border-white/5 rounded-lg font-mono select-all break-all text-left text-zinc-400">
+                    {`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sandbox Actions Footer */}
+            <div className="p-6 bg-[#0f111a] border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-xs text-zinc-400 text-center sm:text-left max-w-sm">
+                <span className="text-amber-500 font-bold">Modo Sandbox Superadmin:</span> Permite activar la cuenta de manera rápida para pruebas de flujos.
+              </p>
+              
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-center">
+                <button
+                  onClick={() => handleCopyLink(`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 border border-white/5 text-zinc-300 font-medium text-xs rounded-xl hover:bg-zinc-800 transition-colors"
+                >
+                  {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Copiado" : "Copiar Enlace"}
+                </button>
+                <a
+                  href={`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-xs rounded-xl hover:bg-amber-500 hover:text-black transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Probar Activación
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

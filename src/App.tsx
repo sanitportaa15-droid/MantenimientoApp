@@ -70,7 +70,13 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace("#", "?"));
+  const isInvite = hashParams.get("type") === "invite" || hashParams.get("type") === "signup" || params.get("invite") === "true";
+  const isReset = hashParams.get("type") === "recovery" || params.get("reset") === "true";
+  const isAuthPath = location.pathname === "/auth" || window.location.pathname === "/auth";
+
+  if (!user || isInvite || isReset || isAuthPath) {
     return <AuthPage />;
   }
 

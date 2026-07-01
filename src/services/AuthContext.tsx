@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log("Paso 11: Ejecutando db.perfiles.update para vincular perfil id:", p.id);
             console.time("Supabase: db.perfiles.update (Link existing profile)");
             try {
-              p = await db.perfiles.update(p.id, { user_id: u.id, rol: "Administrador" });
+              p = await db.perfiles.update(p.id, { user_id: u.id, rol: p.rol || "Administrador" });
               console.log("Paso 12: db.perfiles.update resuelto con perfil:", p);
             } catch (error) {
               console.log("Paso 12 - ERROR: db.perfiles.update falló con:", error);

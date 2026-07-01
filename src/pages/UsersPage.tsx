@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../services/AuthContext";
 import { db } from "../services/db";
+import { supabase } from "../services/supabase";
 import { Perfil } from "../types/supabase";
 import { 
   UserPlus, 
@@ -13,7 +14,13 @@ import {
   Clock, 
   Search, 
   X, 
-  AlertTriangle 
+  AlertTriangle,
+  Send,
+  RotateCcw,
+  Copy,
+  ExternalLink,
+  CheckCircle2,
+  Lock
 } from "lucide-react";
 
 export default function UsersPage() {
@@ -21,6 +28,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<Perfil[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [empresaNombre, setEmpresaNombre] = useState("tu empresa");
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,54 +43,51 @@ export default function UsersPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Invitation simulated email modal
+  const [invitedUser, setInvitedUser] = useState<Perfil | null>(null);
+  const [copied, setCopied] = useState(false);
+  
+  // Success / notification alert state
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await db.perfiles.getAll();
-      setUsers(data);
-    } catch (error) {
-      console.error("Error al cargar usuarios:", error);
+      if (profile?.empresa_id) {
+        const u = await db.perfiles.getByEmpresaId(profile.empresa_id);
+        setUsers(u || []);
+      }
+    } catch (err) {
+      console.error("Error al cargar usuarios:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (profile?.rol === "Administrador" || profile?.rol === "Superadmin") {
-      loadUsers();
+    loadUsers();
+  }, [profile]);
+
+  useEffect(() => {
+    if (profile?.empresa_id) {
+      supabase.from("empresa_identidad")
+        .select("nombre")
+        .eq("id", profile.empresa_id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.nombre) {
+            setEmpresaNombre(data.nombre);
+          }
+        });
     }
   }, [profile]);
 
-  if (!profile) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-zinc-500">Verificando permisos...</p>
-      </div>
-    );
-  }
-
-  if (profile.rol !== "Administrador" && profile.rol !== "Superadmin") {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4 text-center">
-        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
-          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <AlertTriangle className="w-8 h-8" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-3">Acceso Denegado</h2>
-          <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
-            Esta sección es exclusiva para usuarios con rol de **Administrador**. Comuníquese con el administrador de su empresa para solicitar acceso.
-          </p>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center w-full px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl shadow-lg shadow-emerald-500/10 transition-all text-sm"
-          >
-            Volver al Dashboard
-          </a>
-        </div>
-      </div>
-    );
-  }
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => {
+      setNotification(null);
+    }, 4000);
+  };
 
   const openCreateModal = () => {
     setEditingUser(null);
@@ -98,7 +103,7 @@ export default function UsersPage() {
     setEditingUser(user);
     setNombre(user.nombre);
     setEmail(user.email);
-    setRol(user.rol);
+    setRol(user.rol as any);
     setActivo(user.activo);
     setErrorMsg(null);
     setIsModalOpen(true);
@@ -118,8 +123,7 @@ export default function UsersPage() {
     try {
       if (editingUser) {
         // Edit existing user profile
-        // Validation: Do not allow disabling oneself
-        if (editingUser.id === profile.id && !activo) {
+        if (editingUser.id === profile?.id && !activo) {
           throw new Error("No puede desactivar su propio usuario administrador.");
         }
         
@@ -129,26 +133,33 @@ export default function UsersPage() {
           rol,
           activo
         });
+        
+        showToast(`Usuario "${nombre.trim()}" actualizado correctamente.`);
+        setIsModalOpen(false);
+        loadUsers();
       } else {
-        // Invite new user (create pre-invite profile record)
-        // Check if email already exists
+        // Invite new user (create pre-invite profile record with user_id = null)
         const emailExists = await db.perfiles.getByEmail(email);
         if (emailExists) {
           throw new Error("Ya existe un usuario o invitación registrada con este correo electrónico.");
         }
 
-        await db.perfiles.create({
+        const newUser = await db.perfiles.create({
           nombre: nombre.trim(),
           email: email.trim().toLowerCase(),
           rol,
           activo,
-          empresa_id: profile.empresa_id,
-          user_id: null // User has not registered via auth yet
+          empresa_id: profile?.empresa_id || null,
+          user_id: null // Pending activation
         });
+
+        setIsModalOpen(false);
+        loadUsers();
+        
+        // Trigger the high-fidelity simulated invitation email display modal
+        setInvitedUser(newUser);
+        showToast(`Invitación creada para "${nombre.trim()}".`);
       }
-      
-      setIsModalOpen(false);
-      loadUsers();
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Ocurrió un error al guardar la información del usuario.");
@@ -158,7 +169,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (id === profile.id) {
+    if (id === profile?.id) {
       alert("No puede eliminarse a sí mismo.");
       return;
     }
@@ -166,26 +177,61 @@ export default function UsersPage() {
     if (confirm(`¿Está seguro de que desea eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) {
       try {
         await db.perfiles.delete(id);
+        showToast(`Usuario "${name}" eliminado.`);
         loadUsers();
       } catch (err) {
         console.error("Error al eliminar usuario:", err);
-        alert("Ocurrió un error al intentar eliminar el usuario.");
+        showToast("Ocurrió un error al intentar eliminar el usuario.", 'error');
+      }
+    }
+  };
+
+  const handleCancelInvitation = async (id: string, name: string) => {
+    if (confirm(`¿Está seguro de que desea cancelar la invitación de "${name}"? El colaborador no podrá activar su cuenta y el registro pendiente será eliminado.`)) {
+      try {
+        await db.perfiles.delete(id);
+        showToast(`Invitación para "${name}" cancelada exitosamente.`);
+        loadUsers();
+      } catch (err) {
+        console.error("Error al cancelar invitación:", err);
+        showToast("Ocurrió un error al intentar cancelar la invitación.", 'error');
       }
     }
   };
 
   const toggleUserActive = async (user: Perfil) => {
-    if (user.id === profile.id) {
+    if (user.id === profile?.id) {
       alert("No puede cambiar el estado de su propio usuario administrador.");
       return;
     }
 
     try {
       await db.perfiles.update(user.id, { activo: !user.activo });
+      showToast(`Estado de "${user.nombre}" actualizado.`);
       loadUsers();
     } catch (err) {
       console.error("Error al cambiar estado de usuario:", err);
+      showToast("Error al cambiar el estado del usuario.", 'error');
     }
+  };
+
+  const handleSendPasswordRecovery = async (user: Perfil) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/auth?reset=true`
+      });
+      if (error) throw error;
+      showToast(`Se ha enviado la solicitud oficial de restablecimiento a ${user.email}.`);
+    } catch (err: any) {
+      console.error("Error al enviar recuperación de contraseña:", err);
+      showToast(err.message || "Error al enviar recuperación de contraseña.", 'error');
+    }
+  };
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   // Filter users based on search query
@@ -197,6 +243,22 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-xl animate-fade-in ${
+          notification.type === 'success' 
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          {notification.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5" />
+          ) : (
+            <AlertTriangle className="w-5 h-5" />
+          )}
+          <span className="text-xs font-medium">{notification.message}</span>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -210,6 +272,7 @@ export default function UsersPage() {
         <button
           onClick={openCreateModal}
           className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-xl shadow-lg shadow-emerald-500/10 transition-all self-start sm:self-auto"
+          id="btn-invitar-usuario"
         >
           <UserPlus className="w-4 h-4" />
           Invitar Usuario
@@ -227,6 +290,7 @@ export default function UsersPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-[#0f0f0f] border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+          id="search-usuarios"
         />
       </div>
 
@@ -251,17 +315,17 @@ export default function UsersPage() {
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Usuario</th>
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Correo Electrónico</th>
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Rol</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Estado</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Estado de Activación</th>
                   <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredUsers.map((user) => {
                   const isPending = !user.user_id;
-                  const isMe = user.id === profile.id;
+                  const isMe = user.id === profile?.id;
                   
                   return (
-                    <tr key={user.id} className="hover:bg-white/[0.01] transition-colors">
+                    <tr key={user.id} className="hover:bg-white/[0.01] transition-colors" id={`row-usuario-${user.id}`}>
                       {/* Name column */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -314,21 +378,17 @@ export default function UsersPage() {
                       
                       {/* Status Column */}
                       <td className="px-6 py-4">
-                        <button
-                          disabled={isMe}
-                          onClick={() => toggleUserActive(user)}
-                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all ${
-                            isPending
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20 cursor-pointer"
-                              : user.activo
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 cursor-pointer"
-                              : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20 cursor-pointer"
-                          } ${isMe ? "cursor-not-allowed opacity-80" : ""}`}
-                        >
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border ${
+                          isPending
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : user.activo
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-red-500/10 text-red-400 border-red-500/20"
+                        }`}>
                           {isPending ? (
                             <>
                               <Clock className="w-3.5 h-3.5" />
-                              Invitación Pendiente
+                              Pendiente de activación
                             </>
                           ) : user.activo ? (
                             <>
@@ -341,19 +401,72 @@ export default function UsersPage() {
                               Inactivo
                             </>
                           )}
-                        </button>
+                        </span>
                       </td>
                       
                       {/* Actions Column */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Resend Invitation (Only for pending users) */}
+                          {isPending ? (
+                            <>
+                              <button
+                                onClick={() => setInvitedUser(user)}
+                                className="p-2 hover:bg-amber-500/10 rounded-lg text-amber-500 hover:text-amber-400 transition-colors"
+                                title="Ver / Reenviar invitación por correo"
+                                id={`btn-resend-${user.id}`}
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleCancelInvitation(user.id, user.nombre)}
+                                className="p-2 hover:bg-red-500/10 rounded-lg text-zinc-500 hover:text-red-400 transition-colors"
+                                title="Cancelar Invitación"
+                                id={`btn-cancel-${user.id}`}
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* Send Password Recovery (Only for active users) */}
+                              <button
+                                onClick={() => handleSendPasswordRecovery(user)}
+                                className="p-2 hover:bg-emerald-500/10 rounded-lg text-zinc-400 hover:text-emerald-400 transition-colors"
+                                title="Enviar recuperación de contraseña"
+                                id={`btn-recover-${user.id}`}
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                              
+                              {/* Toggle Active status */}
+                              <button
+                                disabled={isMe}
+                                onClick={() => toggleUserActive(user)}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  isMe 
+                                    ? "cursor-not-allowed opacity-30 text-zinc-600" 
+                                    : user.activo 
+                                    ? "hover:bg-red-500/10 text-zinc-400 hover:text-red-400" 
+                                    : "hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-400"
+                                }`}
+                                title={user.activo ? "Desactivar acceso" : "Activar acceso"}
+                                id={`btn-toggle-${user.id}`}
+                              >
+                                {user.activo ? <Lock className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                              </button>
+                            </>
+                          )}
+
                           <button
                             onClick={() => openEditModal(user)}
                             className="p-2 hover:bg-white/5 rounded-lg text-zinc-400 hover:text-zinc-100 transition-colors"
                             title="Editar usuario"
+                            id={`btn-edit-${user.id}`}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+                          
                           <button
                             disabled={isMe}
                             onClick={() => handleDelete(user.id, user.nombre)}
@@ -362,7 +475,8 @@ export default function UsersPage() {
                                 ? "cursor-not-allowed opacity-40" 
                                 : "hover:bg-red-500/10 hover:text-red-400"
                             }`}
-                            title={isMe ? "No puedes eliminarte a ti mismo" : "Eliminar usuario"}
+                            title={isMe ? "No puedes eliminarte a ti mismo" : "Eliminar de la base de datos"}
+                            id={`btn-delete-${user.id}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -394,7 +508,7 @@ export default function UsersPage() {
             <p className="text-xs text-zinc-400 mb-5">
               {editingUser 
                 ? "Modifica los datos del colaborador o actualiza sus permisos." 
-                : "Al invitar un usuario, se guardará su perfil para que se enlace cuando se registre con su correo."
+                : "Se creará el usuario en estado 'Pendiente de activación' y se generará su correo de invitación."
               }
             </p>
 
@@ -462,10 +576,10 @@ export default function UsersPage() {
                     id="activo-checkbox"
                     checked={activo}
                     onChange={(e) => setActivo(e.target.checked)}
-                    disabled={editingUser.id === profile.id}
+                    disabled={editingUser.id === profile?.id}
                     className="w-4 h-4 rounded text-emerald-500 bg-zinc-900 border-white/10 focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
-                  <label htmlFor="activo-checkbox" className="text-sm font-medium text-zinc-300 select-none cursor-pointer disabled:opacity-50">
+                  <label htmlFor="activo-checkbox" className="text-sm font-medium text-zinc-300 select-none cursor-pointer">
                     Usuario Activo (Permitir acceso al sistema)
                   </label>
                 </div>
@@ -493,6 +607,112 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Simulated Email Inbox Modal */}
+      {invitedUser && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-[#0b0c10] border border-amber-500/30 rounded-3xl shadow-2xl shadow-amber-500/5 overflow-hidden animate-fade-in">
+            {/* Header / Top Ribbon */}
+            <div className="bg-gradient-to-r from-amber-600/20 via-[#12131a] to-amber-600/20 px-6 py-4 border-b border-amber-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Mail className="w-5 h-5" />
+                <span className="text-xs font-bold uppercase tracking-wider font-mono">Buzón de Correo Simulado</span>
+              </div>
+              <button
+                onClick={() => setInvitedUser(null)}
+                className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-white/5 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Simulated Email Client Envelope */}
+            <div className="p-6 bg-[#12131a]/80 space-y-4 text-xs text-zinc-400 border-b border-white/5">
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">De:</span>
+                <span className="text-zinc-300 font-medium">Soporte del Sistema &lt;soporte@sistema-mantenimiento.com&gt;</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">Para:</span>
+                <span className="text-emerald-400 font-mono font-medium">{invitedUser.email}</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] gap-2">
+                <span className="font-semibold text-zinc-500">Asunto:</span>
+                <span className="text-white font-bold">🔑 Invitación para unirte a {empresaNombre} - Crear Contraseña</span>
+              </div>
+            </div>
+
+            {/* Email Body Mockup */}
+            <div className="p-8 bg-black/60 flex flex-col items-center">
+              <div className="w-full max-w-md bg-[#0f111a] border border-white/5 rounded-2xl p-8 space-y-6 text-sm text-zinc-300 shadow-inner">
+                {/* Email Header */}
+                <div className="text-center pb-4 border-b border-white/5">
+                  <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <UserPlus className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">¡Has sido invitado!</h3>
+                </div>
+
+                {/* Email Main Text */}
+                <div className="space-y-4">
+                  <p>Hola <strong>{invitedUser.nombre}</strong>,</p>
+                  <p className="leading-relaxed">
+                    Te han invitado a unirte a <strong>{empresaNombre}</strong> en el <strong>Sistema de Mantenimiento</strong> con el rol de <span className="px-2 py-0.5 bg-zinc-800 text-zinc-200 rounded text-xs font-mono">{invitedUser.rol}</span>.
+                  </p>
+                  <p>
+                    Para activar tu cuenta de usuario y definir tu contraseña de acceso, haz clic en el siguiente botón:
+                  </p>
+                </div>
+
+                {/* Email Button */}
+                <div className="text-center py-4">
+                  <a
+                    href={`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl shadow-lg shadow-amber-500/10 transition-all text-xs"
+                  >
+                    Crear Contraseña
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+
+                {/* Email Footer Disclaimer */}
+                <div className="pt-4 border-t border-white/5 text-center text-xs text-zinc-500 leading-relaxed">
+                  Si el botón no funciona, puedes copiar y pegar el siguiente enlace en tu navegador para realizar la activación:
+                  <div className="mt-2 p-2.5 bg-black/50 border border-white/5 rounded-lg text-[11px] font-mono select-all break-all text-left text-zinc-400">
+                    {`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sandbox Testing Action Footer */}
+            <div className="p-6 bg-[#0f111a] border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-xs text-zinc-400 text-center sm:text-left max-w-sm">
+                <span className="text-amber-500 font-bold">Modo Sandbox:</span> Utiliza estos botones rápidos para copiar el enlace o abrir directamente la activación.
+              </p>
+              
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-center">
+                <button
+                  onClick={() => handleCopyLink(`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 border border-white/5 text-zinc-300 font-medium text-xs rounded-xl hover:bg-zinc-800 transition-colors"
+                >
+                  {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Enlace Copiado" : "Copiar Enlace"}
+                </button>
+                <a
+                  href={`${window.location.origin}/auth?invite=true&email=${encodeURIComponent(invitedUser.email)}&nombre=${encodeURIComponent(invitedUser.nombre)}`}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-xs rounded-xl hover:bg-amber-500 hover:text-black transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Probar Activación
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}
