@@ -225,13 +225,37 @@ export default function AiDiagnosisPage() {
         marca: marcas.find(m => m.id === pulsador.marcaId)?.nombre || "Otra"
       };
 
-      const activeProvider = await db.configuracion.getByKey("ia_proveedor", "gemini");
+      let activeProvider = await db.configuracion.getByKey("ia_provider", "gemini");
+      if (!activeProvider || activeProvider === "ninguno") {
+        const legacyP = await db.configuracion.getByKey("ia_proveedor", "");
+        if (legacyP && legacyP !== "ninguno") activeProvider = legacyP as any;
+      }
+
       const activeGeminiKey = await db.configuracion.getByKey("ia_gemini_api_key", "");
       const activeOpenaiKey = await db.configuracion.getByKey("ia_openai_api_key", "");
-      const activeModel = await db.configuracion.getByKey("ia_modelo", "");
+      const activeGeminiModel = await db.configuracion.getByKey("ia_gemini_model", "");
+      const activeOpenaiModel = await db.configuracion.getByKey("ia_openai_model", "");
+      const legacyModel = await db.configuracion.getByKey("ia_modelo", "");
 
-      if (activeProvider !== "ninguno" && !activeModel) {
-        throw new Error("No hay un modelo de Inteligencia Artificial configurado en la base de datos. Por favor, ingrese a la sección de Configuración Técnica, actualice la lista de modelos y seleccione un modelo activo disponible.");
+      let selectedApiKey = "";
+      let selectedModel = "";
+
+      if (activeProvider === "gemini") {
+        selectedApiKey = activeGeminiKey;
+        selectedModel = activeGeminiModel || (legacyModel && !legacyModel.includes("gpt") ? legacyModel : "gemini-2.5-flash");
+      } else if (activeProvider === "openai") {
+        selectedApiKey = activeOpenaiKey;
+        selectedModel = activeOpenaiModel || (legacyModel && legacyModel.includes("gpt") ? legacyModel : "gpt-4o-mini");
+      }
+
+      if (activeProvider !== "ninguno") {
+        const providerName = activeProvider === "gemini" ? "Google Gemini" : "OpenAI";
+        if (!selectedApiKey) {
+          throw new Error(`No hay una API Key configurada para el proveedor activo (${providerName}). Por favor, ingrese a la sección de Configuración Técnica, proporcione una API Key para ${providerName} y guarde los cambios.`);
+        }
+        if (!selectedModel) {
+          throw new Error(`No hay un modelo seleccionado para el proveedor activo (${providerName}). Por favor, ingrese a la sección de Configuración Técnica, seleccione un modelo para ${providerName} y guarde los cambios.`);
+        }
       }
 
       if (activeProvider === "ninguno") {
@@ -352,8 +376,8 @@ export default function AiDiagnosisPage() {
           pulsadorSpecs: specs,
           additionalNotes,
           provider: activeProvider,
-          apiKey: activeProvider === "openai" ? activeOpenaiKey : activeGeminiKey,
-          model: activeModel,
+          apiKey: selectedApiKey,
+          model: selectedModel,
           tamboId: selectedTamboId,
           empresaId: getActiveCompanyId()
         }),

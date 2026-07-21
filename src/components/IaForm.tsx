@@ -20,10 +20,11 @@ import {
 import { cn } from "../utils/ui";
 
 export default function IaForm() {
-  const [provider, setProvider] = useState<"ninguno" | "gemini" | "openai">("ninguno");
+  const [provider, setProvider] = useState<"ninguno" | "gemini" | "openai">("gemini");
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [geminiModel, setGeminiModel] = useState("gemini-2.5-flash");
+  const [openaiModel, setOpenaiModel] = useState("gpt-4o-mini");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   
@@ -34,6 +35,15 @@ export default function IaForm() {
   const [availableModels, setAvailableModels] = useState<{ id: string; displayName: string }[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+
+  const activeModel = provider === "gemini" ? geminiModel : openaiModel;
+  const setActiveModel = (modelId: string) => {
+    if (provider === "gemini") {
+      setGeminiModel(modelId);
+    } else if (provider === "openai") {
+      setOpenaiModel(modelId);
+    }
+  };
 
   // Fetch available models from backend
   const fetchModels = async (prov: string, key: string, targetModel = "") => {
@@ -59,24 +69,22 @@ export default function IaForm() {
       if (response.ok && Array.isArray(data.models)) {
         setAvailableModels(data.models);
         if (data.models.length > 0) {
-          // If we passed a specific targetModel or have a selectedModel, check if it exists in loaded list
-          const activeTarget = targetModel || selectedModel;
+          const currentModel = prov === "gemini" ? geminiModel : openaiModel;
+          const activeTarget = targetModel || currentModel;
           const exists = data.models.some((m: any) => m.id === activeTarget);
           if (exists) {
-            setSelectedModel(activeTarget);
+            if (prov === "gemini") setGeminiModel(activeTarget);
+            else if (prov === "openai") setOpenaiModel(activeTarget);
           } else {
-            // The previously configured or selected model is NOT in the active models list
             const firstModel = data.models[0].id;
             const firstModelName = data.models[0].displayName || firstModel;
-            setSelectedModel(firstModel);
-            
-            // Inform the user that their model is obsolete or no longer exists
+            if (prov === "gemini") setGeminiModel(firstModel);
+            else if (prov === "openai") setOpenaiModel(firstModel);
+
             if (activeTarget && activeTarget !== "ninguno" && activeTarget !== "") {
-              alert(`El modelo anteriormente configurado o seleccionado (${activeTarget}) ya no está disponible o ha sido retirado por Google. Se ha seleccionado automáticamente el modelo activo disponible '${firstModelName}' (${firstModel}). Recuerde presionar "Guardar Configuración" para conservar este cambio.`);
+              alert(`El modelo anteriormente configurado o seleccionado (${activeTarget}) ya no está disponible. Se ha seleccionado automáticamente '${firstModelName}' (${firstModel}). Recuerde presionar "Guardar Configuración" para conservar este cambio.`);
             }
           }
-        } else {
-          setSelectedModel("");
         }
       } else {
         setModelsError(data.error || "Fallo al obtener la lista de modelos de IA de la API.");
@@ -93,28 +101,36 @@ export default function IaForm() {
   useEffect(() => {
     async function loadIaSettings() {
       try {
-        const [p, gk, ok, m] = await Promise.all([
-          db.configuracion.getByKey("ia_provider", "ninguno"),
+        const [p, gk, ok, gm, om, legacyM] = await Promise.all([
+          db.configuracion.getByKey("ia_provider", "gemini"),
           db.configuracion.getByKey("ia_gemini_api_key", ""),
           db.configuracion.getByKey("ia_openai_api_key", ""),
+          db.configuracion.getByKey("ia_gemini_model", ""),
+          db.configuracion.getByKey("ia_openai_model", ""),
           db.configuracion.getByKey("ia_modelo", "")
         ]);
         
-        // Migrate or check legacy key if ia_provider doesn't exist
         let resolvedProvider = p as "ninguno" | "gemini" | "openai";
-        if (resolvedProvider === "ninguno") {
+        if (resolvedProvider === ("ninguno" as any)) {
           const oldProvider = await db.configuracion.getByKey("ia_proveedor", "");
-          if (oldProvider) resolvedProvider = oldProvider as any;
+          if (oldProvider && oldProvider !== "ninguno") resolvedProvider = oldProvider as any;
         }
 
         setProvider(resolvedProvider);
         setGeminiKey(gk);
         setOpenaiKey(ok);
-        setSelectedModel(m);
+
+        const loadedGeminiModel = gm || (legacyM && !legacyM.includes("gpt") ? legacyM : "gemini-2.5-flash");
+        const loadedOpenaiModel = om || (legacyM && legacyM.includes("gpt") ? legacyM : "gpt-4o-mini");
+
+        setGeminiModel(loadedGeminiModel);
+        setOpenaiModel(loadedOpenaiModel);
 
         const activeKey = resolvedProvider === "gemini" ? gk : ok;
+        const activeM = resolvedProvider === "gemini" ? loadedGeminiModel : loadedOpenaiModel;
+
         if (resolvedProvider !== "ninguno" && activeKey) {
-          await fetchModels(resolvedProvider, activeKey, m);
+          await fetchModels(resolvedProvider, activeKey, activeM);
         }
       } catch (err) {
         console.error("Error al cargar configuración de IA:", err);
@@ -128,10 +144,9 @@ export default function IaForm() {
     setTestResult(null);
     setAvailableModels([]);
     const activeKey = newProvider === "gemini" ? geminiKey : openaiKey;
+    const activeM = newProvider === "gemini" ? geminiModel : openaiModel;
     if (newProvider !== "ninguno" && activeKey) {
-      fetchModels(newProvider, activeKey);
-    } else {
-      setSelectedModel("");
+      fetchModels(newProvider, activeKey, activeM);
     }
   };
 
@@ -140,12 +155,15 @@ export default function IaForm() {
     setIsSaving(true);
     setTestResult(null);
     try {
+      const selectedActiveModel = provider === "gemini" ? geminiModel : openaiModel;
       await Promise.all([
         db.configuracion.setByKey("ia_provider", provider, "Proveedor de Inteligencia Artificial para el Diagnóstico Técnico"),
         db.configuracion.setByKey("ia_proveedor", provider, "Proveedor de Inteligencia Artificial (Legacy)"),
         db.configuracion.setByKey("ia_gemini_api_key", geminiKey, "API Key de Google Gemini"),
         db.configuracion.setByKey("ia_openai_api_key", openaiKey, "API Key de OpenAI"),
-        db.configuracion.setByKey("ia_modelo", selectedModel, "Modelo de IA Seleccionado")
+        db.configuracion.setByKey("ia_gemini_model", geminiModel, "Modelo Seleccionado para Google Gemini"),
+        db.configuracion.setByKey("ia_openai_model", openaiModel, "Modelo Seleccionado para OpenAI"),
+        db.configuracion.setByKey("ia_modelo", selectedActiveModel, "Modelo de IA Seleccionado Activo")
       ]);
       alert("Configuración de Inteligencia Artificial guardada correctamente.");
     } catch (error) {
@@ -161,6 +179,7 @@ export default function IaForm() {
     setTestResult(null);
     try {
       const activeKey = provider === "gemini" ? geminiKey : openaiKey;
+      const activeM = provider === "gemini" ? geminiModel : openaiModel;
       
       if (provider === "ninguno") {
         setTestResult({
@@ -173,15 +192,15 @@ export default function IaForm() {
       if (!activeKey) {
         setTestResult({
           success: false,
-          message: "API Key inválida o vacía. Por favor ingrese su clave."
+          message: `API Key de ${provider === "gemini" ? "Google Gemini" : "OpenAI"} inválida o vacía. Por favor ingrese su clave.`
         });
         return;
       }
 
-      if (provider === "openai" && !selectedModel) {
+      if (!activeM) {
         setTestResult({
           success: false,
-          message: "Modelo no disponible. Seleccione o actualice la lista de modelos antes de realizar la prueba."
+          message: `Modelo de ${provider === "gemini" ? "Google Gemini" : "OpenAI"} no seleccionado. Actualice la lista de modelos y seleccione una opción.`
         });
         return;
       }
@@ -192,7 +211,7 @@ export default function IaForm() {
         body: JSON.stringify({
           provider,
           apiKey: activeKey,
-          model: selectedModel
+          model: activeM
         })
       });
 
@@ -205,15 +224,12 @@ export default function IaForm() {
           lastVerification: data.lastVerification
         });
         
-        // If we received updated models list during verification, update the local dropdown too
-        if (provider === "gemini" && data.models) {
+        if (data.models) {
           setAvailableModels(data.models);
-          
-          // Also automatically select the first valid model if none was selected, or if current was deleted
           if (data.models.length > 0) {
-            const exists = data.models.some((m: any) => m.id === selectedModel);
+            const exists = data.models.some((m: any) => m.id === activeM);
             if (!exists) {
-              setSelectedModel(data.models[0].id);
+              setActiveModel(data.models[0].id);
             }
           }
         }
@@ -379,7 +395,7 @@ export default function IaForm() {
                       }
                       setTestResult(null);
                       setAvailableModels([]);
-                      setSelectedModel("");
+                      setActiveModel("");
                     }}
                     disabled={!(provider === "gemini" ? geminiKey : openaiKey)}
                     className="bg-red-500/10 hover:bg-red-500/20 text-red-400 disabled:opacity-30 border border-red-500/20 rounded-xl px-4 flex items-center justify-center transition-all"
@@ -434,9 +450,9 @@ export default function IaForm() {
                 ) : (
                   <div className="relative">
                     <select
-                      value={selectedModel}
+                      value={activeModel}
                       onChange={(e) => {
-                        setSelectedModel(e.target.value);
+                        setActiveModel(e.target.value);
                         setTestResult(null);
                       }}
                       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 text-zinc-100 appearance-none cursor-pointer"

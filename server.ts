@@ -164,10 +164,7 @@ async function startServer() {
       `;
 
       if (provider === "openai") {
-        console.log("[AI Diagnosis Server] Procesando con OpenAI...");
-        
-        let openAiSuccess = false;
-        let openAiErrorMsg = "";
+        console.log("[AI Diagnosis Server] Procesando exclusivamente con OpenAI...");
 
         try {
           const checkOpenAiUrl = "https://api.openai.com/v1/models";
@@ -178,8 +175,8 @@ async function startServer() {
 
           if (!checkResp.ok) {
             const errData = await checkResp.json().catch(() => ({}));
-            openAiErrorMsg = errData.error?.message || `Status ${checkResp.status}`;
-            throw new Error(`Error de validación OpenAI: ${openAiErrorMsg}`);
+            const openAiErrorMsg = errData.error?.message || `Status ${checkResp.status}`;
+            throw new Error(`Error de autenticación/validación OpenAI: ${openAiErrorMsg}`);
           }
 
           const modelsData = await checkResp.json();
@@ -187,7 +184,7 @@ async function startServer() {
           const exists = modelsList.some((m: any) => m.id === model);
 
           if (!exists) {
-            throw new Error(`El modelo configurado '${model}' no existe en la API de OpenAI.`);
+            throw new Error(`El modelo seleccionado '${model}' no está disponible en la cuenta de OpenAI.`);
           }
 
           const endpoint = "https://api.openai.com/v1/chat/completions";
@@ -218,12 +215,12 @@ async function startServer() {
 
           if (!ocrResponse.ok) {
             const errData = await ocrResponse.json().catch(() => ({}));
-            throw new Error(errData.error?.message || `Status OpenAI OCR ${ocrResponse.status}`);
+            throw new Error(errData.error?.message || `Error en servicio OpenAI OCR (HTTP ${ocrResponse.status})`);
           }
 
           const ocrData = await ocrResponse.json();
           const ocrText = ocrData.choices?.[0]?.message?.content;
-          if (!ocrText) throw new Error("Sin respuesta OCR de OpenAI.");
+          if (!ocrText) throw new Error("Respuesta vacía al realizar OCR con OpenAI.");
           const ocrResults = JSON.parse(ocrText.trim());
 
           // STEP 2: DETERMINISTIC ISO RULES ENGINE
@@ -244,7 +241,7 @@ async function startServer() {
                 { role: "system", content: reportSystemInstruction },
                 {
                   role: "user",
-                  content: `Redacta el informe técnico utilizando estrictamente esta información del motor de reglas ISO y mediciones:
+                  content: `Redacta el informe técnico utilizando strictly esta información del motor de reglas ISO y mediciones:
                   Mediciones extraídas: ${JSON.stringify(ocrResults)}
                   Evaluación del motor de reglas ISO: ${JSON.stringify(rulesEngineOutput)}
                   Especificaciones de fábrica: ${specsString}`
@@ -256,12 +253,12 @@ async function startServer() {
 
           if (!reportResponse.ok) {
             const errData = await reportResponse.json().catch(() => ({}));
-            throw new Error(errData.error?.message || `Status OpenAI Report ${reportResponse.status}`);
+            throw new Error(errData.error?.message || `Error en servicio OpenAI Informe (HTTP ${reportResponse.status})`);
           }
 
           const reportData = await reportResponse.json();
           const reportText = reportData.choices?.[0]?.message?.content;
-          if (!reportText) throw new Error("Sin informe narrativo de OpenAI.");
+          if (!reportText) throw new Error("Respuesta vacía al generar el informe con OpenAI.");
           const reportResults = JSON.parse(reportText.trim());
 
           const finalMergedResult = {
@@ -294,22 +291,23 @@ async function startServer() {
           return res.json(finalMergedResult);
 
         } catch (openAiErr: any) {
-          console.warn(`[AI Diagnosis Server] OpenAI no pudo completar la solicitud (${openAiErr.message}). Redirigiendo automáticamente a Google Gemini como fallback...`);
+          console.error(`[AI Diagnosis Server] Error en el proveedor OpenAI: ${openAiErr.message}`);
+          return res.status(400).json({
+            error: `Error al procesar con OpenAI: ${openAiErr.message}. Puede modificar manualmente el proveedor de IA desde Configuración Técnica.`
+          });
         }
       }
 
-      // Google Gemini Pipeline (Direct or Fallback)
-      const geminiApiKey = (provider === "gemini" && apiKey) ? apiKey : (process.env.GEMINI_API_KEY || "");
-      
-      if (geminiApiKey) {
+      if (provider === "gemini") {
+        console.log("[AI Diagnosis Server] Procesando exclusivamente con Google Gemini...");
+        
         try {
-          console.log("[AI Diagnosis Server] Procesando con Google Gemini...");
           const geminiAi = new GoogleGenAI({
-            apiKey: geminiApiKey,
+            apiKey: apiKey,
             httpOptions: { headers: { "User-Agent": "aistudio-build" } }
           });
 
-          let effectiveModel = (provider === "gemini" && model) ? model : "gemini-2.5-flash";
+          let effectiveModel = model || "gemini-2.5-flash";
           if (effectiveModel.includes("/")) {
             effectiveModel = effectiveModel.split("/").pop() || "gemini-2.5-flash";
           }
@@ -362,7 +360,7 @@ async function startServer() {
           });
 
           const ocrText = ocrResponse.text;
-          if (!ocrText) throw new Error("Sin respuesta OCR de Gemini.");
+          if (!ocrText) throw new Error("Sin respuesta OCR de Google Gemini.");
           const ocrResults = JSON.parse(ocrText.trim());
 
           // Gemini Step 2: Deterministic ISO Rules Engine
@@ -400,7 +398,7 @@ async function startServer() {
           });
 
           const reportText = reportResponse.text;
-          if (!reportText) throw new Error("Sin informe narrativo de Gemini.");
+          if (!reportText) throw new Error("Sin informe narrativo de Google Gemini.");
           const reportResults = JSON.parse(reportText.trim());
 
           const finalMergedResult = {
@@ -433,11 +431,16 @@ async function startServer() {
           return res.json(finalMergedResult);
 
         } catch (geminiErr: any) {
-          console.warn(`[AI Diagnosis Server] Falló la ejecución con Gemini (${geminiErr.message}). Ejecutando motor de reglas ISO como salvaguarda...`);
+          console.error(`[AI Diagnosis Server] Error en el proveedor Google Gemini: ${geminiErr.message}`);
+          return res.status(400).json({
+            error: `Error al procesar con Google Gemini: ${geminiErr.message}. Puede cambiar manualmente de proveedor en Configuración Técnica.`
+          });
         }
       }
 
-      // Safe Fallback: Deterministic ISO Engine execution
+      return res.status(400).json({
+        error: `Proveedor '${provider}' no reconocido. Seleccione Google Gemini u OpenAI desde Configuración Técnica.`
+      });
       console.log("[AI Diagnosis Server] Ejecutando evaluación ISO determinista de respaldo...");
       const defaultOcr = {
         frecuenciaMedida: pulsadorSpecs.frecuenciaNominal || 60,

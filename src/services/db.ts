@@ -566,13 +566,47 @@ export const db = {
     },
     async getByKey(clave: string, defaultValue = ""): Promise<string> {
       try {
-        const { data, error } = await (supabase.from("configuracion") as any)
+        const activeEmpId = getActiveCompanyId();
+        let { data, error } = await (supabase.from("configuracion") as any)
           .select("valor")
           .eq("clave", clave)
-          .eq("empresa_id", getActiveCompanyId())
+          .eq("empresa_id", activeEmpId)
           .maybeSingle();
-        if (error || !data) return defaultValue;
-        return data.valor;
+
+        // Si no hay configuración para la empresa activa o el valor está vacío, y es una clave de IA (ia_*), buscar respaldo global
+        if ((!data || !data.valor) && clave.startsWith("ia_")) {
+          const { data: fallbackData } = await (supabase.from("configuracion") as any)
+            .select("valor")
+            .eq("clave", clave)
+            .neq("valor", "")
+            .limit(1)
+            .maybeSingle();
+          if (fallbackData && fallbackData.valor) {
+            data = fallbackData;
+          }
+        }
+
+        let result = data && data.valor ? data.valor : defaultValue;
+
+        // Respaldo para API Key de Gemini desde variable de entorno si no hay clave en BD
+        if (clave === "ia_gemini_api_key" && (!result || result.trim() === "")) {
+          result = (import.meta as any).env?.VITE_GEMINI_API_KEY || defaultValue;
+        }
+
+        // Respaldos para modelos por proveedor
+        if (clave === "ia_gemini_model" && (!result || result.trim() === "")) {
+          result = defaultValue || "gemini-2.5-flash";
+        }
+
+        if (clave === "ia_openai_model" && (!result || result.trim() === "")) {
+          result = defaultValue || "gpt-4o-mini";
+        }
+
+        if (clave === "ia_modelo" && (!result || result.trim() === "")) {
+          result = defaultValue || "gemini-2.5-flash";
+        }
+
+        return result;
       } catch (err) {
         console.warn(`Error al obtener clave ${clave} de la base de datos:`, err);
         return localStorage.getItem(`config_fallback_${getActiveCompanyId()}_${clave}`) || defaultValue;
