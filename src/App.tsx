@@ -20,6 +20,7 @@ import InsumosPage from "./pages/InsumosPage";
 import LavadoPage from "./pages/LavadoPage";
 import WorkOrdersPage from "./pages/WorkOrdersPage";
 import WorkOrderDetailPage from "./pages/WorkOrderDetailPage";
+import AiDiagnosisPage from "./pages/AiDiagnosisPage";
 import { db } from "./services/db";
 import { CompanyProvider, useCompany } from "./services/CompanyContext";
 import { AuthProvider, useAuth } from "./services/AuthContext";
@@ -164,6 +165,7 @@ function AppContent() {
         <Route path="/ordenes/:id" element={<WorkOrderDetailPage />} />
         <Route path="/lavado" element={<LavadoPage />} />
         <Route path="/config/tecnica" element={<TechnicalConfigPage />} />
+        <Route path="/diagnostico-ia" element={<AiDiagnosisPage />} />
       </Routes>
     </Layout>
   );

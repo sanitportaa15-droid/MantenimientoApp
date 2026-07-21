@@ -231,13 +231,17 @@ NOTIFY pgrst, 'reload schema';
 CREATE TABLE IF NOT EXISTS perfiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE, -- Vinculado a auth.users(id) cuando se registran
-  empresa_id UUID NOT NULL DEFAULT 'd1a58a74-9f93-4e8c-8c08-0123456789ab' REFERENCES empresa_identidad(id) ON DELETE CASCADE,
+  empresa_id UUID DEFAULT 'd1a58a74-9f93-4e8c-8c08-0123456789ab' REFERENCES empresa_identidad(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
-  rol TEXT NOT NULL DEFAULT 'Solo lectura' CHECK (rol IN ('Administrador', 'Supervisor', 'Técnico', 'Solo lectura')),
+  rol TEXT NOT NULL DEFAULT 'Solo lectura' CHECK (rol IN ('Superadmin', 'Administrador', 'Supervisor', 'Técnico', 'Solo lectura')),
   activo BOOLEAN NOT NULL DEFAULT true,
+  ultimo_acceso TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Asegurar que la columna ultimo_acceso exista en tablas creadas previamente
+ALTER TABLE perfiles ADD COLUMN IF NOT EXISTS ultimo_acceso TIMESTAMPTZ;
 
 -- Habilitar RLS para la tabla perfiles de forma segura
 ALTER TABLE perfiles ENABLE ROW LEVEL SECURITY;

@@ -26,12 +26,14 @@ import {
   Droplets,
   Calendar,
   Building,
-  AlertCircle
+  AlertCircle,
+  Brain
 } from "lucide-react";
 import { cn, formatDate } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
+import IaForm from "../components/IaForm";
 
-type ConfigTab = "equipos" | "parametros" | "mantenimientos" | "reparaciones" | "reclamos" | "identidad";
+type ConfigTab = "equipos" | "parametros" | "mantenimientos" | "reparaciones" | "reclamos" | "identidad" | "ia";
 
 
 export default function TechnicalConfigPage() {
@@ -324,6 +326,7 @@ export default function TechnicalConfigPage() {
     { id: "reparaciones", name: "Reparaciones", icon: Wrench },
     { id: "reclamos", name: "Reclamos", icon: Activity },
     { id: "identidad", name: "Identidad de la Empresa", icon: Building },
+    { id: "ia", name: "Inteligencia Artificial", icon: Brain },
   ];
 
   return (
@@ -842,6 +845,10 @@ export default function TechnicalConfigPage() {
 
       {activeTab === "identidad" && (
         <IdentidadForm />
+      )}
+
+      {activeTab === "ia" && (
+        <IaForm />
       )}
     </div>
   );

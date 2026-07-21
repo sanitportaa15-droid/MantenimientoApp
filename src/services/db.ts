@@ -538,7 +538,7 @@ export const db = {
         console.error("Error al obtener configuraciones:", error);
         throw error;
       }
-      return data as Configuracion[];
+      return (data as Configuracion[]).filter(c => !c.clave.startsWith("ia_"));
     },
     async getAllWithHidden() {
       const { data, error } = await (supabase.from("configuracion") as any)
@@ -563,6 +563,49 @@ export const db = {
         throw error;
       }
       return data as Configuracion;
+    },
+    async getByKey(clave: string, defaultValue = ""): Promise<string> {
+      try {
+        const { data, error } = await (supabase.from("configuracion") as any)
+          .select("valor")
+          .eq("clave", clave)
+          .eq("empresa_id", getActiveCompanyId())
+          .maybeSingle();
+        if (error || !data) return defaultValue;
+        return data.valor;
+      } catch (err) {
+        console.warn(`Error al obtener clave ${clave} de la base de datos:`, err);
+        return localStorage.getItem(`config_fallback_${getActiveCompanyId()}_${clave}`) || defaultValue;
+      }
+    },
+    async setByKey(clave: string, valor: string, descripcion = "") {
+      const activeEmpId = getActiveCompanyId();
+      try {
+        const { data: existing } = await (supabase.from("configuracion") as any)
+          .select("id")
+          .eq("clave", clave)
+          .eq("empresa_id", activeEmpId)
+          .maybeSingle();
+        
+        if (existing) {
+          const { error } = await (supabase.from("configuracion") as any)
+            .update({ valor })
+            .eq("clave", clave)
+            .eq("empresa_id", activeEmpId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from("configuracion") as any).insert({ 
+            clave, 
+            valor, 
+            descripcion: descripcion || `Configuración ${clave}`,
+            empresa_id: activeEmpId
+          });
+          if (error) throw error;
+        }
+      } catch (err) {
+        console.warn(`Error al guardar clave ${clave} en la base de datos, usando LocalStorage fallback:`, err);
+        localStorage.setItem(`config_fallback_${activeEmpId}_${clave}`, valor);
+      }
     },
     async seed() {
       const defaultConfigs = [
@@ -1743,13 +1786,21 @@ export const db = {
       return data as Perfil[];
     },
     async updateUltimoAcceso(id: string) {
-      const { data, error } = await (supabase.from("perfiles") as any)
-        .update({ ultimo_acceso: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as Perfil;
+      try {
+        const { data, error } = await (supabase.from("perfiles") as any)
+          .update({ ultimo_acceso: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) {
+          console.warn("[Supabase] Advertencia en updateUltimoAcceso (PGRST204 / caché):", error.message);
+          return null;
+        }
+        return data as Perfil;
+      } catch (err: any) {
+        console.warn("[Supabase] Error no crítico al actualizar ultimo_acceso:", err?.message || err);
+        return null;
+      }
     },
     async createGlobal(perfil: Omit<Perfil, 'id' | 'created_at' | 'ultimo_acceso'> & { id?: string; ultimo_acceso?: string | null }) {
       const { data, error } = await (supabase.from("perfiles") as any)

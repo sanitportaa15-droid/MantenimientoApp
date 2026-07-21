@@ -19,7 +19,8 @@ import {
   Shield,
   ClipboardList,
   Building2,
-  ArrowLeft
+  ArrowLeft,
+  Brain
 } from "lucide-react";
 import { cn } from "../utils/ui";
 import { useCompany } from "../services/CompanyContext";
@@ -54,6 +55,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: "Reclamos", path: "/reclamos", icon: MessageSquare },
     { name: "Análisis Técnico", path: "/analisis-tecnico", icon: Terminal },
     { name: "Lavado", path: "/lavado", icon: Sparkles },
+    { name: "Diagnóstico IA", path: "/diagnostico-ia", icon: Brain },
     { name: "Configuración Técnica", path: "/config/tecnica", icon: Settings2 }
   ];
 
