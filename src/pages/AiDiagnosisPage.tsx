@@ -712,10 +712,27 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                         </div>
                       </div>
 
-                      {/* Section 4: Operational Recommendations */}
+                      {/* Section 4: Operational Recommendations & Plan de Inspección */}
+                      {(analysisResult.planInspeccion || (analysisResult.informeProductor?.planInspeccionSencillo)) && (
+                        <div className="bg-zinc-950/80 p-5 rounded-xl border border-zinc-800 space-y-3">
+                          <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                            <Wrench className="w-4 h-4" />
+                            Plan de Inspección Recomendado en Sala
+                          </h3>
+                          <ol className="space-y-2 text-xs text-zinc-300 list-decimal list-inside">
+                            {(analysisResult.informeProductor?.planInspeccionSencillo || analysisResult.planInspeccion || []).map((step, i) => (
+                              <li key={i} className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
+                                <span className="font-semibold text-zinc-100">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {/* Section 5: Operational Recommendations */}
                       <div className="bg-emerald-950/20 p-5 rounded-xl border border-emerald-500/30 space-y-3">
                         <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                          <Wrench className="w-4 h-4" />
+                          <CheckCircle2 className="w-4 h-4" />
                           Recomendaciones de Mantenimiento y Acciones
                         </h3>
                         <ul className="space-y-2 text-xs text-zinc-200">
@@ -728,7 +745,7 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                         </ul>
                       </div>
 
-                      {/* Section 5: Professional Final Conclusion */}
+                      {/* Section 6: Professional Final Conclusion */}
                       {analysisResult.informeProductor?.conclusionFinal && (
                         <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-5 rounded-xl border border-zinc-800 space-y-2">
                           <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
@@ -803,13 +820,37 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                       </div>
                     </div>
 
-                    {/* Technical Causes & Actions */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                        <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4" />
-                          Posibles Causas Técnicas
-                        </h4>
+                    {/* 1. Análisis de Posibles Causas (Hipótesis Técnicas) */}
+                    <div className="p-5 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3">
+                      <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        Análisis de Posibles Causas (Hipótesis Técnicas)
+                      </h4>
+
+                      {analysisResult.posiblesCausasDetalladas && analysisResult.posiblesCausasDetalladas.length > 0 ? (
+                        <div className="space-y-3">
+                          {analysisResult.posiblesCausasDetalladas.map((item, i) => (
+                            <div key={i} className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-bold text-zinc-100 text-xs">{item.causa}</span>
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                  item.probabilidad === "Alta"
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                    : item.probabilidad === "Media"
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                    : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                }`}>
+                                  {item.probabilidad === "Alta" ? "🟢 Alta probabilidad" : item.probabilidad === "Media" ? "🟡 Probabilidad media" : "🔵 Probabilidad baja"}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                <span className="text-zinc-300 font-medium">Justificación: </span>
+                                {item.justificacion}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
                         <ul className="space-y-1.5 text-xs text-zinc-300">
                           {(analysisResult.posiblesCausas || []).map((causa, i) => (
                             <li key={i} className="flex items-start gap-2">
@@ -818,22 +859,57 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                             </li>
                           ))}
                         </ul>
+                      )}
+                    </div>
+
+                    {/* 2. Plan de Inspección Recomendado & 3. Impacto Potencial */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Plan de Inspección */}
+                      <div className="p-5 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3">
+                        <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Activity className="w-4 h-4" />
+                          Plan de Inspección Recomendado
+                        </h4>
+                        <ol className="space-y-2 text-xs text-zinc-300 list-decimal list-inside">
+                          {(analysisResult.planInspeccion || []).map((step, i) => (
+                            <li key={i} className="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
+                              <span className="font-semibold text-zinc-200">{step}</span>
+                            </li>
+                          ))}
+                        </ol>
                       </div>
 
-                      <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                        <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Wrench className="w-4 h-4" />
-                          Acciones Correctivas Recomendadas
+                      {/* Riesgos Operativos */}
+                      <div className="p-5 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3">
+                        <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4" />
+                          Riesgos Operativos / Impacto Potencial
                         </h4>
-                        <ul className="space-y-1.5 text-xs text-zinc-300">
-                          {(analysisResult.accionesCorrectivas || analysisResult.recomendaciones || []).map((accion, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-emerald-400 mt-0.5">•</span>
-                              <span>{accion}</span>
+                        <ul className="space-y-2 text-xs text-zinc-300">
+                          {(analysisResult.impactoPotencial || []).map((riesgo, i) => (
+                            <li key={i} className="flex items-start gap-2 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
+                              <span className="text-amber-400 font-bold shrink-0">•</span>
+                              <span>{riesgo}</span>
                             </li>
                           ))}
                         </ul>
                       </div>
+                    </div>
+
+                    {/* 4. Acciones Correctivas Recomendadas */}
+                    <div className="p-5 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3">
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Wrench className="w-4 h-4" />
+                        Acciones Correctivas Recomendadas
+                      </h4>
+                      <ul className="space-y-2 text-xs text-zinc-300">
+                        {(analysisResult.accionesCorrectivas || analysisResult.recomendaciones || []).map((accion, i) => (
+                          <li key={i} className="flex items-start gap-2 bg-zinc-900/60 p-2.5 rounded-lg border border-emerald-500/20">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{accion}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 )}
@@ -1061,6 +1137,33 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                   </div>
                 </div>
 
+                {/* Causes & Inspection Plan */}
+                {(viewingEval.resultadoIA.posiblesCausasDetalladas || viewingEval.resultadoIA.posiblesCausas) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                      <h5 className="text-xs font-bold text-amber-400 uppercase">Posibles Causas del Desvío</h5>
+                      <ul className="text-xs text-zinc-300 space-y-1.5">
+                        {viewingEval.resultadoIA.posiblesCausasDetalladas?.map((c, i) => (
+                          <li key={i}>
+                            <strong className="text-zinc-200">• {c.causa}:</strong> {c.justificacionProductor || c.justificacion}
+                          </li>
+                        )) || viewingEval.resultadoIA.posiblesCausas?.map((c, i) => (
+                          <li key={i}>• {c}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                      <h5 className="text-xs font-bold text-blue-400 uppercase">Plan de Verificación en Sala</h5>
+                      <ol className="text-xs text-zinc-300 space-y-1 list-decimal list-inside">
+                        {(viewingEval.resultadoIA.planInspeccion || []).map((step, i) => (
+                          <li key={i}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
                 {/* Recommendations */}
                 <div className="p-4 bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-2">
                   <h5 className="text-xs font-bold text-emerald-400 uppercase">Recomendaciones de Mantenimiento</h5>
@@ -1116,24 +1219,70 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
-                    <h5 className="text-xs font-bold text-red-400 uppercase">Posibles Causas Técnicas</h5>
+                {/* 1. Posibles Causas Técnicas con Probabilidad */}
+                <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                  <h5 className="text-xs font-bold text-red-400 uppercase">Análisis de Posibles Causas (Hipótesis Técnicas)</h5>
+                  {viewingEval.resultadoIA.posiblesCausasDetalladas && viewingEval.resultadoIA.posiblesCausasDetalladas.length > 0 ? (
+                    <div className="space-y-2">
+                      {viewingEval.resultadoIA.posiblesCausasDetalladas.map((item, i) => (
+                        <div key={i} className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-bold text-zinc-100 text-xs">{item.causa}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              item.probabilidad === "Alta"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                : item.probabilidad === "Media"
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                            }`}>
+                              {item.probabilidad === "Alta" ? "🟢 Alta probabilidad" : item.probabilidad === "Media" ? "🟡 Probabilidad media" : "🔵 Probabilidad baja"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400">
+                            <span className="text-zinc-300 font-medium">Justificación: </span>
+                            {item.justificacion}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                     <ul className="text-xs text-zinc-300 space-y-1">
                       {(viewingEval.resultadoIA.posiblesCausas || []).map((c, i) => (
                         <li key={i}>• {c}</li>
                       ))}
                     </ul>
+                  )}
+                </div>
+
+                {/* 2. Plan de Inspección & 3. Riesgos Operativos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                    <h5 className="text-xs font-bold text-blue-400 uppercase">Plan de Inspección Recomendado</h5>
+                    <ol className="text-xs text-zinc-300 space-y-1 list-decimal list-inside">
+                      {(viewingEval.resultadoIA.planInspeccion || []).map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
                   </div>
 
                   <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
-                    <h5 className="text-xs font-bold text-emerald-400 uppercase">Acciones Correctivas</h5>
+                    <h5 className="text-xs font-bold text-amber-400 uppercase">Riesgos Operativos</h5>
                     <ul className="text-xs text-zinc-300 space-y-1">
-                      {(viewingEval.resultadoIA.accionesCorrectivas || viewingEval.resultadoIA.recomendaciones || []).map((a, i) => (
-                        <li key={i}>• {a}</li>
+                      {(viewingEval.resultadoIA.impactoPotencial || []).map((r, i) => (
+                        <li key={i}>• {r}</li>
                       ))}
                     </ul>
                   </div>
+                </div>
+
+                {/* 4. Acciones Correctivas */}
+                <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                  <h5 className="text-xs font-bold text-emerald-400 uppercase">Acciones Correctivas Recomendadas</h5>
+                  <ul className="text-xs text-zinc-300 space-y-1">
+                    {(viewingEval.resultadoIA.accionesCorrectivas || viewingEval.resultadoIA.recomendaciones || []).map((a, i) => (
+                      <li key={i}>• {a}</li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             )}

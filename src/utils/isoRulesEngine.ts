@@ -590,8 +590,8 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
       justificacionProductor: "Resortes del pulsador desgastados que no cierran la válvula con rapidez."
     });
     planInspeccionStepsSet.add("Inspeccionar, limpiar o reemplazar el elemento filtrante de aire del pulsador.");
-    planInspeccionSteps.add("Limpiar el puerto atmosférico y comprobar que esté libre de grasa o suciedad.");
-    planInspeccionSteps.add("Revisar la tensión y estado mecánico de los resortes internos.");
+    planInspeccionStepsSet.add("Limpiar el puerto atmosférico y comprobar que esté libre de grasa o suciedad.");
+    planInspeccionStepsSet.add("Revisar la tensión y estado mecánico de los resortes internos.");
     impactoPotencialSet.add("Inestabilidad en la velocidad de colapso de las pezoneras.");
     impactoPotencialSet.add("Estrés mecánico repetitivo sobre la piel y tejido del pezón.");
     accionesCorrectivasSet.add("Limpiar o sustituir el filtro de aire y renovar resortes de retorno fatigados.");

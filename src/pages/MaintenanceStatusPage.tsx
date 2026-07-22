@@ -311,24 +311,28 @@ export default function MaintenanceStatusPage() {
       <div className="hidden print:block print-only text-black bg-white p-4 w-full">
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
-            body * {
-              visibility: hidden !important;
+            body > *:not(.print-only) {
+              display: none !important;
+            }
+            .no-print {
+              display: none !important;
             }
             .print-only, .print-only * {
+              display: block !important;
               visibility: visible !important;
             }
             .print-only {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
+              position: static !important;
               width: 100% !important;
-              display: block !important;
               background-color: white !important;
               color: black !important;
             }
             @page {
-              margin: 1.5cm;
-              size: auto;
+              margin: 1cm;
+              size: portrait;
+            }
+            tr {
+              page-break-inside: avoid !important;
             }
           }
         `}} />
