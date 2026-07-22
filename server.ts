@@ -129,38 +129,50 @@ async function startServer() {
       Actúa como un Ingeniero Mecatrónico experto en sistemas de ordeño y visión artificial.
       Tu única función en este paso es leer la imagen de un gráfico o reporte de pulsógrafo y extraer objetivamente todos los valores medidos presentes según la metodología de ensayo de las normas ISO 5707:2007 e ISO 6690:2007.
 
-      DEBES extraer los siguientes parámetros, si están legibles y disponibles en la imagen:
-      1. Frecuencia de pulsación (en ppm, ciclos/min; ej: 60.5).
-      2. Relación de pulsación real de la curva (ej: "61/39" o "60/40").
-      3. Fase a (ta) en ms (transición de vacío).
-      4. Fase b (tb) en ms (máximo vacío).
-      5. Fase c (tc) en ms (transición de aire).
-      6. Fase d (td) en ms (masaje / presión de descanso).
-      7. Balance entre canales (ej: "50/50" o "52/48" para pulsadores alternados).
-      8. Desbalance o diferencia entre canales (ej: 2.0%).
-      9. Nivel de vacío máximo o de operación (ej: "44.0" o "42.5 kPa").
-      10. Cualquier otro parámetro secundario legible (caída de vacío, tiempo de respuesta, etc.).
+      REGLAS DE EXTRACCIÓN Y MULTI-CANAL (CRÍTICO):
+      1. Si el gráfico o reporte muestra datos para dos canales (ej: Canal 1 y Canal 2, Canal A y Canal B, Ch 1 y Ch 2), DEBES extraer los parámetros de CADA CANAL por separado dentro de la propiedad "canales".
+      2. Conserva EXACTAMENTE los números y decimales reales leídos (ej: Ta=19.0%, Tb=45.5%, Tc=10.0%, Td=25.5%, Relación="64.5 : 35.5", Vacío="46.2 kPa").
+      3. NUNCA redondees ni modifiques los valores (no transformes 64.5:35.5 en 60:40, ni 46.2 en 44.0).
+      4. NO realices ningún juicio de conformidad. Esa decisión técnica es exclusiva del motor de reglas ISO de software.
 
-      REGLAS DE ORO:
-      - NO realices ningún juicio de conformidad, no opines si los valores cumplen, están bien, mal, estables, inestables o si infringen normas. Esa decisión técnica es exclusiva de un motor de reglas de software separado guiado por las normas ISO 5707:2007 e ISO 6690:2007.
-      - Extrae únicamente los valores numéricos o strings reales que representen la realidad medida que se muestra en el reporte gráfico o de texto de la imagen.
-
-      Devuelve estrictamente un objeto JSON con el siguiente esquema, sin explicaciones ni markdown:
+      Devuelve estrictamente un objeto JSON con el siguiente esquema:
       {
-        "nivelConfianza": número de 0 a 100 indicando tu confianza en la extracción visual,
+        "nivelConfianza": número de 0 a 100,
         "calidadImagen": "Alta" | "Media" | "Baja",
-        "frecuenciaMedida": número (o null si no está),
-        "relacionMedida": "string del estilo '60/40'" (o null),
-        "vacioMedido": "string del estilo '44.5 kPa'" (o null),
-        "taMedido": número en ms (o null),
-        "tbMedido": número en ms (o null),
-        "tcMedido": número en ms (o null),
-        "tdMedido": número en ms (o null),
-        "balanceMedido": "string del estilo '50/50'" (o null),
+        "frecuenciaMedida": número (o null),
+        "relacionMedida": "string ej '64.5 : 35.5'" (o null),
+        "vacioMedido": "string ej '46.2 kPa'" (o null),
+        "taMedido": número (o null),
+        "tbMedido": número (o null),
+        "tcMedido": número (o null),
+        "tdMedido": número (o null),
+        "balanceMedido": "string ej '50/50'" (o null),
         "desbalanceMedido": número en % (o null),
-        "hallazgosVisuales": ["lista de detalles visuales observados en las líneas de la curva, ej: 'Curva asimétrica', 'Ruido en la línea de base'"],
+        "canales": [
+          {
+            "nombreCanal": "Canal 1",
+            "frecuenciaMedida": número,
+            "relacionMedida": "string ej '64.5 : 35.5'",
+            "vacioMedido": "string ej '46.2 kPa'",
+            "taMedido": número en %,
+            "tbMedido": número en %,
+            "tcMedido": número en %,
+            "tdMedido": número en %
+          },
+          {
+            "nombreCanal": "Canal 2",
+            "frecuenciaMedida": número,
+            "relacionMedida": "string ej '62.5 : 37.5'",
+            "vacioMedido": "string ej '46.0 kPa'",
+            "taMedido": número en %,
+            "tbMedido": número en %,
+            "tcMedido": número en %,
+            "tdMedido": número en %
+          }
+        ],
+        "hallazgosVisuales": ["lista de hallazgos en la curva"],
         "otrosParametros": [
-          { "nombre": "nombre del parámetro", "value": "valor leído" }
+          { "nombre": "nombre", "valor": "valor" }
         ]
       }
       `;
@@ -313,15 +325,18 @@ async function startServer() {
             nivelConfianza: ocrResults.nivelConfianza || 85,
             calidadImagen: ocrResults.calidadImagen || "Media",
             datosExtraidos: {
-              frecuenciaMedida: ocrResults.frecuenciaMedida || 0,
-              relacionMedida: ocrResults.relacionMedida || "S/D",
-              vacioMedido: ocrResults.vacioMedido || "S/D",
-              taMedido: ocrResults.taMedido,
-              tbMedido: ocrResults.tbMedido,
-              tcMedido: ocrResults.tcMedido,
-              tdMedido: ocrResults.tdMedido,
+              ...ocrResults,
+              frecuenciaMedida: ocrResults.frecuenciaMedida || ocrResults.canales?.[0]?.frecuenciaMedida || 0,
+              relacionMedida: ocrResults.relacionMedida || ocrResults.canales?.[0]?.relacionMedida || "S/D",
+              vacioMedido: ocrResults.vacioMedido || ocrResults.canales?.[0]?.vacioMedido || "S/D",
+              taMedido: ocrResults.taMedido ?? ocrResults.canales?.[0]?.taMedido,
+              tbMedido: ocrResults.tbMedido ?? ocrResults.canales?.[0]?.tbMedido,
+              tcMedido: ocrResults.tcMedido ?? ocrResults.canales?.[0]?.tcMedido,
+              tdMedido: ocrResults.tdMedido ?? ocrResults.canales?.[0]?.tdMedido,
               balanceMedido: ocrResults.balanceMedido,
               desbalanceMedido: ocrResults.desbalanceMedido,
+              canales: ocrResults.canales || [],
+              diferenciaCanales: rulesEngineOutput.diferenciaCanales,
               otrosParametros: ocrResults.otrosParametros || []
             },
             comparacionEspecificaciones: reportResults.comparacionEspecificaciones,
@@ -501,23 +516,31 @@ async function startServer() {
             nivelConfianza: ocrResults.nivelConfianza || 85,
             calidadImagen: ocrResults.calidadImagen || "Media",
             datosExtraidos: {
-              frecuenciaMedida: ocrResults.frecuenciaMedida || pulsadorSpecs?.frecuenciaNominal || 60,
-              relacionMedida: ocrResults.relacionMedida || "60/40",
-              vacioMedido: ocrResults.vacioMedido || pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-              taMedido: ocrResults.taMedido,
-              tbMedido: ocrResults.tbMedido,
-              tcMedido: ocrResults.tcMedido,
-              tdMedido: ocrResults.tdMedido,
+              ...ocrResults,
+              frecuenciaMedida: ocrResults.frecuenciaMedida || ocrResults.canales?.[0]?.frecuenciaMedida || pulsadorSpecs?.frecuenciaNominal || 60,
+              relacionMedida: ocrResults.relacionMedida || ocrResults.canales?.[0]?.relacionMedida || "60/40",
+              vacioMedido: ocrResults.vacioMedido || ocrResults.canales?.[0]?.vacioMedido || pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+              taMedido: ocrResults.taMedido ?? ocrResults.canales?.[0]?.taMedido,
+              tbMedido: ocrResults.tbMedido ?? ocrResults.canales?.[0]?.tbMedido,
+              tcMedido: ocrResults.tcMedido ?? ocrResults.canales?.[0]?.tcMedido,
+              tdMedido: ocrResults.tdMedido ?? ocrResults.canales?.[0]?.tdMedido,
               balanceMedido: ocrResults.balanceMedido,
               desbalanceMedido: ocrResults.desbalanceMedido,
+              canales: ocrResults.canales || [],
+              diferenciaCanales: rulesEngineOutput.diferenciaCanales,
               otrosParametros: ocrResults.otrosParametros || []
             },
             comparacionEspecificaciones: reportResults.comparacionEspecificaciones,
             hallazgos: ocrResults.hallazgosVisuales || [],
             diagnosticoTecnico: reportResults.diagnosticoTecnico,
-            posiblesCausas: reportResults.posiblesCausas,
-            recomendaciones: reportResults.recomendaciones,
-            evaluacionISO: rulesEngineOutput.evaluacionISO
+            posiblesCausas: reportResults.posiblesCausas || rulesEngineOutput.posiblesCausas,
+            posiblesCausasDetalladas: rulesEngineOutput.posiblesCausasDetalladas,
+            planInspeccion: rulesEngineOutput.planInspeccion,
+            impactoPotencial: rulesEngineOutput.impactoPotencial,
+            accionesCorrectivas: rulesEngineOutput.accionesCorrectivas,
+            recomendaciones: reportResults.recomendaciones || rulesEngineOutput.accionesCorrectivas,
+            evaluacionISO: rulesEngineOutput.evaluacionISO,
+            informeProductor: rulesEngineOutput.informeProductor
           };
 
           const totalDuration = Date.now() - startTime;

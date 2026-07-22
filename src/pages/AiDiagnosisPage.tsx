@@ -668,12 +668,29 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60">
                               {(analysisResult.evaluacionISO || []).map((row, idx) => (
-                                <tr key={idx} className="hover:bg-zinc-800/20 transition-colors">
-                                  <td className="p-3 font-semibold text-zinc-200">{row.parametro}</td>
-                                  <td className="p-3 font-bold text-white">{row.valorMedido}</td>
-                                  <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
-                                  <td className="p-3">{getStatusIndicator(row.estado)}</td>
-                                </tr>
+                                <React.Fragment key={idx}>
+                                  <tr className="hover:bg-zinc-800/20 transition-colors">
+                                    <td className="p-3 font-semibold text-zinc-200">
+                                      {row.canal && row.canal !== "Global" && (
+                                        <span className="inline-block mr-2 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[10px]">
+                                          {row.canal}
+                                        </span>
+                                      )}
+                                      {row.parametro}
+                                    </td>
+                                    <td className="p-3 font-bold text-white font-mono">{row.valorMedido}</td>
+                                    <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
+                                    <td className="p-3">{getStatusIndicator(row.estado)}</td>
+                                  </tr>
+                                  {row.interpretacion && (
+                                    <tr className="bg-zinc-950/40 border-b border-zinc-800/40">
+                                      <td colSpan={4} className="px-3 py-2 text-[11px] text-zinc-400 italic">
+                                        <span className="font-semibold text-emerald-400 not-italic mr-1">💡 Interpretación:</span>
+                                        {row.interpretacion}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               ))}
                             </tbody>
                           </table>
@@ -803,22 +820,74 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                           </thead>
                           <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/40">
                             {(analysisResult.evaluacionISO || []).map((item, idx) => (
-                              <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
-                                <td className="p-3 font-semibold text-zinc-200">{item.parametro}</td>
-                                <td className="p-3 font-bold text-white">{item.valorMedido}</td>
-                                <td className="p-3 text-zinc-400">{item.valorPermitido}</td>
-                                <td className="p-3 text-zinc-300 font-mono">{item.diferencia}</td>
-                                <td className="p-3">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(item.estado)}`}>
-                                    {item.estado}
-                                  </span>
-                                </td>
-                              </tr>
+                              <React.Fragment key={idx}>
+                                <tr className="hover:bg-zinc-800/30 transition-colors">
+                                  <td className="p-3 font-semibold text-zinc-200">
+                                    {item.canal && item.canal !== "Global" && (
+                                      <span className="inline-block mr-2 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[10px]">
+                                        {item.canal}
+                                      </span>
+                                    )}
+                                    {item.parametro}
+                                  </td>
+                                  <td className="p-3 font-bold text-white font-mono">{item.valorMedido}</td>
+                                  <td className="p-3 text-zinc-400">{item.valorPermitido}</td>
+                                  <td className="p-3 text-zinc-300 font-mono">{item.diferencia}</td>
+                                  <td className="p-3">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(item.estado)}`}>
+                                      {item.estado}
+                                    </span>
+                                  </td>
+                                </tr>
+                                {item.interpretacion && (
+                                  <tr className="bg-zinc-950/60 border-b border-zinc-800/60">
+                                    <td colSpan={5} className="px-3 py-2 text-[11px] text-zinc-300">
+                                      <span className="font-semibold text-emerald-400 mr-1">💡 Análisis Técnico:</span>
+                                      {item.interpretacion}
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
                             ))}
                           </tbody>
                         </table>
                       </div>
                     </div>
+
+                    {/* Desbalance entre Canales */}
+                    {analysisResult.datosExtraidos?.diferenciaCanales && (
+                      <div className="p-4 bg-zinc-950/90 border border-emerald-500/30 rounded-xl space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Activity className="w-4 h-4 text-emerald-400" />
+                            Análisis de Desbalance entre Canal 1 y Canal 2 (ISO 5707)
+                          </h4>
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                            analysisResult.datosExtraidos.diferenciaCanales.esAceptableISO
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                              : "bg-red-500/10 text-red-400 border-red-500/30"
+                          }`}>
+                            {analysisResult.datosExtraidos.diferenciaCanales.esAceptableISO ? "🟢 Conforme ISO (≤ 5.0%)" : "🔴 Desbalance fuera de norma"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                          <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-400 text-[11px] block">Diferencia de Relación de Pulsado:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.datosExtraidos.diferenciaCanales.diferenciaRelacion.toFixed(1)}%</span>
+                            <span className="text-zinc-500 text-[10px] block mt-0.5">(Tolerancia ISO: Máximo 5.0%)</span>
+                          </div>
+                          <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-400 text-[11px] block">Diferencia de Frecuencia:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.datosExtraidos.diferenciaCanales.diferenciaFrecuencia.toFixed(1)} ppm</span>
+                            <span className="text-zinc-500 text-[10px] block mt-0.5">(Tolerancia ISO: Máximo 1.0 ppm)</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-300 leading-relaxed pt-1">
+                          <span className="font-semibold text-emerald-400">Interpretación: </span>
+                          {analysisResult.datosExtraidos.diferenciaCanales.explicacion}
+                        </p>
+                      </div>
+                    )}
 
                     {/* 1. Análisis de Posibles Causas (Hipótesis Técnicas) */}
                     <div className="p-5 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3">

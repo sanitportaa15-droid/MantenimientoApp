@@ -17,13 +17,34 @@ export interface PulsadorModel {
   manualPdfUrl?: string; // Optional manual
 }
 
+export interface DatosCanalPulsador {
+  nombreCanal: string; // e.g. "Canal 1", "Canal 2"
+  frecuenciaMedida?: number; // e.g. 60.5
+  relacionMedida?: string; // e.g. "64.5 : 35.5" or "64.5/35.5"
+  vacioMedido?: string | number; // e.g. "46.2 kPa"
+  taMedido?: number; // % or ms e.g. 19.0
+  tbMedido?: number; // % or ms e.g. 45.5
+  tcMedido?: number; // % or ms e.g. 10.0
+  tdMedido?: number; // % or ms e.g. 25.5
+  unidadFases?: "%" | "ms";
+}
+
+export interface DiferenciaCanalesInfo {
+  diferenciaRelacion: string; // e.g. "2.0%"
+  diferenciaFrecuencia: string; // e.g. "0.5 ppm"
+  esAceptableISO: boolean;
+  explicacion: string;
+}
+
 export interface ParametroISOEvaluacion {
+  canal?: string; // "Canal 1" | "Canal 2" | "Global"
   parametro: string;
   valorMedido: string;
   valorPermitido: string;
   diferencia: string;
   estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
   observacion: string;
+  interpretacion?: string;
 }
 
 export interface PosibleCausaDetallada {
@@ -51,15 +72,18 @@ export interface ResultadoIA {
   nivelConfianza: number; // 0 - 100
   calidadImagen: "Alta" | "Media" | "Baja";
   datosExtraidos: {
-    frecuenciaMedida: number;
-    relacionMedida: string;
-    vacioMedido: string;
+    frecuenciaMedida?: number;
+    relacionMedida?: string;
+    vacioMedido?: string | number;
     taMedido?: number;
     tbMedido?: number;
     tcMedido?: number;
     tdMedido?: number;
     balanceMedido?: string;
     desbalanceMedido?: number;
+    canales?: DatosCanalPulsador[];
+    diferenciaCanales?: DiferenciaCanalesInfo;
+    otrosParametros?: Array<{ nombre: string; valor: string }>;
     [key: string]: any;
   };
   comparacionEspecificaciones: string;

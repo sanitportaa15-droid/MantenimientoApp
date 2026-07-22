@@ -1,30 +1,11 @@
-export interface ParametroISOEvaluacion {
-  parametro: string;
-  valorMedido: string;
-  valorPermitido: string;
-  diferencia: string;
-  estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
-  observacion: string;
-}
-
-export interface PosibleCausaDetallada {
-  causa: string;
-  probabilidad: "Alta" | "Media" | "Baja";
-  justificacion: string;
-  justificacionProductor?: string;
-}
-
-export interface InformeProductor {
-  estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
-  queSignifica: string;
-  queRiesgosExisten: string;
-  queSeRecomiendaHacer: string;
-  interpretacion: string;
-  conclusionFinal: string;
-  posiblesCausasSencillas?: string[];
-  planInspeccionSencillo?: string[];
-  impactoPotencialSencillo?: string[];
-}
+import {
+  ParametroISOEvaluacion,
+  PosibleCausaDetallada,
+  InformeProductor,
+  ResultadoIA,
+  DatosCanalPulsador,
+  DiferenciaCanalesInfo
+} from "../types/aiDiagnosis";
 
 export interface ResultadoEvaluacionISO {
   evaluacionISO: ParametroISOEvaluacion[];
@@ -36,9 +17,9 @@ export interface ResultadoEvaluacionISO {
   impactoPotencial: string[];
   accionesCorrectivas: string[];
   informeProductor: InformeProductor;
+  diferenciaCanales?: DiferenciaCanalesInfo;
 }
 
-// Helpers to parse specifications and measured data
 function parseNumber(val: any): number | null {
   if (val === undefined || val === null) return null;
   if (typeof val === "number") return val;
@@ -46,12 +27,19 @@ function parseNumber(val: any): number | null {
   return match ? parseFloat(match[0]) : null;
 }
 
+function formatExactNumber(val: any, fallbackDecimals: number = 1): string {
+  if (val === undefined || val === null) return "S/D";
+  if (typeof val === "string") return val.trim();
+  if (typeof val === "number") {
+    return Number.isInteger(val) ? val.toString() : val.toFixed(fallbackDecimals);
+  }
+  return String(val);
+}
+
 function parseVacuumRange(rangeStr: string): { min: number; max: number } {
-  const defaultRange = { min: 40, max: 50 };
+  const defaultRange = { min: 40.0, max: 50.0 };
   if (!rangeStr) return defaultRange;
-  
-  // Try to find numbers in the string
-  const numbers = rangeStr.match(/[0-9]+/g);
+  const numbers = rangeStr.match(/[0-9]+(?:\.[0-9]+)?/g);
   if (numbers && numbers.length >= 2) {
     return {
       min: parseFloat(numbers[0]),
@@ -60,19 +48,19 @@ function parseVacuumRange(rangeStr: string): { min: number; max: number } {
   } else if (numbers && numbers.length === 1) {
     const singleVal = parseFloat(numbers[0]);
     return {
-      min: singleVal - 4,
-      max: singleVal + 4,
+      min: singleVal - 4.0,
+      max: singleVal + 4.0,
     };
   }
   return defaultRange;
 }
 
 function parseAllowedRatios(ratiosStr: string): number[] {
-  if (!ratiosStr) return [60]; // default 60%
+  if (!ratiosStr) return [60];
   const ratios: number[] = [];
   const parts = ratiosStr.split(/[,;\s]+/);
   for (const part of parts) {
-    const match = part.match(/([0-9]+)\s*[\/:-]\s*([0-9]+)/);
+    const match = part.match(/([0-9]+(?:\.[0-9]+)?)\s*[\/:-]\s*([0-9]+(?:\.[0-9]+)?)/);
     if (match) {
       ratios.push(parseFloat(match[1]));
     } else {
@@ -85,15 +73,18 @@ function parseAllowedRatios(ratiosStr: string): number[] {
   return ratios.length > 0 ? ratios : [60];
 }
 
-function parseRatioPercentage(ratioStr: string): number | null {
+function parseRatioPercentage(ratioStr: string): { first: number; second: number; raw: string } | null {
   if (!ratioStr) return null;
-  const match = String(ratioStr).match(/([0-9]+)\s*[\/:-]\s*[0-9]+/);
+  const str = String(ratioStr).trim();
+  const match = str.match(/([0-9]+(?:\.[0-9]+)?)\s*[\/:-]\s*([0-9]+(?:\.[0-9]+)?)/);
   if (match) {
-    return parseFloat(match[1]);
+    const f = parseFloat(match[1]);
+    const s = parseFloat(match[2]);
+    return { first: f, second: s, raw: str };
   }
-  const singleNum = parseNumber(ratioStr);
+  const singleNum = parseNumber(str);
   if (singleNum !== null && singleNum > 0 && singleNum < 100) {
-    return singleNum;
+    return { first: singleNum, second: 100 - singleNum, raw: `${singleNum} : ${100 - singleNum}` };
   }
   return null;
 }
@@ -101,340 +92,387 @@ function parseRatioPercentage(ratioStr: string): number | null {
 export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacionISO {
   const evaluations: ParametroISOEvaluacion[] = [];
 
-  // ISO Standard baselines for Milking Machine Pulsators (ISO 5707 / ISO 6690)
-  // Compliance is evaluated STRICTLY against ISO limits, independent of brand or model.
-  const nomFreq = (specs && parseNumber(specs.frecuenciaNominal)) || 60;
-  const vacRange = (specs && parseVacuumRange(specs.vacioRecomendado)) || { min: 40, max: 50 };
+  const nomFreq = (specs && parseNumber(specs.frecuenciaNominal)) || 60.0;
+  const vacRange = (specs && parseVacuumRange(specs.vacioRecomendado)) || { min: 40.0, max: 50.0 };
 
-  // Cycle duration calculated from actual measured frequency (or nominal 60 ppm -> 1000 ms)
-  const measuredFreq = parseNumber(datos.frecuenciaMedida);
-  const activeFreqForCycle = measuredFreq && measuredFreq > 0 ? measuredFreq : nomFreq;
-  const cycleMs = 60000 / activeFreqForCycle;
-
-  // --- 1. FRECUENCIA DE PULSACIÓN (Norma ISO: +/- 3.0 ppm respecto al valor nominal de trabajo) ---
-  if (measuredFreq !== null) {
-    const diff = measuredFreq - nomFreq;
-    const absDiff = Math.abs(diff);
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
-
-    if (absDiff <= 3) {
-      estado = "Conforme";
-      obs = "Frecuencia dentro de la tolerancia estricta ISO (+/- 3 ppm).";
-    } else if (absDiff <= 5) {
-      estado = "Advertencia";
-      obs = `Ligera desviación de frecuencia. Norma ISO especifica +/- 3 ppm respecto al régimen nominal (${nomFreq} ppm).`;
-    } else if (absDiff <= 8) {
-      estado = "Fuera de tolerancia";
-      obs = `Frecuencia fuera del límite normativo ISO (+/- 3 ppm). Requiere ajuste o calibración del pulsador.`;
-    } else {
-      estado = "Crítico";
-      obs = `Frecuencia críticamente fuera de rango ISO (${measuredFreq.toFixed(1)} ppm). Severo riesgo de lesión de esfínter o congestión.`;
-    }
-
-    evaluations.push({
-      parametro: "Frecuencia de pulsación",
-      valorMedido: `${measuredFreq.toFixed(1)} ppm`,
-      valorPermitido: `${nomFreq} ppm (+/- 3 ppm según ISO)`,
-      diferencia: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ppm`,
-      estado,
-      observacion: obs
-    });
+  // Normalize channels
+  let channels: DatosCanalPulsador[] = [];
+  if (Array.isArray(datos.canales) && datos.canales.length > 0) {
+    channels = datos.canales;
+  } else {
+    // Single channel fallback
+    channels = [{
+      nombreCanal: "Canal 1",
+      frecuenciaMedida: datos.frecuenciaMedida,
+      relacionMedida: datos.relacionMedida,
+      vacioMedido: datos.vacioMedido,
+      taMedido: datos.taMedido,
+      tbMedido: datos.tbMedido,
+      tcMedido: datos.tcMedido,
+      tdMedido: datos.tdMedido,
+      unidadFases: datos.unidadFases || "%"
+    }];
   }
 
-  // --- 2. TIEMPO DE PULSACIÓN (DURACIÓN TOTAL DEL CICLO EN MS) ---
-  const measuredCycleTime = parseNumber(datos.tiempoPulsacionMedido) || (measuredFreq ? 60000 / measuredFreq : null);
-  if (measuredCycleTime !== null) {
-    const nomCycleMs = 60000 / nomFreq;
-    const diffCycle = measuredCycleTime - nomCycleMs;
-    const absDiffMs = Math.abs(diffCycle);
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
+  // Evaluate each channel
+  for (const ch of channels) {
+    const chName = ch.nombreCanal || "Canal 1";
+    const measuredFreq = parseNumber(ch.frecuenciaMedida ?? datos.frecuenciaMedida);
 
-    if (measuredCycleTime >= 850 && measuredCycleTime <= 1200) {
-      if (absDiffMs <= 50) {
-        estado = "Conforme";
-        obs = "Tiempo de ciclo de pulsación dentro de parámetros óptimos de la norma ISO.";
-      } else {
-        estado = "Advertencia";
-        obs = `Tiempo de ciclo (${measuredCycleTime.toFixed(0)} ms) levemente desviado del objetivo nominal de ${nomCycleMs.toFixed(0)} ms.`;
-      }
-    } else if (measuredCycleTime >= 750 && measuredCycleTime <= 1350) {
-      estado = "Fuera de tolerancia";
-      obs = `Duración de ciclo fuera del estándar ISO (850 - 1200 ms). Impacta la cadencia de ordeño y descanso.`;
-    } else {
-      estado = "Crítico";
-      obs = `Duración de ciclo críticamente anómala (${measuredCycleTime.toFixed(0)} ms). Alteración grave en el ritmo de pulsación.`;
-    }
-
-    evaluations.push({
-      parametro: "Tiempo de pulsación (Ciclo)",
-      valorMedido: `${measuredCycleTime.toFixed(0)} ms`,
-      valorPermitido: `${nomCycleMs.toFixed(0)} ms (Rango ISO: 850 - 1200 ms)`,
-      diferencia: `${diffCycle >= 0 ? "+" : ""}${diffCycle.toFixed(0)} ms`,
-      estado,
-      observacion: obs
-    });
-  }
-
-  // --- 3. RELACIÓN DE PULSACIÓN (Norma ISO: Tolerancia máxima +/- 5% frente al valor nominal de calibración) ---
-  const measuredRatioPct = parseRatioPercentage(datos.relacionMedida);
-  if (measuredRatioPct !== null) {
-    const allowedRatios = (specs && parseAllowedRatios(specs.relacionesPermitidas)) || [60];
-    let closestNominal = allowedRatios[0];
-    let minDiff = Math.abs(measuredRatioPct - closestNominal);
-    for (const r of allowedRatios) {
-      const d = Math.abs(measuredRatioPct - r);
-      if (d < minDiff) {
-        minDiff = d;
-        closestNominal = r;
-      }
-    }
-
-    const diff = measuredRatioPct - closestNominal;
-    const absDiff = Math.abs(diff);
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
-
-    if (absDiff <= 5) {
-      estado = "Conforme";
-      obs = `Relación de pulsación en conformidad con norma ISO (tolerancia <= +/- 5%).`;
-    } else if (absDiff <= 8) {
-      estado = "Advertencia";
-      obs = `Desviación moderada. La norma ISO exige no superar +/- 5% respecto a la relación nominal (${closestNominal}/${100 - closestNominal}).`;
-    } else if (absDiff <= 12) {
-      estado = "Fuera de tolerancia";
-      obs = `Relación de pulsación fuera del límite ISO. Afecta directamente los tiempos de ordeño y masaje.`;
-    } else {
-      estado = "Crítico";
-      obs = `Relación de pulsación severamente alterada (${datos.relacionMedida}). Riesgo alto de congestión y edema mamario.`;
-    }
-
-    evaluations.push({
-      parametro: "Relación de pulsación",
-      valorMedido: String(datos.relacionMedida).includes("/") ? String(datos.relacionMedida) : `${measuredRatioPct}/${100 - measuredRatioPct}`,
-      valorPermitido: `${closestNominal}/${100 - closestNominal} (+/- 5% límite ISO)`,
-      diferencia: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`,
-      estado,
-      observacion: obs
-    });
-  }
-
-  // Helper to evaluate phases ta, tb, tc, td
-  const evaluatePhase = (
-    name: string,
-    measuredVal: any,
-    isMinimum: boolean,
-    limitVal: number,
-    isPercentage: boolean,
-    yellowThreshold: number,
-    redThreshold: number,
-    criticalThreshold: number
-  ) => {
-    const val = parseNumber(measuredVal);
-    if (val === null) return null;
-
-    let checkedVal = val;
-    let unit = isPercentage ? "%" : " ms";
-    
-    if (isPercentage && !String(measuredVal).includes("%")) {
-      checkedVal = (val / cycleMs) * 100;
-    }
-
-    let diffVal = 0;
-    let diffStr = "";
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
-
-    if (isMinimum) {
-      diffVal = checkedVal - limitVal;
-      diffStr = `${diffVal >= 0 ? "+" : ""}${diffVal.toFixed(1)}${unit}`;
-      
-      if (checkedVal >= limitVal) {
-        estado = "Conforme";
-        obs = `Fase ${name} conforme con la norma ISO (mínimo ${limitVal}${unit}).`;
-      } else if (checkedVal >= yellowThreshold) {
-        estado = "Advertencia";
-        obs = `Fase ${name} levemente corta. Norma ISO requiere al menos ${limitVal}${unit}.`;
-      } else if (checkedVal >= redThreshold) {
-        estado = "Fuera de tolerancia";
-        obs = `Fase ${name} fuera de tolerancia ISO. Insuficiente tiempo de recuperación o extracción.`;
-      } else {
-        estado = "Crítico";
-        obs = `Fase ${name} críticamente deficiente (${checkedVal.toFixed(1)}${unit}). Riesgo para la salud del pezón.`;
-      }
-    } else {
-      diffVal = checkedVal - limitVal;
-      diffStr = `${diffVal >= 0 ? "+" : ""}${diffVal.toFixed(1)}${unit}`;
-
-      if (checkedVal <= limitVal) {
-        estado = "Conforme";
-        obs = `Fase ${name} conforme con la norma ISO (máximo ${limitVal}${unit}).`;
-      } else if (checkedVal <= yellowThreshold) {
-        estado = "Advertencia";
-        obs = `Fase ${name} ligeramente lenta. Norma ISO establece máximo ${limitVal}${unit}.`;
-      } else if (checkedVal <= redThreshold) {
-        estado = "Fuera de tolerancia";
-        obs = `Fase ${name} lenta fuera de tolerancia. Pérdida de eficiencia en transiciones de vacío.`;
-      } else {
-        estado = "Crítico";
-        obs = `Fase ${name} excesivamente lenta (${checkedVal.toFixed(1)}${unit}). Inestabilidad severa de vacío.`;
-      }
-    }
-
-    return {
-      parametro: `Fase ${name} (t${name})`,
-      valorMedido: String(measuredVal).includes("ms") || String(measuredVal).includes("%") ? String(measuredVal) : `${val.toFixed(0)} ms (${checkedVal.toFixed(1)}%)`,
-      valorPermitido: `${isMinimum ? "Mínimo" : "Máximo"} ${limitVal}${unit} (Norma ISO)`,
-      diferencia: diffStr,
-      estado,
-      observacion: obs
-    };
-  };
-
-  // --- 4. FASE a (ta) - Transición de vacío (ISO Máximo 15% del ciclo) ---
-  const evalTa = evaluatePhase("a", datos.taMedido, false, 15, true, 18, 22, 25);
-  if (evalTa) evaluations.push(evalTa);
-
-  // --- 5. FASE b (tb) - Extracción a máximo vacío (ISO Mínimo 30% del ciclo) ---
-  const evalTb = evaluatePhase("b", datos.tbMedido, true, 30, true, 25, 20, 15);
-  if (evalTb) evaluations.push(evalTb);
-
-  // --- 6. FASE c (tc) - Transición a aire/colapso (ISO Máximo 10% del ciclo) ---
-  const evalTc = evaluatePhase("c", datos.tcMedido, false, 10, true, 13, 16, 20);
-  if (evalTc) evaluations.push(evalTc);
-
-  // --- 7. FASE d (td) - Masaje / Presión atmosférica (ISO Mínimo 15% del ciclo y MÍNIMO 150 ms absolutos) ---
-  const evalTd = evaluatePhase("d", datos.tdMedido, true, 15, true, 12, 10, 8);
-  if (evalTd) {
-    const tdMs = parseNumber(datos.tdMedido) || 0;
-    if (tdMs > 0 && tdMs < 150) {
-      if (evalTd.estado === "Conforme") {
-        evalTd.estado = "Advertencia";
-        evalTd.observacion = `Fase d es >= 15% en porcentaje pero menor a 150 ms absolutos exigidos por norma ISO para masaje mamario.`;
-      }
-    }
-    evaluations.push(evalTd);
-  }
-
-  // --- 8. DESBALANCE ENTRE CANALES (Norma ISO: Máximo 5.0% de diferencia entre canales) ---
-  const measuredDesbalance = parseNumber(datos.desbalanceMedido);
-  if (measuredDesbalance !== null) {
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
-
-    if (measuredDesbalance <= 5) {
-      estado = "Conforme";
-      obs = "Desbalance entre canales en conformidad con la norma ISO (<= 5.0%).";
-    } else if (measuredDesbalance <= 8) {
-      estado = "Advertencia";
-      obs = "Desbalance superior al 5.0% recomendado por norma ISO. Sugiere desgaste asimétrico de cámaras o diafragma.";
-    } else if (measuredDesbalance <= 12) {
-      estado = "Fuera de tolerancia";
-      obs = "Desbalance fuera de tolerancia ISO. Provoca ordeño desigual entre cuartos.";
-    } else {
-      estado = "Crítico";
-      obs = "Desbalance crítico entre canales. Alto riesgo de irritación unilateral y congestión.";
-    }
-
-    evaluations.push({
-      parametro: "Diferencia / Desbalance de canales",
-      valorMedido: `${measuredDesbalance.toFixed(1)}%`,
-      valorPermitido: "Máximo 5.0% (Norma ISO)",
-      diferencia: `${measuredDesbalance > 5 ? "+" : ""}${(measuredDesbalance).toFixed(1)}%`,
-      estado,
-      observacion: obs
-    });
-  }
-
-  // --- 9. BALANCE DE CANALES ---
-  if (datos.balanceMedido && measuredDesbalance === null) {
-    const balPct = parseRatioPercentage(datos.balanceMedido);
-    if (balPct !== null) {
-      const dev = Math.abs(balPct - 50);
-      const desbalanceCalc = dev * 2;
+    // 1. FRECUENCIA DE PULSACIÓN
+    if (measuredFreq !== null) {
+      const diff = measuredFreq - nomFreq;
+      const absDiff = Math.abs(diff);
       let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
       let obs = "";
+      let interp = "";
 
-      if (desbalanceCalc <= 5) {
+      if (absDiff <= 3.0) {
         estado = "Conforme";
-        obs = "Balance conforme a norma ISO (diferencia entre canales <= 5.0%).";
-      } else if (desbalanceCalc <= 8) {
+        obs = `Frecuencia conforme con norma ISO 5707:2007 (tolerancia ±3.0 ppm respecto al nominal ${nomFreq} ppm).`;
+        interp = `Asegura la cadencia óptima de conmutación. Mantiene la tasa ideal de estímulo de bajada de leche sin sobrecargar la ubre.`;
+      } else if (absDiff <= 5.0) {
         estado = "Advertencia";
-        obs = "Diferencia de balance excede el 5.0% ISO. Se aconseja inspección de válvulas o bobinas.";
-      } else if (desbalanceCalc <= 12) {
+        obs = `Ligera desviación de frecuencia (${measuredFreq} ppm vs nominal ${nomFreq} ppm). Norma ISO especifica ±3.0 ppm.`;
+        interp = `Alteración moderada del ritmo de pulsación. Puede prolongar ligeramente el tiempo de ordeño por lote.`;
+      } else if (absDiff <= 8.0) {
         estado = "Fuera de tolerancia";
-        obs = "Diferencia de balance fuera de tolerancia ISO. Afecta el ordeño alternado.";
+        obs = `Frecuencia fuera del límite normativo ISO (desvío de ${diff > 0 ? "+" : ""}${diff.toFixed(1)} ppm). Requiere ajuste del regulador.`;
+        interp = `Desviación significativa que altera la frecuencia de estímulo. Afecta la velocidad de flujo de leche e incrementa el estrés mamario.`;
       } else {
         estado = "Crítico";
-        obs = "Balance de canales críticamente descalibrado.";
+        obs = `Frecuencia críticamente fuera de rango ISO (${measuredFreq} ppm). Severo riesgo de lesión de esfínter.`;
+        interp = `Ritmo anómalo severo. Genera congestión vascular grave y riesgo inminente de trauma tisular.`;
       }
 
       evaluations.push({
-        parametro: "Balance de canales",
-        valorMedido: String(datos.balanceMedido),
-        valorPermitido: "50/50 (Diferencia máx 5.0% según ISO)",
-        diferencia: `${desbalanceCalc.toFixed(1)}% desvío`,
+        canal: chName,
+        parametro: "Frecuencia de pulsación",
+        valorMedido: `${measuredFreq} ppm`,
+        valorPermitido: `${nomFreq} ppm (± 3.0 ppm según ISO 5707)`,
+        diferencia: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} ppm`,
         estado,
-        observacion: obs
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // 2. RELACIÓN DE PULSACIÓN
+    const rawRatioStr = ch.relacionMedida || datos.relacionMedida;
+    const ratioObj = parseRatioPercentage(rawRatioStr);
+    if (ratioObj) {
+      const { first, second, raw } = ratioObj;
+      const allowedRatios = (specs && parseAllowedRatios(specs.relacionesPermitidas)) || [60];
+      let closestNominal = allowedRatios[0];
+      let minDiff = Math.abs(first - closestNominal);
+      for (const r of allowedRatios) {
+        const d = Math.abs(first - r);
+        if (d < minDiff) {
+          minDiff = d;
+          closestNominal = r;
+        }
+      }
+
+      const diff = first - closestNominal;
+      const absDiff = Math.abs(diff);
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+
+      if (absDiff <= 5.0) {
+        estado = "Conforme";
+        obs = `Relación de pulsación dentro de la tolerancia ISO 5707 (≤ ±5.0% respecto a nominal ${closestNominal}/${100 - closestNominal}).`;
+        interp = `Proporción equilibrada entre la fase de ordeño y la de masaje. Garantiza una extracción eficiente protegiendo la punta del pezón.`;
+      } else if (absDiff <= 8.0) {
+        estado = "Advertencia";
+        obs = `Desviación moderada. Exige no superar ±5.0% respecto a la relación nominal (${closestNominal}/${100 - closestNominal}).`;
+        interp = `Ligero desbalance entre el tiempo de vaciado y el de descanso. Puede ralentizar el ordeño o congestionar pezones sensibles.`;
+      } else if (absDiff <= 12.0) {
+        estado = "Fuera de tolerancia";
+        obs = `Relación de pulsación fuera del límite normativo ISO (desviación del ${diff.toFixed(1)}%).`;
+        interp = `Alteración directa en los tiempos de ordeño y colapso de pezoneras. Riesgo de sobreordeño o vaciado incompleto.`;
+      } else {
+        estado = "Crítico";
+        obs = `Relación severamente descompensada (${raw}). Alto riesgo de sobreordeño y edema mamario.`;
+        interp = `Falta grave de balance neumático. Genera edema, congestión y dolor durante el ordeño.`;
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Relación de pulsación",
+        valorMedido: raw,
+        valorPermitido: `${closestNominal}/${100 - closestNominal} (± 5.0% límite ISO)`,
+        diferencia: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`,
+        estado,
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // 3. FASES A, B, C, D
+    const activeCycleMs = measuredFreq && measuredFreq > 0 ? 60000 / measuredFreq : 1000;
+
+    // Fase A (ta) - ISO Máximo 15% del ciclo
+    const taVal = parseNumber(ch.taMedido ?? datos.taMedido);
+    if (taVal !== null) {
+      const unitIsMs = ch.unidadFases === "ms" || (taVal > 35);
+      const taPct = unitIsMs ? (taVal / activeCycleMs) * 100 : taVal;
+      const taMs = unitIsMs ? taVal : (taVal / 100) * activeCycleMs;
+
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+
+      if (taPct <= 15.0) {
+        estado = "Conforme";
+        obs = `Fase a (ta) conforme con norma ISO 5707 (≤ 15.0% del ciclo total).`;
+        interp = `Transición rápida y limpia hacia la apertura completa del pezón. Evita pérdidas de tiempo en la fase de aumento de vacío.`;
+      } else if (taPct <= 18.0) {
+        estado = "Advertencia";
+        obs = `Fase a levemente lenta (${taPct.toFixed(1)}%). ISO requiere ≤ 15.0%.`;
+        interp = `Conmutación demorada. Puede deberse a pequeña restricción de aire en la línea o mangueras de pulsado.`;
+      } else if (taPct <= 22.0) {
+        estado = "Fuera de tolerancia";
+        obs = `Fase a fuera de tolerancia ISO (${taPct.toFixed(1)}%). Restricción neumática en apertura.`;
+        interp = `Apertura lenta de la pezonera. Disminuye el tiempo efectivo de ordeño y la velocidad de flujo de leche.`;
+      } else {
+        estado = "Crítico";
+        obs = `Fase a excesivamente lenta (${taPct.toFixed(1)}%). Severa restricción neumática.`;
+        interp = `Obstrucción grave o pérdida masiva de vacío de conmutación. Impide el correcto funcionamiento del pulsador.`;
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Fase a (Transición a vacío)",
+        valorMedido: `${taPct.toFixed(1)}% (${taMs.toFixed(0)} ms)`,
+        valorPermitido: "Máximo 15.0% del ciclo (Norma ISO)",
+        diferencia: `${(taPct - 15.0) >= 0 ? "+" : ""}${(taPct - 15.0).toFixed(1)}%`,
+        estado,
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // Fase B (tb) - ISO Mínimo 30% del ciclo
+    const tbVal = parseNumber(ch.tbMedido ?? datos.tbMedido);
+    if (tbVal !== null) {
+      const unitIsMs = ch.unidadFases === "ms" || (tbVal > 50);
+      const tbPct = unitIsMs ? (tbVal / activeCycleMs) * 100 : tbVal;
+      const tbMs = unitIsMs ? tbVal : (tbVal / 100) * activeCycleMs;
+
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+
+      if (tbPct >= 30.0) {
+        estado = "Conforme";
+        obs = `Fase b (tb) conforme con norma ISO 5707 (≥ 30.0% del ciclo total).`;
+        interp = `Tiempo de ordeño a máximo vacío suficiente para permitir el flujo constante y rápido de leche.`;
+      } else if (tbPct >= 25.0) {
+        estado = "Advertencia";
+        obs = `Fase b levemente reducida (${tbPct.toFixed(1)}%). ISO requiere al menos 30.0%.`;
+        interp = `Periodo de extracción acortado. Puede reducir levemente la tasa de flujo por minuto.`;
+      } else if (tbPct >= 20.0) {
+        estado = "Fuera de tolerancia";
+        obs = `Fase b insuficiente (${tbPct.toFixed(1)}%). Incompleta extracción de leche.`;
+        interp = `Insuficiente tiempo a máximo vacío. Conduce a vaciado incompleto de la ubre y aumento de tiempo en sala.`;
+      } else {
+        estado = "Crítico";
+        obs = `Fase b críticamente baja (${tbPct.toFixed(1)}%). Caída drástica de rendimiento.`;
+        interp = `Extracción de leche severamente comprometida por falta de estabilidad en el vacío de la cámara.`;
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Fase b (Máximo vacío / Ordeño)",
+        valorMedido: `${tbPct.toFixed(1)}% (${tbMs.toFixed(0)} ms)`,
+        valorPermitido: "Mínimo 30.0% del ciclo (Norma ISO)",
+        diferencia: `${(tbPct - 30.0) >= 0 ? "+" : ""}${(tbPct - 30.0).toFixed(1)}%`,
+        estado,
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // Fase C (tc) - ISO Máximo 10% del ciclo
+    const tcVal = parseNumber(ch.tcMedido ?? datos.tcMedido);
+    if (tcVal !== null) {
+      const unitIsMs = ch.unidadFases === "ms" || (tcVal > 30);
+      const tcPct = unitIsMs ? (tcVal / activeCycleMs) * 100 : tcVal;
+      const tcMs = unitIsMs ? tcVal : (tcVal / 100) * activeCycleMs;
+
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+
+      if (tcPct <= 10.0) {
+        estado = "Conforme";
+        obs = `Fase c (tc) conforme con norma ISO 5707 (≤ 10.0% del ciclo total).`;
+        interp = `Colapso ágil de la pezonera que inicia la fase de descanso e interrumpe la succión sin demoras.`;
+      } else if (tcPct <= 13.0) {
+        estado = "Advertencia";
+        obs = `Fase c levemente lenta (${tcPct.toFixed(1)}%). ISO fija máximo 10.0%.`;
+        interp = `Cierre progresivo lento. Sugiere filtro de aire sucio o pequeña restricción en el ingreso atmosférico.`;
+      } else if (tcPct <= 16.0) {
+        estado = "Fuera de tolerancia";
+        obs = `Fase c fuera de tolerancia (${tcPct.toFixed(1)}%). Obstrucción atmosférica.`;
+        interp = `Demora en el colapso de la pezonera. Retrasa el alivio de la congestión en la punta del pezón.`;
+      } else {
+        estado = "Crítico";
+        obs = `Fase c excesivamente lenta (${tcPct.toFixed(1)}%). Filtro de aire tupido o resortes dañados.`;
+        interp = `Incapacidad para colapsar la pezonera a tiempo. Ocasiona congestión continua y dolor al animal.`;
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Fase c (Transición a aire)",
+        valorMedido: `${tcPct.toFixed(1)}% (${tcMs.toFixed(0)} ms)`,
+        valorPermitido: "Máximo 10.0% del ciclo (Norma ISO)",
+        diferencia: `${(tcPct - 10.0) >= 0 ? "+" : ""}${(tcPct - 10.0).toFixed(1)}%`,
+        estado,
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // Fase D (td) - ISO Mínimo 15% del ciclo y MÍNIMO 150 ms
+    const tdVal = parseNumber(ch.tdMedido ?? datos.tdMedido);
+    if (tdVal !== null) {
+      const unitIsMs = ch.unidadFases === "ms" || (tdVal > 40);
+      const tdPct = unitIsMs ? (tdVal / activeCycleMs) * 100 : tdVal;
+      const tdMs = unitIsMs ? tdVal : (tdVal / 100) * activeCycleMs;
+
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+
+      if (tdPct >= 15.0 && tdMs >= 150) {
+        estado = "Conforme";
+        obs = `Fase d (td) conforme con norma ISO 5707 (≥ 15.0% del ciclo y ≥ 150 ms absolutos).`;
+        interp = `Masaje mamario efectivo que alivia el estancamiento sanguíneo en el esfínter y garantiza el confort.`;
+      } else if (tdPct >= 12.0 || tdMs >= 120) {
+        estado = "Advertencia";
+        obs = `Fase d bordeando el límite normativo (${tdPct.toFixed(1)}%, ${tdMs.toFixed(0)} ms). ISO requiere ≥ 15.0% y ≥ 150 ms.`;
+        interp = `Tiempo de masaje ligeramente ajustado. Puede provocar ligera congestión en pezones de rodeos de alta producción.`;
+      } else if (tdPct >= 10.0 || tdMs >= 100) {
+        estado = "Fuera de tolerancia";
+        obs = `Fase d insuficiente (${tdPct.toFixed(1)}%, ${tdMs.toFixed(0)} ms). Inadecuado masaje mamario.`;
+        interp = `Masaje inadecuado. Incrementa el riesgo de hipermia y edematización de la punta del pezón.`;
+      } else {
+        estado = "Crítico";
+        obs = `Fase d críticamente deficiente (${tdPct.toFixed(1)}%, ${tdMs.toFixed(0)} ms). Riesgo de hiperqueratosis y mastitis.`;
+        interp = `Ausencia de masaje mamario efectivo. Causa directa de hiperqueratosis y predisposición crítica a mastitis.`;
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Fase d (Masaje / Presión atmosférica)",
+        valorMedido: `${tdPct.toFixed(1)}% (${tdMs.toFixed(0)} ms)`,
+        valorPermitido: "Mínimo 15.0% del ciclo y ≥ 150 ms (Norma ISO)",
+        diferencia: `${(tdPct - 15.0) >= 0 ? "+" : ""}${(tdPct - 15.0).toFixed(1)}%`,
+        estado,
+        observacion: obs,
+        interpretacion: interp
+      });
+    }
+
+    // VACÍO DE OPERACIÓN POR CANAL
+    const rawVac = ch.vacioMedido ?? datos.vacioMedido;
+    const measuredVac = parseNumber(rawVac);
+    if (measuredVac !== null) {
+      let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
+      let obs = "";
+      let interp = "";
+      let diffStr = "0.0 kPa";
+
+      if (measuredVac >= vacRange.min && measuredVac <= vacRange.max) {
+        estado = "Conforme";
+        obs = `Nivel de vacío en conformidad con el rango operativo ISO (${vacRange.min} - ${vacRange.max} kPa).`;
+        interp = `Presión de vacío firme y estable. Permite la succión adecuada sin deslizamientos ni agresividad sobre la mucosa.`;
+      } else {
+        const diffMin = measuredVac - vacRange.min;
+        const diffMax = measuredVac - vacRange.max;
+        const diff = measuredVac < vacRange.min ? diffMin : diffMax;
+        diffStr = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} kPa`;
+        const absDiff = Math.abs(diff);
+
+        if (absDiff <= 2.0) {
+          estado = "Advertencia";
+          obs = `Vacío levemente fuera del rango ISO (${vacRange.min} - ${vacRange.max} kPa).`;
+          interp = `Ligera fluctuación en la presión principal. Verificar el regulador de vacío y sellos de sala.`;
+        } else if (absDiff <= 5.0) {
+          estado = "Fuera de tolerancia";
+          obs = `Vacío fuera de tolerancia ISO (medido: ${formatExactNumber(rawVac)}).`;
+          interp = `Desviación marcada de vacío. Provoca desprendimiento de pezoneras (si es bajo) o traumatismos (si es alto).`;
+        } else {
+          estado = "Crítico";
+          obs = `Vacío en nivel crítico. Alto riesgo de daño tisular.`;
+          interp = `Presión de vacío peligrosa para la salud mamaria.`;
+        }
+      }
+
+      evaluations.push({
+        canal: chName,
+        parametro: "Nivel de vacío",
+        valorMedido: formatExactNumber(rawVac),
+        valorPermitido: `${vacRange.min} - ${vacRange.max} kPa (Norma ISO)`,
+        diferencia: diffStr,
+        estado,
+        observacion: obs,
+        interpretacion: interp
       });
     }
   }
 
-  // --- 10. VACÍO DE OPERACIÓN (Norma ISO: 40.0 - 50.0 kPa estándar de ordeño) ---
-  const measuredVac = parseNumber(datos.vacioMedido);
-  if (measuredVac !== null) {
-    let estado: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico" = "Conforme";
-    let obs = "";
-    let diffStr = "";
+  // CHANNEL COMPARISON & DESBALANCE ANALYSIS
+  let diferenciaCanales: DiferenciaCanalesInfo | undefined = undefined;
+  if (channels.length >= 2) {
+    const ch1 = channels[0];
+    const ch2 = channels[1];
 
-    if (measuredVac >= vacRange.min && measuredVac <= vacRange.max) {
-      estado = "Conforme";
-      obs = "Nivel de vacío en conformidad con el rango operativo estándar ISO.";
-      diffStr = "0.0 kPa";
+    const r1 = parseRatioPercentage(ch1.relacionMedida || datos.relacionMedida);
+    const r2 = parseRatioPercentage(ch2.relacionMedida || datos.relacionMedida);
+
+    const f1 = parseNumber(ch1.frecuenciaMedida ?? datos.frecuenciaMedida) || nomFreq;
+    const f2 = parseNumber(ch2.frecuenciaMedida ?? datos.frecuenciaMedida) || nomFreq;
+
+    const freqDiff = Math.abs(f1 - f2);
+
+    let ratioDiffPct = 0;
+    if (r1 && r2) {
+      ratioDiffPct = Math.abs(r1.first - r2.first);
     } else {
-      const diffMin = measuredVac - vacRange.min;
-      const diffMax = measuredVac - vacRange.max;
-      const diff = measuredVac < vacRange.min ? diffMin : diffMax;
-      diffStr = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)} kPa`;
-      const absDiff = Math.abs(diff);
-
-      if (absDiff <= 2) {
-        estado = "Advertencia";
-        obs = `Vacío levemente fuera de rango ISO (${vacRange.min} - ${vacRange.max} kPa).`;
-      } else if (absDiff <= 5) {
-        estado = "Fuera de tolerancia";
-        obs = `Nivel de vacío fuera de tolerancia ISO. Puede ocasionar deslizamiento de pezoneras o hiperqueratosis.`;
-      } else {
-        estado = "Crítico";
-        obs = `Vacío en nivel crítico. Alto riesgo de lesión tisular severa.`;
-      }
+      ratioDiffPct = parseNumber(datos.desbalanceMedido) || 0;
     }
+
+    const esAceptableISO = ratioDiffPct <= 5.0 && freqDiff <= 2.0;
+
+    let explicacion = "";
+    if (esAceptableISO) {
+      explicacion = `La diferencia entre el ${ch1.nombreCanal || "Canal 1"} (${ch1.relacionMedida || "S/D"}) y el ${ch2.nombreCanal || "Canal 2"} (${ch2.relacionMedida || "S/D"}) es de ${ratioDiffPct.toFixed(1)}% en relación y ${freqDiff.toFixed(1)} ppm en frecuencia, la cual es mínima y no representa un desbalance significativo (dentro del límite máximo normativo ISO de ≤ 5.0%).`;
+    } else {
+      explicacion = `Se observa un desbalance de ${ratioDiffPct.toFixed(1)}% entre ambos canales, el cual supera la tolerancia recomendada por la norma ISO (≤ 5.0%). Esto indica una asimetría funcional entre las cámaras de pulsado que requiere revisión de membranas o tubos.`;
+    }
+
+    diferenciaCanales = {
+      diferenciaRelacion: `${ratioDiffPct.toFixed(1)}%`,
+      diferenciaFrecuencia: `${freqDiff.toFixed(1)} ppm`,
+      esAceptableISO,
+      explicacion
+    };
 
     evaluations.push({
-      parametro: "Nivel de vacío",
-      valorMedido: `${measuredVac.toFixed(1)} kPa`,
-      valorPermitido: `${vacRange.min} - ${vacRange.max} kPa (Rango ISO)`,
-      diferencia: diffStr,
-      estado,
-      observacion: obs
+      canal: "Comparación de Canales",
+      parametro: "Desbalance entre Canal 1 y Canal 2",
+      valorMedido: `${ratioDiffPct.toFixed(1)}% desvío`,
+      valorPermitido: "Máximo 5.0% de desbalance (Norma ISO)",
+      diferencia: `${ratioDiffPct.toFixed(1)}%`,
+      estado: esAceptableISO ? "Conforme" : (ratioDiffPct <= 8.0 ? "Advertencia" : "Fuera de tolerancia"),
+      observacion: explicacion,
+      interpretacion: esAceptableISO
+        ? "Distribución uniforme del trabajo entre los cuatro cuartos mamarios."
+        : "Un canal ordeña más rápido o agresivo que el otro, generando tensión desigual sobre la ubre."
     });
-  }
-
-  // --- 11. OTROS PARÁMETROS EXTRAÍDOS DEL INFORME ---
-  if (Array.isArray(datos.otrosParametros)) {
-    for (const item of datos.otrosParametros) {
-      if (item && item.nombre && item.valor) {
-        evaluations.push({
-          parametro: String(item.nombre),
-          valorMedido: String(item.valor),
-          valorPermitido: "Extraído de reporte ISO",
-          diferencia: "0.0",
-          estado: "Conforme",
-          observacion: "Parámetro complementario extraído del informe del pulsógrafo."
-        });
-      }
-    }
   }
 
   // Determine overall status based on worst individual status
@@ -461,242 +499,104 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
     nivelCriticidad = "Bajo";
   }
 
-  // Generate Posibles Causas, Plan de Inspección y Riesgos Operativos
+  // Build Posibles Causas, Plan de Inspección & Riesgos
   const causasDetalladas: PosibleCausaDetallada[] = [];
   const planInspeccionStepsSet = new Set<string>();
   const impactoPotencialSet = new Set<string>();
   const accionesCorrectivasSet = new Set<string>();
 
-  let hasFreq = false;
-  let hasRatio = false;
-  let hasPhaseA = false;
-  let hasPhaseB = false;
-  let hasPhaseC = false;
-  let hasPhaseD = false;
-  let hasBalance = false;
-  let hasVacuum = false;
-
-  for (const item of evaluations) {
-    if (item.estado !== "Conforme") {
-      const pName = item.parametro.toLowerCase();
-      if (pName.includes("frecuencia")) hasFreq = true;
-      if (pName.includes("relación")) hasRatio = true;
-      if (pName.includes("fase a") || pName.includes("ta")) hasPhaseA = true;
-      if (pName.includes("fase b") || pName.includes("tb")) hasPhaseB = true;
-      if (pName.includes("fase c") || pName.includes("tc")) hasPhaseC = true;
-      if (pName.includes("fase d") || pName.includes("td")) hasPhaseD = true;
-      if (pName.includes("desbalance") || pName.includes("balance")) hasBalance = true;
-      if (pName.includes("vacío")) hasVacuum = true;
-    }
-  }
-
-  if (hasFreq) {
-    causasDetalladas.push({
-      causa: "Regulador de pulsación descalibrado o desajuste mecánico",
-      probabilidad: "Alta",
-      justificacion: "La desviación de frecuencia observada respecto del estándar nominal (60 ppm ± 3) es compatible con una descalibración del tornillo o mecanismo regulador de velocidad de conmutación.",
-      justificacionProductor: "El pulsador está latiendo fuera del ritmo óptimo (60 golpes por minuto), lo que suele indicar un desajuste en el regulador."
-    });
-    causasDetalladas.push({
-      causa: "Restricción en el filtro de aire o entrada de ventilación parcial",
-      probabilidad: "Media",
-      justificacion: "La acumulación de polvo o suciedad en el filtro de ventilación incrementa la resistencia neumática, lo cual suele ocasionar variaciones en el ritmo del pulso.",
-      justificacionProductor: "Filtros de aire sucios o tapados que le quitan fluidez al movimiento del pulsador."
-    });
-    planInspeccionStepsSet.add("Verificar la alimentación y señal eléctrica de control si el equipo cuenta con pulsación electrónica.");
-    planInspeccionStepsSet.add("Inspeccionar y limpiar el filtro de aire del pulsador o sustituir el elemento filtrante.");
-    planInspeccionStepsSet.add("Verificar la calibración de frecuencia y ajustar a 60 ppm con un vacuómetro/pulsógrafo patrón según norma ISO 5707.");
-    impactoPotencialSet.add("Variación no deseada en la velocidad de ordeño de los animales.");
-    impactoPotencialSet.add("Mayor tiempo total de ordeño por lote y posible sobreestimulación del esfínter.");
-    accionesCorrectivasSet.add("Calibrar la frecuencia de pulsación a 60 ppm (± 3 ppm) de acuerdo con la norma ISO 5707.");
-    accionesCorrectivasSet.add("Limpiar o sustituir el filtro de aire y verificar la limpieza de los orificios de ventilación.");
-  }
-
-  if (hasRatio) {
-    causasDetalladas.push({
-      causa: "Desgaste de membranas o diafragmas internos del pulsador",
-      probabilidad: "Alta",
-      justificacion: "Una alteración en la relación entre la fase de ordeño y la de masaje es compatible con fatiga de material o pérdida de elasticidad en las membranas de goma o silicona.",
-      justificacionProductor: "Las membranas internas se van gastando por el uso continuo, alterando los tiempos de apertura y cierre."
-    });
-    causasDetalladas.push({
-      causa: "Microfugas de vacío o estanqueidad deficiente en cámaras de pulsado",
-      probabilidad: "Media",
-      justificacion: "Pérdidas menores de hermeticidad en los acoples o juntas del bloque de pulsación pueden modificar la proporción efectiva de vacío.",
-      justificacionProductor: "Pérdidas chicas de vacío por juntas o acoples flojos que distorsionan el ritmo."
-    });
-    planInspeccionStepsSet.add("Inspeccionar el estado físico, flexibilidad y estanqueidad de las membranas del pulsador.");
-    planInspeccionStepsSet.add("Revisar sellos y juntas tóricas del bloque de pulsación para descarta fugas de aire.");
-    planInspeccionStepsSet.add("Verificar que las mangueras de pulsado no presenten fisuras ni porosidades.");
-    impactoPotencialSet.add("Riesgo de sobreordeño o vaciado incompleto de los cuartos mamarios.");
-    impactoPotencialSet.add("Mayor propensión a congestión y edema en la punta del pezón por desproporción de fases.");
-    accionesCorrectivasSet.add("Reemplazar el kit de membranas/diafragmas desgastados por repuestos originales.");
-    accionesCorrectivasSet.add("Inspeccionar conexiones y sellos para eliminar fugas de vacío en las cámaras.");
-  }
-
-  if (hasPhaseA) {
-    causasDetalladas.push({
-      causa: "Restricción o reducción de sección en líneas neumáticas o canillas",
-      probabilidad: "Alta",
-      justificacion: "Una fase 'a' prolongada (transición lenta hacia el vacío) es compatible con obstrucciones parciales, estrangulamientos o sedimentos en los tubos de pulsado.",
-      justificacionProductor: "Mangueras o cañerías parcialmente apretadas o sucias que frenan la entrada de vacío."
-    });
-    causasDetalladas.push({
-      causa: "Desgaste en la válvula o distribuidor de aire del pulsador",
-      probabilidad: "Media",
-      justificacion: "El desgaste en las superficies de conmutación del distribuidor reduce el área de paso de aire, demorando la formación de vacío en la copa.",
-      justificacionProductor: "El distribuidor interno del pulsador está desgastado y demora el cambio de fase."
-    });
-    planInspeccionStepsSet.add("Inspeccionar las mangueras de pulsado buscando pliegues, estrangulamientos o depósitos de suciedad.");
-    planInspeccionStepsSet.add("Desarmar y limpiar los orificios del bloque distribuidor de aire.");
-    planInspeccionStepsSet.add("Verificar la limpieza y ajuste de las canillas de pulsado.");
-    impactoPotencialSet.add("Pérdida de eficiencia en la velocidad de extracción de leche.");
-    impactoPotencialSet.add("Incremento en la duración del turno de ordeño.");
-    accionesCorrectivasSet.add("Desobstruir conductos de aire y reemplazar mangueras dobladas o deterioradas.");
-  }
-
-  if (hasPhaseB) {
-    causasDetalladas.push({
-      causa: "Deficiencia o caída de vacío en la línea de pulsación",
-      probabilidad: "Alta",
-      justificacion: "Un tiempo de extracción (fase b) por debajo del estándar normativo (mínimo 30%) sugiere una presión de vacío de línea reducida o caídas bruscas durante el ordeño.",
-      justificacionProductor: "Falta de presión de vacío firme en la línea mientras se ordeña."
-    });
-    causasDetalladas.push({
-      causa: "Mangueras de pulsado deterioradas o con fisuras",
-      probabilidad: "Media",
-      justificacion: "Entradas parásitas de aire a través de grietas en las mangueras acortan el periodo en que se mantiene el máximo vacío operativo.",
-      justificacionProductor: "Mangueras cuarteadas o viejas que dejan pasar aire no deseado."
-    });
-    planInspeccionStepsSet.add("Medir la presión de vacío efectiva en la línea de pulsación durante el ordeño.");
-    planInspeccionStepsSet.add("Revisar mangueras cortas y largas de pulsado en busca de porosidades.");
-    planInspeccionStepsSet.add("Comprobar la estanqueidad de las copas y el colector de ordeño.");
-    impactoPotencialSet.add("Ordeño incompleto y retención involuntaria de leche en la ubre.");
-    impactoPotencialSet.add("Disminución del rendimiento de bajada de leche por unidad de tiempo.");
-    accionesCorrectivasSet.add("Restablecer el nivel de vacío regulado según ISO 6690 y sustituir mangueras defectuosas.");
-  }
-
-  if (hasPhaseC) {
-    causasDetalladas.push({
-      causa: "Filtro de aire saturado o suciedad acumulada en el puerto de ventilación",
-      probabilidad: "Alta",
-      justificacion: "Una fase 'c' prolongada (transición lenta a presión atmosférica) suele asociarse con un filtro de aire tupido que frena el ingreso de aire atmosférico.",
-      justificacionProductor: "Filtro de aire tapado de tierra que impide que la pezonera colapse a tiempo."
-    });
-    causasDetalladas.push({
-      causa: "Fatiga o pérdida de tensión en los resortes de retorno del pulsador",
-      probabilidad: "Media",
-      justificacion: "Resortes mecánicos fatigados demoran el cierre del obturador de vacío hacia la posición de reposo.",
-      justificacionProductor: "Resortes del pulsador desgastados que no cierran la válvula con rapidez."
-    });
-    planInspeccionStepsSet.add("Inspeccionar, limpiar o reemplazar el elemento filtrante de aire del pulsador.");
-    planInspeccionStepsSet.add("Limpiar el puerto atmosférico y comprobar que esté libre de grasa o suciedad.");
-    planInspeccionStepsSet.add("Revisar la tensión y estado mecánico de los resortes internos.");
-    impactoPotencialSet.add("Inestabilidad en la velocidad de colapso de las pezoneras.");
-    impactoPotencialSet.add("Estrés mecánico repetitivo sobre la piel y tejido del pezón.");
-    accionesCorrectivasSet.add("Limpiar o sustituir el filtro de aire y renovar resortes de retorno fatigados.");
-  }
-
-  if (hasPhaseD) {
-    causasDetalladas.push({
-      causa: "Descalibración del pulsador o desgaste progresivo de membranas",
-      probabilidad: "Alta",
-      justificacion: "Una reducción del tiempo de la fase d suele asociarse con una disminución del tiempo efectivo de masaje. Este comportamiento puede ser compatible con un pulsador descalibrado o con desgaste de sus membranas.",
-      justificacionProductor: "Las membranas desgastadas o la descalibración reducen el tiempo en que la pezonera masajea el pezón."
-    });
-    causasDetalladas.push({
-      causa: "Restricción en la entrada de aire atmosférico al cuerpo del pulsador",
-      probabilidad: "Media",
-      justificacion: "Paso de aire dificultado que impide mantener la pezonera colapsada el periodo mínimo de 150 ms exigido para el masaje tisular.",
-      justificacionProductor: "Ingreso de aire sofocado que acorta el descanso de la punta del pezón."
-    });
-    planInspeccionStepsSet.add("Verificar el nivel de vacío del sistema.");
-    planInspeccionStepsSet.add("Inspeccionar posibles fugas de aire.");
-    planInspeccionStepsSet.add("Revisar el regulador de vacío.");
-    planInspeccionStepsSet.add("Verificar el funcionamiento del pulsador.");
-    planInspeccionStepsSet.add("Inspeccionar el estado de las membranas.");
-    planInspeccionStepsSet.add("Revisar mangueras y conexiones.");
-    planInspeccionStepsSet.add("Repetir la medición una vez realizada la intervención.");
-    impactoPotencialSet.add("Aumento del riesgo de mastitis por falta de alivio a la congestión en la punta del pezón.");
-    impactoPotencialSet.add("Riesgo de sobreordeño, congestión e hiperqueratosis del esfínter.");
-    impactoPotencialSet.add("Disminución del bienestar animal y malestar durante el ordeño.");
-    accionesCorrectivasSet.add("Sustituir membranas y recalibrar la fase de masaje a un mínimo de 150 ms (ISO 5707).");
-  }
-
-  if (hasBalance) {
-    causasDetalladas.push({
-      causa: "Desgaste asimétrico en membranas o bloque distribuidor",
-      probabilidad: "Alta",
-      justificacion: "Un desbalance superior al 5% entre los canales A y B suele indicar un desgaste desigual en las membranas o en los asientos del distribuidor.",
-      justificacionProductor: "El pulsador trabaja de forma dispareja entre un par de copas y el otro por desgaste asimétrico."
-    });
-    causasDetalladas.push({
-      causa: "Manguera de pulsado de un canal parcialmente obstruida o estrangulada",
-      probabilidad: "Media",
-      justificacion: "Diferencias en la longitud o deformidad del tubo de un solo canal provocan una conmutación neumática asimétrica.",
-      justificacionProductor: "Manguera doblada o apretada en uno solo de los canales del pulsador."
-    });
-    planInspeccionStepsSet.add("Inspeccionar y comparar el desgaste de las membranas del canal A y canal B.");
-    planInspeccionStepsSet.add("Comprobar que las mangueras de ambos canales tengan la misma longitud e integridad.");
-    planInspeccionStepsSet.add("Limpiar los conductos de salida del bloque distribuidor.");
-    impactoPotencialSet.add("Ordeño desigual entre cuartos mamarios.");
-    impactoPotencialSet.add("Congestión y riesgo de mastitis focalizada en los cuartos afectados.");
-    accionesCorrectivasSet.add("Sustituir el bloque distribuidor y nivelar mangueras de pulsado.");
-  }
-
-  if (hasVacuum) {
-    causasDetalladas.push({
-      causa: "Regulador de vacío descalibrado o con suciedad en la válvula de alivio",
-      probabilidad: "Alta",
-      justificacion: "Un nivel de vacío fuera del rango normativo ISO (40-50 kPa) se asocia frecuentemente a una mala calibración del regulador o acumulación de suciedad en su asiento.",
-      justificacionProductor: "El regulador de vacío está desajustado o sucio, desestabilizando la presión de ordeño."
-    });
-    causasDetalladas.push({
-      causa: "Ingreso de aire o fugas de vacío en la red principal y acoples",
-      probabilidad: "Media",
-      justificacion: "Entradas parásitas de aire reducen la presión de vacío disponible en los puntos de ordeño.",
-      justificacionProductor: "Fugas de aire en las uniones de caño o mangueras de la sala."
-    });
-    causasDetalladas.push({
-      causa: "Falta de mantenimiento preventivo en la bomba de vacío o correa floja",
-      probabilidad: "Baja",
-      justificacion: "Rendimiento insuficiente de la bomba de vacío debido a descompresión o patinamiento de la correa de mando.",
-      justificacionProductor: "La bomba de vacío no rinde adecuadamente por falta de mantenimiento."
-    });
-    planInspeccionStepsSet.add("Verificar y calibrar el regulador de vacío con un vacuómetro patrón.");
-    planInspeccionStepsSet.add("Inspeccionar la red principal y acoples rápidos en busca de fugas de aire.");
-    planInspeccionStepsSet.add("Verificar el funcionamiento de la bomba de vacío y tensión de correas.");
-    impactoPotencialSet.add("Deslizamiento o caída de pezoneras si el vacío es insuficiente.");
-    impactoPotencialSet.add("Lesión tisular severa e hiperqueratosis si el vacío es excesivo.");
-    impactoPotencialSet.add("Incremento general del desgaste de componentes del equipo.");
-    accionesCorrectivasSet.add("Calibrar la válvula del regulador de vacío al rango normativo (40 - 50 kPa).");
-    accionesCorrectivasSet.add("Sellar acoples y verificar hermeticidad general del sistema.");
-  }
-
-  // Default fallback if CONFORME
+  // STRICT RULE 11: IF ALL CONFORME, DO NOT INVENT PROBLEMS OR UNNECESSARY RECOMMENDATIONS!
   if (worstStatus === "Conforme") {
-    causasDetalladas.push({
-      causa: "Comportamiento mecánico y neumático dentro de tolerancias ISO",
-      probabilidad: "Baja",
-      justificacion: "Las mediciones no muestran desvíos de frecuencia, tiempos de fase ni vacío. Los resultados son compatibles con un pulsador adecuadamente calibrado y en correcto estado de mantenimiento.",
-      justificacionProductor: "El equipo no presenta anomalías. Funciona perfectamente de acuerdo a las normas internacionales."
-    });
-    planInspeccionStepsSet.add("Continuar con el plan de mantenimiento preventivo programado.");
-    planInspeccionStepsSet.add("Realizar limpieza periódica del filtro de aire atmosférico.");
-    planInspeccionStepsSet.add("Programar el próximo control periódico con pulsógrafo según protocolo.");
-    impactoPotencialSet.add("Preservación de la salud de la ubre y óptima eficiencia de ordeño.");
-    impactoPotencialSet.add("Garantía de confort y bienestar animal durante el proceso de extracción.");
-    accionesCorrectivasSet.add("Continuar con el mantenimiento preventivo rutinario del sistema de ordeño.");
+    const defaultCleanRecommendation = "Continuar con el programa de mantenimiento preventivo habitual y repetir el control de pulsación según el cronograma establecido.";
+    planInspeccionStepsSet.add(defaultCleanRecommendation);
+    accionesCorrectivasSet.add(defaultCleanRecommendation);
+  } else {
+    // Collect specific failures if NOT Conforme
+    let hasFreq = false;
+    let hasRatio = false;
+    let hasPhaseA = false;
+    let hasPhaseB = false;
+    let hasPhaseC = false;
+    let hasPhaseD = false;
+    let hasBalance = false;
+    let hasVacuum = false;
+
+    for (const item of evaluations) {
+      if (item.estado !== "Conforme") {
+        const pName = item.parametro.toLowerCase();
+        if (pName.includes("frecuencia")) hasFreq = true;
+        if (pName.includes("relación")) hasRatio = true;
+        if (pName.includes("fase a") || pName.includes("ta")) hasPhaseA = true;
+        if (pName.includes("fase b") || pName.includes("tb")) hasPhaseB = true;
+        if (pName.includes("fase c") || pName.includes("tc")) hasPhaseC = true;
+        if (pName.includes("fase d") || pName.includes("td")) hasPhaseD = true;
+        if (pName.includes("desbalance") || pName.includes("balance")) hasBalance = true;
+        if (pName.includes("vacío")) hasVacuum = true;
+      }
+    }
+
+    if (hasFreq) {
+      causasDetalladas.push({
+        causa: "Regulador de pulsación descalibrado o desajuste mecánico",
+        probabilidad: "Alta",
+        justificacion: "La desviación de frecuencia observada respecto del estándar nominal es compatible con una descalibración del mecanismo regulador de velocidad de conmutación.",
+        justificacionProductor: "El pulsador está latiendo fuera del ritmo óptimo, indicando desajuste en el regulador."
+      });
+      planInspeccionStepsSet.add("Verificar la calibración de frecuencia y ajustar a 60 ppm con un vacuómetro/pulsógrafo patrón según norma ISO 5707.");
+      accionesCorrectivasSet.add("Calibrar la frecuencia de pulsación a 60 ppm (± 3.0 ppm) de acuerdo con la norma ISO 5707.");
+    }
+
+    if (hasRatio || hasBalance) {
+      causasDetalladas.push({
+        causa: "Desgaste de membranas o diafragmas internos del pulsador",
+        probabilidad: "Alta",
+        justificacion: "Una alteración en la relación o desbalance entre canales es compatible con fatiga de material o pérdida de elasticidad en las membranas de goma o silicona.",
+        justificacionProductor: "Las membranas internas presentan desgaste por uso continuo."
+      });
+      planInspeccionStepsSet.add("Inspeccionar el estado físico, flexibilidad y estanqueidad de las membranas del pulsador.");
+      accionesCorrectivasSet.add("Reemplazar el kit de membranas/diafragmas desgastados por repuestos originales.");
+    }
+
+    if (hasPhaseA || hasPhaseC) {
+      causasDetalladas.push({
+        causa: "Filtro de aire saturado o suciedad acumulada en puertos de ventilación",
+        probabilidad: "Alta",
+        justificacion: "Transiciones lentas en las fases a o c suelen asociarse a restricciones en los puertos de ventilación atmosférica.",
+        justificacionProductor: "Filtro de aire sucio o tapado que frena el movimiento neumático."
+      });
+      planInspeccionStepsSet.add("Inspeccionar y limpiar el filtro de aire del pulsador o sustituir el elemento filtrante.");
+      accionesCorrectivasSet.add("Limpiar o sustituir el filtro de aire y verificar conductos de ventilación.");
+    }
+
+    if (hasPhaseD) {
+      causasDetalladas.push({
+        causa: "Descalibración de fase de masaje o pérdida de flexibilidad neumática",
+        probabilidad: "Alta",
+        justificacion: "Reducción de la fase d (masaje) por debajo de los 150 ms o 15% requeridos por norma ISO para aliviar la congestión mamaria.",
+        justificacionProductor: "Tiempo insuficiente de descanso y masaje para la ubre."
+      });
+      planInspeccionStepsSet.add("Verificar la calibración de la fase de masaje y revisar la integridad de membranas.");
+      accionesCorrectivasSet.add("Sustituir membranas y recalibrar la fase de masaje a un mínimo de 150 ms (ISO 5707).");
+    }
+
+    if (hasVacuum) {
+      causasDetalladas.push({
+        causa: "Regulador de vacío descalibrado o fugas en la red principal",
+        probabilidad: "Alta",
+        justificacion: "Nivel de vacío fuera del rango normativo ISO (40.0 - 50.0 kPa).",
+        justificacionProductor: "El regulador de vacío de la sala requiere calibración."
+      });
+      planInspeccionStepsSet.add("Verificar y calibrar el regulador de vacío con un vacuómetro patrón.");
+      accionesCorrectivasSet.add("Calibrar la válvula del regulador de vacío al rango normativo (40.0 - 50.0 kPa).");
+    }
   }
 
   const planInspeccion = Array.from(planInspeccionStepsSet);
   const impactoPotencial = Array.from(impactoPotencialSet);
   const accionesCorrectivas = Array.from(accionesCorrectivasSet);
-
-  // String array version for backward compatibility
   const posiblesCausas = causasDetalladas.map(c => `${c.causa} [${c.probabilidad} probabilidad]: ${c.justificacion}`);
 
-  // Generate Non-technical Producer Report (Informe para Productor)
+  // Informe Productor & Narrative
   let queSignifica = "";
   let queRiesgosExisten = "";
   let queSeRecomiendaHacer = "";
@@ -704,29 +604,23 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
   let conclusionFinal = "";
 
   if (worstStatus === "Conforme") {
-    queSignifica = "El sistema de pulsación funciona de manera óptima y cumple totalmente con los parámetros establecidos por las normas internacionales ISO 5707 e ISO 6690. Las fases de ordeño y masaje se encuentran perfectamente equilibradas.";
-    queRiesgosExisten = "No existen riesgos para la salud de las ubres ni para la velocidad del ordeño en las condiciones actuales.";
-    queSeRecomiendaHacer = "Continuar con el mantenimiento preventivo rutinario del sistema de ordeño, respetando el plan de mantenimiento establecido para el establecimiento.";
-    interpretacion = "El sistema de pulsación se encuentra funcionando dentro de los parámetros establecidos por las normas ISO, lo que favorece un ordeño eficiente, permite una extracción completa de la leche y contribuye de manera directa al bienestar animal y a la preservación de los pezones.";
-    conclusionFinal = "En conclusión, el equipo evaluado presenta un desempeño totalmente satisfactorio y conforme con la normativa técnica vigente. No se requieren intervenciones correctivas de urgencia. Se recomienda continuar con los controles periódicos programados para asegurar la constancia y calidad del ordeño en la sala.";
+    queSignifica = "Las mediciones obtenidas muestran un funcionamiento uniforme entre ambos canales. Todos los parámetros evaluados se encuentran dentro de las tolerancias establecidas por las normas ISO 6690:2007 e ISO 5707:2007.";
+    queRiesgosExisten = "No se detectan desviaciones ni riesgos para la salud de las ubres ni para la velocidad de ordeño.";
+    queSeRecomiendaHacer = "Continuar con el programa de mantenimiento preventivo habitual y repetir el control de pulsación según el cronograma establecido.";
+    interpretacion = "El sistema de pulsación funciona de manera óptima y responde rigurosamente a las exigencias de la norma ISO. Permite una extracción confortable y completa de la leche.";
+    conclusionFinal = "Las mediciones obtenidas muestran un funcionamiento uniforme entre ambos canales. Todos los parámetros evaluados se encuentran dentro de las tolerancias establecidas por las normas ISO 6690:2007 e ISO 5707:2007. No se detectan desviaciones significativas que indiquen problemas de regulación del sistema de pulsación.";
   } else if (worstStatus === "Advertencia") {
-    queSignifica = "El pulsador se encuentra operativo, pero registra pequeñas desviaciones respecto a los rangos óptimos de la norma ISO. El ritmo o la fuerza de conmutación muestran ligeras variaciones.";
-    queRiesgosExisten = "Existe riesgo de ordeños ligeramente más lentos o congestión inicial en la punta del pezón si los desvíos se profundizan.";
-    queSeRecomiendaHacer = "Programar una revisión técnica preventiva en los próximos días para limpiar conductos, verificar juntas o reemplazar componentes desgastados antes de que la falla avance.";
-    interpretacion = "Aunque el pulsador continúa trabajando, las ligeras alteraciones en los tiempos de fase de pulso disminuyen la eficiencia general de la bajada de leche y pueden generar estrés mecánico innecesario en los esfínteres de la ubre. Corregir estos pequeños desvíos de forma oportuna evita fallas mayores.";
-    conclusionFinal = "En conclusión, el equipo requiere una atención preventiva moderada a corto plazo. Si bien no se trata de una falla crítica inminente, ajustar y calibrar los valores fuera de rango garantizará la salud mamaria del rodeo y mantendrá el máximo rendimiento del ordeño diario.";
-  } else if (worstStatus === "Fuera de tolerancia") {
-    queSignifica = "El pulsador no cumple con las tolerancias exigidas por las normas ISO. Las fases de masaje o de ordeño se encuentran notablemente descompensadas.";
-    queRiesgosExisten = "Riesgo alto de sobreordeño, congestión en el pezón, lesiones en la piel, aumento del recuento de células somáticas (RCS) y predisposición a contraer mastitis.";
-    queSeRecomiendaHacer = "Realizar mantenimiento técnico a la brevedad. Reemplazar el kit de membranas/diafragmas y recalibrar los tiempos de pulso a los valores normativos.";
-    interpretacion = "El funcionamiento fuera de tolerancia altera el vaciado de las mamellas e interrumpe la fase de descanso necesaria para la correcta circulación sanguínea en la punta del pezón. Esta alteración daña progresivamente los tejidos e incrementa la tasa de infecciones mamarias.";
-    conclusionFinal = "En conclusión, el estado del pulsador representa un riesgo concreto para la salud de las vacas y la calidad del producto. Se recomienda efectuar el service técnico e higiénico a la brevedad antes de que la alteración repercuta en pérdidas productivas o inflamación en el rodeo.";
+    queSignifica = "El pulsador registra pequeñas desviaciones respecto a los rangos óptimos de la norma ISO.";
+    queRiesgosExisten = "Ligeros retrasos en la velocidad de ordeño o leve estrés en la punta del pezón.";
+    queSeRecomiendaHacer = "Programar un ajuste de rutina y limpieza en el próximo servicio técnico.";
+    interpretacion = "Desviaciones moderadas que deben corregirse preventivamente para evitar un desgaste mayor.";
+    conclusionFinal = "El equipo presenta desviaciones leves respecto a la norma ISO. Se aconseja una revisión técnica de rutina para restablecer los valores nominales óptimos.";
   } else {
-    queSignifica = "El pulsador presenta una falla técnica crítica severa. El patrón de pulso se encuentra interrumpido o descalibrado a niveles peligrosos.";
-    queRiesgosExisten = "Riesgo crítico de mastitis clínica, trauma severo en el tejido mamario (hiperqueratosis), dolor manifiesto durante el ordeño y caída del volumen producido.";
-    queSeRecomiendaHacer = "Desactivar o reemplazar este pulsador de inmediato antes del próximo turno de ordeño hasta ejecutar la reparación técnica integral.";
-    interpretacion = "La falla crítica suprime la fase de masaje imprescindible para liberar la congestión del pezón, sometiendo a las vacas a una succión de vacío continua y agresiva. Esta situación genera dolor en los animales, comportamiento inquieto durante la bajada y daños tisulares permanentes.";
-    conclusionFinal = "En conclusión, el equipo evaluado no se encuentra apto para el ordeño y debe ser excluido de servicio inmediatamente. Su uso contraviene las pautas básicas de sanidad animal. Se insta a sustituir o reparar integralmente el componente antes de reiniciar las labores de ordeño.";
+    queSignifica = "El pulsador registra parámetros fuera de las tolerancias de la norma ISO.";
+    queRiesgosExisten = "Riesgo de sobreordeño, congestión en el pezón e incremento en la tasa de mastitis.";
+    queSeRecomiendaHacer = "Realizar service técnico correctivo, reemplazar el kit de membranas y recalibrar antes de continuar operando.";
+    interpretacion = "Funcionamiento fuera de tolerancia que impacta negativamente en la salud mamaria y en la eficiencia de extracción.";
+    conclusionFinal = "El equipo evaluado no cumple con las especificaciones normativas ISO. Requiere mantenimiento técnico e intervención inmediata para corregir los desvíos detectados.";
   }
 
   const informeProductor: InformeProductor = {
@@ -750,6 +644,7 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
     planInspeccion,
     impactoPotencial,
     accionesCorrectivas,
-    informeProductor
+    informeProductor,
+    diferenciaCanales
   };
 }

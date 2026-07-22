@@ -148,7 +148,7 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
     currentY += 3.5;
 
     const tableRows = isoTable.map((item) => [
-      item.parametro,
+      item.canal && item.canal !== "Global" ? `[${item.canal}] ${item.parametro}` : item.parametro,
       item.valorMedido,
       item.valorPermitido,
       item.diferencia,
@@ -476,7 +476,7 @@ export function downloadProducerPdf(evalData: EvaluacionDiagnosis) {
       if (item.estado === "Crítico") icon = "🔴 Crítico";
 
       return [
-        item.parametro,
+        item.canal && item.canal !== "Global" ? `[${item.canal}] ${item.parametro}` : item.parametro,
         item.valorMedido,
         item.valorPermitido,
         icon
