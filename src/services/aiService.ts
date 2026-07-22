@@ -264,6 +264,10 @@ export const AIService = {
       accionesCorrectivas: isoOutput.accionesCorrectivas,
       recomendaciones: isoOutput.accionesCorrectivas,
       evaluacionISO: isoOutput.evaluacionISO,
+      analisisCanal1: isoOutput.analisisCanal1,
+      analisisCanal2: isoOutput.analisisCanal2,
+      analisisComparativo: isoOutput.analisisComparativo,
+      conclusionGlobal: isoOutput.conclusionGlobal,
       informeProductor: isoOutput.informeProductor
     };
   }

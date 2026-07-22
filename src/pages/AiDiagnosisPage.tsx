@@ -34,6 +34,7 @@ import { EvaluacionDiagnosis, ResultadoIA } from "../types/aiDiagnosis";
 import { Tambo } from "../types/supabase";
 import { AIService } from "../services/aiService";
 import { downloadTechnicalPdf, downloadProducerPdf } from "../utils/pdfGenerator";
+import { evaluatePulsatorISO } from "../utils/isoRulesEngine";
 import IaForm from "../components/IaForm";
 
 export default function AiDiagnosisPage() {
@@ -244,7 +245,7 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
       item.tecnicoNombre.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = 
       statusFilter === "todos" || 
-      item.resultadoIA.estadoGeneral.toLowerCase() === statusFilter.toLowerCase();
+      (item.resultadoIA?.estadoGeneral || "").toLowerCase() === statusFilter.toLowerCase();
     return matchesSearch && matchesStatus;
   });
 
@@ -916,41 +917,65 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
 
                         {/* Comparative Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Relación de Pulsado:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaRelacion.diferencia}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaRelacion.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.diferenciaRelacion && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Δ Relación de Pulsado:</span>
+                              <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaRelacion.diferencia}</span>
+                              {analysisResult.analisisComparativo.diferenciaRelacion.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaRelacion.observacion}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Frecuencia:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaFrecuencia.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.diferenciaFrecuencia && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Δ Frecuencia:</span>
+                              <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
+                              {analysisResult.analisisComparativo.diferenciaFrecuencia.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaFrecuencia.observacion}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Fase d (Masaje):</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaTd.diferencia}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaTd.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.diferenciaTd && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Δ Fase d (Masaje):</span>
+                              <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaTd.diferencia}</span>
+                              {analysisResult.analisisComparativo.diferenciaTd.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaTd.observacion}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Nivel de Vacío:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaVacio.diferencia}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaVacio.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.diferenciaVacio && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Δ Nivel de Vacío:</span>
+                              <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaVacio.diferencia}</span>
+                              {analysisResult.analisisComparativo.diferenciaVacio.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaVacio.observacion}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Sincronización:</span>
-                            <span className="font-bold text-emerald-400 font-mono text-sm">{analysisResult.analisisComparativo.sincronizacion.tipo}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.sincronizacion.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.sincronizacion && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Sincronización:</span>
+                              <span className="font-bold text-emerald-400 font-mono text-sm">{analysisResult.analisisComparativo.sincronizacion.tipo}</span>
+                              {analysisResult.analisisComparativo.sincronizacion.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.sincronizacion.observacion}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
-                            <span className="text-zinc-400 text-[11px] font-semibold block">Reparto de Balance:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.balance.relacionBalance}</span>
-                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.balance.observacion}</span>
-                          </div>
+                          {analysisResult.analisisComparativo.balance && (
+                            <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                              <span className="text-zinc-400 text-[11px] font-semibold block">Reparto de Balance:</span>
+                              <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.balance.relacionBalance}</span>
+                              {analysisResult.analisisComparativo.balance.observacion && (
+                                <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.balance.observacion}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Comparative Synthesis */}
@@ -1429,19 +1454,43 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
-                        <span className="text-zinc-400 text-[10px] block">Δ Relación de Pulsado:</span>
-                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaRelacion.diferencia}</span>
-                      </div>
-                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
-                        <span className="text-zinc-400 text-[10px] block">Δ Frecuencia:</span>
-                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
-                      </div>
-                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
-                        <span className="text-zinc-400 text-[10px] block">Δ Fase d (Masaje):</span>
-                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaTd.diferencia}</span>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+                      {viewingEval.resultadoIA.analisisComparativo.diferenciaRelacion && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Δ Relación de Pulsado:</span>
+                          <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaRelacion.diferencia}</span>
+                        </div>
+                      )}
+                      {viewingEval.resultadoIA.analisisComparativo.diferenciaFrecuencia && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Δ Frecuencia:</span>
+                          <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
+                        </div>
+                      )}
+                      {viewingEval.resultadoIA.analisisComparativo.diferenciaTd && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Δ Fase d (Masaje):</span>
+                          <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaTd.diferencia}</span>
+                        </div>
+                      )}
+                      {viewingEval.resultadoIA.analisisComparativo.diferenciaVacio && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Δ Nivel de Vacío:</span>
+                          <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaVacio.diferencia}</span>
+                        </div>
+                      )}
+                      {viewingEval.resultadoIA.analisisComparativo.sincronizacion && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Sincronización:</span>
+                          <span className="font-bold text-emerald-400 font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.sincronizacion.tipo}</span>
+                        </div>
+                      )}
+                      {viewingEval.resultadoIA.analisisComparativo.balance && (
+                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                          <span className="text-zinc-400 text-[10px] block">Reparto de Balance:</span>
+                          <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.balance.relacionBalance}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 text-xs space-y-1">

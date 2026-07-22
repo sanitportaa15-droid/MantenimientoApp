@@ -672,7 +672,12 @@ async function startServer() {
         diagnosticoTecnico: `Análisis de emergencia generado por Motor de Reglas ISO: ${rulesEngineOutput.estadoGeneral}.`,
         posiblesCausas: [],
         recomendaciones: ["Revisar calibración en la próxima inspección."],
-        evaluacionISO: rulesEngineOutput.evaluacionISO
+        evaluacionISO: rulesEngineOutput.evaluacionISO,
+        analisisCanal1: rulesEngineOutput.analisisCanal1,
+        analisisCanal2: rulesEngineOutput.analisisCanal2,
+        analisisComparativo: rulesEngineOutput.analisisComparativo,
+        conclusionGlobal: rulesEngineOutput.conclusionGlobal,
+        informeProductor: rulesEngineOutput.informeProductor
       });
     }
   });
