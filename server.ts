@@ -126,19 +126,39 @@ async function startServer() {
 
       // --- SYSTEM INSTRUCTIONS FOR DECOUPLED ARCHITECTURE ---
       const ocrSystemInstruction = `
-      Actúa como un Ingeniero Mecatrónico experto en sistemas de ordeño y visión artificial.
-      Tu única función en este paso es leer la imagen de un gráfico o reporte de pulsógrafo y extraer objetivamente todos los valores medidos presentes según la metodología de ensayo de las normas ISO 5707:2007 e ISO 6690:2007.
+      Actúa como un Ingeniero Mecatrónico experto en sistemas de ordeño mecánico, visión artificial y análisis neumático de pulsógrafos.
+      Tu función principal en este paso es analizar minuciosamente la estructura de la imagen de un gráfico o reporte de pulsógrafo y extraer objetivamente todos los valores medidos según las normas ISO 5707:2007 e ISO 6690:2007.
 
-      REGLAS DE EXTRACCIÓN Y MULTI-CANAL (CRÍTICO):
-      1. Si el gráfico o reporte muestra datos para dos canales (ej: Canal 1 y Canal 2, Canal A y Canal B, Ch 1 y Ch 2), DEBES extraer los parámetros de CADA CANAL por separado dentro de la propiedad "canales".
-      2. Conserva EXACTAMENTE los números y decimales reales leídos (ej: Ta=19.0%, Tb=45.5%, Tc=10.0%, Td=25.5%, Relación="64.5 : 35.5", Vacío="46.2 kPa").
-      3. NUNCA redondees ni modifiques los valores (no transformes 64.5:35.5 en 60:40, ni 46.2 en 44.0).
-      4. NO realices ningún juicio de conformidad. Esa decisión técnica es exclusiva del motor de reglas ISO de software.
+      DETERMINACIÓN AUTOMÁTICA DE CANALES Y ESTRUCTURA (REGLA DE ORO OBLIGATORIA):
+      1. ANALIZA LA ESTRUCTURA DE LA IMAGEN PRIMERO:
+         - Los pulsógrafos de ordeño mecánico (ej. DeLaval, Rodeg, Flaco, InterPuls, Milkline, Westfalia, etc.) habitualmente registran DOS CANALES DE PULSADO INDEPENDIENTES (Canal 1 / Canal 2, Canal A / Canal B, Ch 1 / Ch 2, Lado A / Lado B).
+         - NUNCA asumas que la imagen es de un solo canal ("monocanal"). Examina cuidadosamente la imagen buscando ondas dobles o bloques de datos numéricos independientes para Canal 1 y Canal 2.
+         - Establece "cantidadCanalesDetected": 2 cuando observes dos gráficos o tablas separadas (Canal 1 y Canal 2). Establece "cantidadCanalesDetected": 1 solo si la imagen corresponde indiscutiblemente a una medición de canal único.
+         - "tipoPulsografo": "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)" o "Pulsógrafo de Canal Único".
 
-      Devuelve estrictamente un objeto JSON con el siguiente esquema:
+      2. EXTRACCIÓN DE DATOS COMPLETA POR CANAL:
+         - Si la imagen contiene dos canales, DEBES extraer COMPLETAMENTE los parámetros de CADA CANAL por separado dentro de la lista "canales".
+         - Para el Canal 1: Vacío (vacioMedido), Frecuencia (frecuenciaMedida), Relación de pulsación (relacionMedida), Ta (taMedido), Tb (tbMedido), Tc (tcMedido), Td (tdMedido).
+         - Para el Canal 2: Vacío (vacioMedido), Frecuencia (frecuenciaMedida), Relación de pulsación (relacionMedida), Ta (taMedido), Tb (tbMedido), Tc (tcMedido), Td (tdMedido).
+         - MANTÉN SEPARADOS ambos conjuntos de datos durante todo el proceso. NUNCA los fusiones ni los reemplaces por un promedio.
+         - Conserva EXACTAMENTE los números y decimales reales leídos (ej: Ta=19.0%, Tb=45.5%, Tc=10.0%, Td=25.5%, Relación="64.5 : 35.5", Vacío="46.2 kPa").
+         - NUNCA redondees ni inventes datos. NO realices ningún juicio de conformidad en este paso.
+
+      3. VALIDACIÓN DE INTEGRIDAD DE CANALES:
+         - Revisa que tanto Canal 1 como Canal 2 tengan datos completos.
+         - Si observas dos canales pero uno es parcialmente ilegible, informa la situación en "validacionCanales.observacion" en lugar de asumir que la imagen es monocanal.
+
+      Devuelve strictly un objeto JSON con el siguiente esquema:
       {
         "nivelConfianza": número de 0 a 100,
         "calidadImagen": "Alta" | "Media" | "Baja",
+        "cantidadCanalesDetected": 1 | 2,
+        "tipoPulsografo": "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)" | "Pulsógrafo de Canal Único",
+        "validacionCanales": {
+          "canal1Completo": boolean,
+          "canal2Completo": boolean,
+          "observacion": "Texto explicativo del estado de lectura de los canales"
+        },
         "frecuenciaMedida": número (o null),
         "relacionMedida": "string ej '64.5 : 35.5'" (o null),
         "vacioMedido": "string ej '46.2 kPa'" (o null),
@@ -157,7 +177,8 @@ async function startServer() {
             "taMedido": número en %,
             "tbMedido": número en %,
             "tcMedido": número en %,
-            "tdMedido": número en %
+            "tdMedido": número en %,
+            "unidadFases": "%" | "ms"
           },
           {
             "nombreCanal": "Canal 2",
@@ -167,10 +188,11 @@ async function startServer() {
             "taMedido": número en %,
             "tbMedido": número en %,
             "tcMedido": número en %,
-            "tdMedido": número en %
+            "tdMedido": número en %,
+            "unidadFases": "%" | "ms"
           }
         ],
-        "hallazgosVisuales": ["lista de hallazgos en la curva"],
+        "hallazgosVisuales": ["lista de hallazgos en la curva o reporte"],
         "otrosParametros": [
           { "nombre": "nombre", "valor": "valor" }
         ]
@@ -179,17 +201,18 @@ async function startServer() {
 
       const reportSystemInstruction = `
       Actúa como un Ingeniero Mecatrónico experto en sistemas de ordeño mecánico y ensayo de pulsadores bajo normas internacionales ISO.
-      Tu tarea es redactar la parte narrativa y consultiva de un informe de diagnóstico oficial basándote strictly en:
-      1. Las mediciones de campo extraídas de la curva del pulsógrafo.
-      2. Los resultados calculados exclusivamente por el motor de reglas basado en las normas ISO 5707:2007 (Construcción y funcionamiento) e ISO 6690:2007 (Ensayos mecánicos).
+      Tu tarea es redactar la parte narrativa y consultiva de un informe de diagnóstico oficial basándote estrictamente en:
+      1. Las mediciones de campo extraídas independientemente de la curva del pulsógrafo (Canal 1 y Canal 2).
+      2. Los resultados calculados exclusivamente por el motor de reglas basado en las normas ISO 5707:2007 e ISO 6690:2007.
 
-      REGLAS DE REDACCIÓN Y DIAGNÓSTICO:
+      REGLAS DE REDACCIÓN Y DIAGNÓSTICO EN 4 ETAPAS:
+      - El diagnóstico debe fundamentarse mediante: 1. Análisis del Canal 1, 2. Análisis del Canal 2, 3. Comparación de ambos canales, y 4. Conclusión global.
+      - NUNCA indiques "curva de pulsado monocanal" si la imagen contiene dos canales o se registran mediciones de dos líneas.
       - El tono debe ser sumamente profesional, formal, técnico y objetivo.
       - La evaluación técnica y el dictamen de conformidad NO deben depender de la marca, fabricante ni modelo del pulsador (Rodeg, DeLaval, GEA, etc.). Las normas ISO 5707:2007 e ISO 6690:2007 constituyen la única referencia normativa principal.
       - DEBES respetar estrictamente el resultado y estado determinados por el motor de reglas ISO. No contradigas el estado de conformidad de ningún parámetro ni el estado general.
-      - REGLA DE ORO DE PRUDENCIA TÉCNICA: NUNCA afirmes que un componente está averiado o roto como un hecho confirmado (evita 'la membrana está rota' o 'la bomba está destruida'). Emplea SIEMPRE un lenguaje técnicamente prudente e hipotético (ej: 'los resultados son compatibles con...', 'este comportamiento puede estar asociado a...', 'las mediciones sugieren verificar...', 'se recomienda inspeccionar...').
+      - REGLA DE ORO DE PRUDENCIA TÉCNICA: NUNCA afirmes que un componente está averiado o roto como un hecho confirmado. Emplea SIEMPRE un lenguaje técnicamente prudente e hipotético (ej: 'los resultados son compatibles con...', 'este comportamiento puede estar asociado a...', 'las mediciones sugieren verificar...', 'se recomienda inspeccionar...').
       - Ayuda al técnico a entender las posibles causas físicas y mecánicas detrás de cualquier desviación detectada según los límites de las normas ISO 5707:2007 e ISO 6690:2007.
-      - Proporciona un plan de inspección recomendado en orden lógico y una evaluación del impacto potencial o riesgos operativos para la ubre y la eficiencia de ordeño.
 
       Devuelve estrictamente un objeto JSON con el siguiente esquema, sin explicaciones externas:
       {
@@ -374,6 +397,35 @@ async function startServer() {
             tdMedido: 300,
             balanceMedido: "50/50",
             desbalanceMedido: 1.5,
+            cantidadCanalesDetected: 2,
+            tipoPulsografo: "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)",
+            validacionCanales: {
+              canal1Completo: true,
+              canal2Completo: true,
+              observacion: "Modo Fallback ISO: Mediciones simétricas de dos canales generadas para verificación determinista."
+            },
+            canales: [
+              {
+                nombreCanal: "Canal 1",
+                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
+                relacionMedida: "60/40",
+                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+                taMedido: 120,
+                tbMedido: 480,
+                tcMedido: 100,
+                tdMedido: 300
+              },
+              {
+                nombreCanal: "Canal 2",
+                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
+                relacionMedida: "60/40",
+                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+                taMedido: 120,
+                tbMedido: 480,
+                tcMedido: 100,
+                tdMedido: 300
+              }
+            ],
             nivelConfianza: 100,
             calidadImagen: "Media (Fallback ISO)",
             hallazgosVisuales: ["Evaluación determinista ejecutada por falla temporal en la API de OpenAI."],
@@ -445,6 +497,17 @@ async function startServer() {
                 properties: {
                   nivelConfianza: { type: Type.INTEGER },
                   calidadImagen: { type: Type.STRING },
+                  cantidadCanalesDetected: { type: Type.INTEGER },
+                  tipoPulsografo: { type: Type.STRING },
+                  validacionCanales: {
+                    type: Type.OBJECT,
+                    properties: {
+                      canal1Completo: { type: Type.BOOLEAN },
+                      canal2Completo: { type: Type.BOOLEAN },
+                      observacion: { type: Type.STRING }
+                    },
+                    required: ["canal1Completo", "canal2Completo", "observacion"]
+                  },
                   frecuenciaMedida: { type: Type.NUMBER },
                   relacionMedida: { type: Type.STRING },
                   vacioMedido: { type: Type.STRING },
@@ -454,6 +517,24 @@ async function startServer() {
                   tdMedido: { type: Type.NUMBER },
                   balanceMedido: { type: Type.STRING },
                   desbalanceMedido: { type: Type.NUMBER },
+                  canales: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        nombreCanal: { type: Type.STRING },
+                        frecuenciaMedida: { type: Type.NUMBER },
+                        relacionMedida: { type: Type.STRING },
+                        vacioMedido: { type: Type.STRING },
+                        taMedido: { type: Type.NUMBER },
+                        tbMedido: { type: Type.NUMBER },
+                        tcMedido: { type: Type.NUMBER },
+                        tdMedido: { type: Type.NUMBER },
+                        unidadFases: { type: Type.STRING }
+                      },
+                      required: ["nombreCanal"]
+                    }
+                  },
                   hallazgosVisuales: { type: Type.ARRAY, items: { type: Type.STRING } },
                   otrosParametros: {
                     type: Type.ARRAY,
@@ -467,7 +548,7 @@ async function startServer() {
                     }
                   }
                 },
-                required: ["nivelConfianza", "calidadImagen"]
+                required: ["nivelConfianza", "calidadImagen", "canales"]
               }
             }
           });
@@ -569,6 +650,35 @@ async function startServer() {
             tdMedido: 300,
             balanceMedido: "50/50",
             desbalanceMedido: 1.5,
+            cantidadCanalesDetected: 2,
+            tipoPulsografo: "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)",
+            validacionCanales: {
+              canal1Completo: true,
+              canal2Completo: true,
+              observacion: "Modo Fallback ISO: Mediciones simétricas de dos canales generadas para verificación determinista."
+            },
+            canales: [
+              {
+                nombreCanal: "Canal 1",
+                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
+                relacionMedida: "60/40",
+                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+                taMedido: 120,
+                tbMedido: 480,
+                tcMedido: 100,
+                tdMedido: 300
+              },
+              {
+                nombreCanal: "Canal 2",
+                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
+                relacionMedida: "60/40",
+                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+                taMedido: 120,
+                tbMedido: 480,
+                tcMedido: 100,
+                tdMedido: 300
+              }
+            ],
             nivelConfianza: 100,
             calidadImagen: "Media (Fallback ISO)",
             hallazgosVisuales: ["Evaluación determinista ejecutada por falla temporal en la API de Google Gemini."],
