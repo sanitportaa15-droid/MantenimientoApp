@@ -26,11 +26,23 @@ export interface ParametroISOEvaluacion {
   observacion: string;
 }
 
+export interface PosibleCausaDetallada {
+  causa: string;
+  probabilidad: "Alta" | "Media" | "Baja";
+  justificacion: string;
+  justificacionProductor?: string;
+}
+
 export interface InformeProductor {
   estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
   queSignifica: string;
   queRiesgosExisten: string;
   queSeRecomiendaHacer: string;
+  interpretacion: string;
+  conclusionFinal: string;
+  posiblesCausasSencillas?: string[];
+  planInspeccionSencillo?: string[];
+  impactoPotencialSencillo?: string[];
 }
 
 export interface ResultadoIA {
@@ -54,6 +66,9 @@ export interface ResultadoIA {
   hallazgos: string[];
   diagnosticoTecnico: string;
   posiblesCausas: string[];
+  posiblesCausasDetalladas?: PosibleCausaDetallada[];
+  planInspeccion?: string[];
+  impactoPotencial?: string[];
   accionesCorrectivas?: string[];
   recomendaciones: string[];
   evaluacionISO?: ParametroISOEvaluacion[];

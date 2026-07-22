@@ -19,7 +19,12 @@ import {
   Wrench,
   Share2,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Award,
+  ShieldCheck,
+  Activity,
+  HeartPulse,
+  ClipboardCheck
 } from "lucide-react";
 import { db, getActiveCompanyId } from "../services/db";
 import { useAuth } from "../services/AuthContext";
@@ -33,15 +38,18 @@ import IaForm from "../components/IaForm";
 export default function AiDiagnosisPage() {
   const { profile, user: authUser } = useAuth();
   
-  // Navigation Tabs: Only 2 tabs
+  // Navigation Tabs: Only 2 main tabs ("nueva" or "historial")
   const [activeTab, setActiveTab] = useState<"nueva" | "historial">("nueva");
+
+  // View mode within result display: "productor" vs "tecnico"
+  const [reportViewMode, setReportViewMode] = useState<"productor" | "tecnico">("productor");
 
   // General state
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [evaluaciones, setEvaluaciones] = useState<EvaluacionDiagnosis[]>([]);
   const [loadingTambos, setLoadingTambos] = useState(true);
 
-  // Form States - Nueva Evaluación (Simplified to strictly required fields)
+  // Form States
   const [selectedTamboId, setSelectedTamboId] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -60,6 +68,7 @@ export default function AiDiagnosisPage() {
 
   // History states for View Modal & Filtering
   const [viewingEval, setViewingEval] = useState<EvaluacionDiagnosis | null>(null);
+  const [modalReportMode, setModalReportMode] = useState<"productor" | "tecnico">("productor");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
 
@@ -70,11 +79,7 @@ export default function AiDiagnosisPage() {
       try {
         const companyId = getActiveCompanyId();
         let tambosList: Tambo[] = [];
-        if (companyId) {
-          tambosList = await db.tambos.getAll(companyId);
-        } else {
-          tambosList = await db.tambos.getAll();
-        }
+        tambosList = await db.tambos.getAll();
         setTambos(tambosList);
         if (tambosList.length > 0) {
           setSelectedTamboId(tambosList[0].id);
@@ -182,6 +187,7 @@ export default function AiDiagnosisPage() {
       setEvaluaciones(aiDiagnosisStorage.getEvaluaciones());
       setAnalysisResult(res);
       setCurrentEval(newEval);
+      setReportViewMode("productor");
 
     } catch (err: any) {
       console.error("Error en análisis:", err);
@@ -198,21 +204,24 @@ export default function AiDiagnosisPage() {
     const tamboName = evalData.tamboNombre || "Establecimiento";
     const dateStr = evalData.fecha ? new Date(evalData.fecha).toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
 
-    const msg = `🏥 *DIAGNÓSTICO TÉCNICO DE PULSADO - NORMA ISO 5707 / 6690*
-📍 *Tambo:* ${tamboName}
+    const msg = `🏥 *GANPOR - INFORME DE PULSADO PARA EL PRODUCTOR*
+📍 *Establecimiento:* ${tamboName}
 📅 *Fecha:* ${dateStr}
-📊 *Estado General:* ${res.estadoGeneral.toUpperCase()}
+📊 *Estado del Pulsador:* ${res.estadoGeneral.toUpperCase()}
 
-📝 *¿Qué significa este resultado?*
-${inf?.queSignifica || res.diagnosticoTecnico}
+💡 *¿Cómo impacta en el ordeño?*
+${inf?.interpretacion || inf?.queSignifica || res.diagnosticoTecnico}
 
-🚨 *Riesgos identificados:*
-${inf?.queRiesgosExisten || "Revisar la tabla de evaluación ISO."}
+🩺 *Salud de la Ubre y Bienestar:*
+${inf?.queRiesgosExisten || "Revisar la tabla de parámetros ISO."}
 
-💡 *Acciones Recomendadas:*
+🔧 *Recomendaciones:*
 ${inf?.queSeRecomiendaHacer || (res.accionesCorrectivas || res.recomendaciones || []).join("\n• ")}
 
-_Generado por GANPOR - Motor de Reglas ISO_`;
+📌 *Conclusión Final:*
+${inf?.conclusionFinal || "Evaluación profesional procesada según Norma ISO 5707 / 6690."}
+
+_Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
 
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank");
@@ -242,51 +251,69 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
   const getBadgeStyle = (estado: string) => {
     switch (estado) {
       case "Conforme":
-        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
       case "Advertencia":
-        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+      case "Atención":
+        return "bg-amber-500/10 text-amber-400 border-amber-500/30";
       case "Fuera de tolerancia":
-        return "bg-orange-500/10 text-orange-400 border-orange-500/20";
+        return "bg-orange-500/10 text-orange-400 border-orange-500/30";
       case "Crítico":
-        return "bg-red-500/10 text-red-400 border-red-500/20";
+        return "bg-red-500/10 text-red-400 border-red-500/30";
       default:
-        return "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+        return "bg-zinc-500/10 text-zinc-400 border-zinc-500/30";
     }
   };
 
   const getStatusIcon = (estado: string) => {
     switch (estado) {
       case "Conforme":
-        return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
+        return <CheckCircle2 className="w-6 h-6 text-emerald-400" />;
       case "Advertencia":
-        return <AlertTriangle className="w-5 h-5 text-amber-400" />;
+      case "Atención":
+        return <AlertTriangle className="w-6 h-6 text-amber-400" />;
       case "Fuera de tolerancia":
-        return <AlertCircle className="w-5 h-5 text-orange-400" />;
+        return <AlertCircle className="w-6 h-6 text-orange-400" />;
       case "Crítico":
-        return <XCircle className="w-5 h-5 text-red-400" />;
+        return <XCircle className="w-6 h-6 text-red-400" />;
       default:
-        return <Info className="w-5 h-5 text-zinc-400" />;
+        return <Info className="w-6 h-6 text-zinc-400" />;
+    }
+  };
+
+  const getStatusIndicator = (estado: string) => {
+    switch (estado) {
+      case "Conforme":
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Conforme</span>;
+      case "Advertencia":
+      case "Atención":
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">🟡 Atención</span>;
+      case "Fuera de tolerancia":
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">🔴 Desviado</span>;
+      case "Crítico":
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">🔴 Crítico</span>;
+      default:
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">⚪ Sin evaluar</span>;
     }
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-zinc-900/60 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-xl">
+      {/* Institutional Header Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-gradient-to-r from-emerald-950/60 via-zinc-900/80 to-zinc-900/60 p-6 rounded-2xl border border-emerald-500/20 backdrop-blur-xl shadow-xl shadow-emerald-950/10">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
-              <Brain className="w-6 h-6" />
+            <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+              <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                Diagnóstico de Pulsado ISO
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold uppercase tracking-wider">
-                  ISO 5707 / 6690
+              <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                GANPOR - DIAGNÓSTICO DE PULSADO
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold uppercase tracking-wider">
+                  NORMA ISO 5707 / 6690
                 </span>
               </h1>
-              <p className="text-sm text-zinc-400 mt-0.5">
-                Evaluación técnica estricta basada exclusivamente en normas internacionales ISO, sin sesgo de marcas o modelos.
+              <p className="text-sm text-zinc-300 mt-0.5">
+                Evaluación mecánica y neumática imparcial para optimizar la salud mamaria y el rendimiento del ordeño.
               </p>
             </div>
           </div>
@@ -303,7 +330,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
         </div>
       </div>
 
-      {/* Navigation Tabs - STRICTLY 2 TABS */}
+      {/* Main Navigation Tabs */}
       <div className="flex border-b border-zinc-800 mb-8">
         <button
           onClick={() => setActiveTab("nueva")}
@@ -333,9 +360,9 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
       {/* TAB 1: NUEVA EVALUACIÓN */}
       {activeTab === "nueva" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Form (Strictly simplified) */}
+          {/* Left Column: Input Form */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="bg-zinc-900/60 p-6 rounded-2xl border border-zinc-800 backdrop-blur-xl">
+            <div className="bg-zinc-900/60 p-6 rounded-2xl border border-zinc-800 backdrop-blur-xl shadow-lg">
               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                 <Droplets className="w-5 h-5 text-emerald-400" />
                 Datos de la Evaluación
@@ -422,7 +449,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                           Arrastre la imagen aquí o haga clic para seleccionar
                         </p>
                         <p className="text-xs text-zinc-500 mt-1">
-                          Admite fotos de gráficos de pulsógrafo, pantallas LCD o informes impresos
+                          Admite gráficos de pulsógrafo, fotos de pantalla LCD o impresiones
                         </p>
                       </label>
                     )}
@@ -438,7 +465,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                     rows={2}
                     value={additionalNotes}
                     onChange={(e) => setAdditionalNotes(e.target.value)}
-                    placeholder="Detalles sobre temperatura, bajada o estado físico del equipo..."
+                    placeholder="Observaciones adicionales del técnico sobre el pulsador o la bajada..."
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500 text-sm"
                   />
                 </div>
@@ -447,7 +474,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                 <button
                   onClick={handleAnalyze}
                   disabled={isAnalyzing || !selectedTamboId || !imagePreview}
-                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-zinc-950 font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base"
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-zinc-950 font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base"
                 >
                   {isAnalyzing ? (
                     <>
@@ -457,7 +484,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                   ) : (
                     <>
                       <Brain className="w-5 h-5" />
-                      <span>Analizar con Motor ISO</span>
+                      <span>Generar Informe de Pulsado</span>
                     </>
                   )}
                 </button>
@@ -474,196 +501,342 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
               </div>
             </div>
 
-            {/* Standard Reference Info Box */}
+            {/* Normative Reference Card */}
             <div className="bg-zinc-900/40 p-5 rounded-2xl border border-zinc-800/60 text-xs text-zinc-400 space-y-2">
               <h3 className="font-bold text-zinc-200 flex items-center gap-2">
                 <Info className="w-4 h-4 text-emerald-400" />
-                Criterio Normativo ISO
+                Normas Internacionales de Referencia
               </h3>
-              <p>
-                Este módulo evalúa la frecuencia (60 ppm +/- 3 ppm), relación de pulsado (+/- 5%), fases de pulso (ta, tb, tc, td) y nivel de vacío (40-50 kPa) exclusivamente contra las normas <strong>ISO 5707:2007</strong> y <strong>ISO 6690:2007</strong>.
+              <p className="leading-relaxed">
+                Este diagnóstico evalúa la Frecuencia (60 ppm ± 3), Relación de Pulsado (± 5%), Fases A, B, C, D y Nivel de Vacío (40-50 kPa) exclusivamente bajo las normas <strong>ISO 5707:2007</strong> y <strong>ISO 6690:2007</strong>.
               </p>
             </div>
           </div>
 
-          {/* Right Column: Results Display */}
+          {/* Right Column: High-Impact Professional Report View */}
           <div className="lg:col-span-7 space-y-6">
             {!analysisResult && !isAnalyzing && (
-              <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
-                <div className="p-4 bg-zinc-800/50 rounded-2xl mb-4 text-zinc-500">
+              <div className="bg-zinc-900/30 border border-zinc-800/80 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[420px]">
+                <div className="p-4 bg-emerald-500/10 text-emerald-400 rounded-2xl mb-4 border border-emerald-500/20">
                   <FileSpreadsheet className="w-12 h-12" />
                 </div>
-                <h3 className="text-lg font-bold text-zinc-300 mb-1">
+                <h3 className="text-lg font-bold text-zinc-200 mb-1">
                   Esperando Análisis de Pulsógrafo
                 </h3>
-                <p className="text-sm text-zinc-500 max-w-md">
-                  Cargue la imagen del reporte y presione "Analizar con Motor ISO" para obtener la tabla completa de parámetros, diagnóstico técnico y recomendaciones.
+                <p className="text-sm text-zinc-400 max-w-md leading-relaxed">
+                  Cargue la imagen del reporte y presione "Generar Informe de Pulsado" para obtener el informe profesional para el productor con tablas de valores, interpretación técnica y recomendaciones.
                 </p>
               </div>
             )}
 
             {isAnalyzing && (
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[400px] space-y-4">
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[420px] space-y-4">
                 <div className="relative">
                   <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto" />
                   <Brain className="w-8 h-8 text-emerald-400 absolute inset-0 m-auto" />
                 </div>
                 <h3 className="text-lg font-bold text-white">{analysisStep}</h3>
                 <p className="text-xs text-zinc-400 max-w-sm">
-                  Evaluando parámetros contra tolerancias estrictas ISO 5707 / ISO 6690...
+                  Evaluando parámetros contra tolerancias ISO 5707 / ISO 6690...
                 </p>
               </div>
             )}
 
             {analysisResult && currentEval && (
               <div className="space-y-6 animate-fadeIn">
-                {/* Status Summary Banner */}
-                <div className="bg-zinc-900/80 p-6 rounded-2xl border border-zinc-800 backdrop-blur-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(analysisResult.estadoGeneral)}
-                      <div>
-                        <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">
-                          Dictamen General ISO
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl font-bold text-white">
-                            {analysisResult.estadoGeneral}
-                          </span>
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold uppercase ${getBadgeStyle(analysisResult.estadoGeneral)}`}>
-                            Criticidad: {analysisResult.nivelCriticidad}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => downloadTechnicalPdf(currentEval)}
-                        className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                      >
-                        <Download className="w-4 h-4" />
-                        Descargar PDF Técnico
-                      </button>
-
-                      <button
-                        onClick={() => downloadProducerPdf(currentEval)}
-                        className="px-3.5 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Informe Productor
-                      </button>
-
-                      <button
-                        onClick={() => handleShareWhatsApp(currentEval)}
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        WhatsApp
-                      </button>
-                    </div>
+                {/* View Switcher Controls (Productor vs Técnico) */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-900/80 p-4 rounded-2xl border border-zinc-800 backdrop-blur-xl">
+                  <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+                    <button
+                      onClick={() => setReportViewMode("productor")}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                        reportViewMode === "productor"
+                          ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <Award className="w-4 h-4" />
+                      Informe para el Productor
+                    </button>
+                    <button
+                      onClick={() => setReportViewMode("tecnico")}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                        reportViewMode === "tecnico"
+                          ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      Reporte Técnico ISO
+                    </button>
                   </div>
 
-                  {/* ISO Parameters Table */}
-                  <div className="mt-6">
-                    <h3 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2">
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                      Tabla de Evaluación de Parámetros ISO
-                    </h3>
+                  {/* Action Download Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => downloadProducerPdf(currentEval)}
+                      className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                    >
+                      <Download className="w-4 h-4" />
+                      PDF Productor
+                    </button>
 
-                    <div className="overflow-x-auto rounded-xl border border-zinc-800">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-zinc-950 text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-800">
-                          <tr>
-                            <th className="p-3">Parámetro</th>
-                            <th className="p-3">Medido</th>
-                            <th className="p-3">Estándar ISO</th>
-                            <th className="p-3">Desviación</th>
-                            <th className="p-3">Estado</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/40">
-                          {(analysisResult.evaluacionISO || []).map((item, idx) => (
-                            <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
-                              <td className="p-3 font-semibold text-zinc-200">{item.parametro}</td>
-                              <td className="p-3 font-bold text-white">{item.valorMedido}</td>
-                              <td className="p-3 text-zinc-400">{item.valorPermitido}</td>
-                              <td className="p-3 text-zinc-300 font-mono">{item.diferencia}</td>
-                              <td className="p-3">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(item.estado)}`}>
-                                  {item.estado}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <button
+                      onClick={() => downloadTechnicalPdf(currentEval)}
+                      className="px-3.5 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                    >
+                      <FileText className="w-4 h-4" />
+                      PDF Técnico
+                    </button>
+
+                    <button
+                      onClick={() => handleShareWhatsApp(currentEval)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      WhatsApp
+                    </button>
                   </div>
-
-                  {/* Posibles Causas & Acciones Correctivas */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                    {/* Posibles Causas */}
-                    <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                      <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4" />
-                        Posibles Causas
-                      </h4>
-                      <ul className="space-y-1.5 text-xs text-zinc-300">
-                        {(analysisResult.posiblesCausas || []).map((causa, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <span className="text-red-400 mt-0.5">•</span>
-                            <span>{causa}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Acciones Correctivas */}
-                    <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Wrench className="w-4 h-4" />
-                        Acciones Correctivas
-                      </h4>
-                      <ul className="space-y-1.5 text-xs text-zinc-300">
-                        {(analysisResult.accionesCorrectivas || analysisResult.recomendaciones || []).map((accion, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <span className="text-emerald-400 mt-0.5">•</span>
-                            <span>{accion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Non-technical Producer Summary Card */}
-                  {analysisResult.informeProductor && (
-                    <div className="mt-6 p-5 bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-3">
-                      <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                        <Info className="w-4 h-4" />
-                        Informe Simplificado para el Productor
-                      </h4>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                        <div className="bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block mb-1">¿Qué significa?</span>
-                          <p className="text-zinc-400 leading-relaxed">{analysisResult.informeProductor.queSignifica}</p>
-                        </div>
-
-                        <div className="bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-red-300 block mb-1">¿Qué riesgos existen?</span>
-                          <p className="text-zinc-400 leading-relaxed">{analysisResult.informeProductor.queRiesgosExisten}</p>
-                        </div>
-
-                        <div className="bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-blue-300 block mb-1">¿Qué se recomienda hacer?</span>
-                          <p className="text-zinc-400 leading-relaxed">{analysisResult.informeProductor.queSeRecomiendaHacer}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* REPORT VIEW: INFORME PARA EL PRODUCTOR */}
+                {reportViewMode === "productor" && (
+                  <div className="bg-zinc-900/90 rounded-2xl border border-emerald-500/30 overflow-hidden shadow-2xl backdrop-blur-xl">
+                    {/* Header Card */}
+                    <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 p-6 text-zinc-950">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                          <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-950 bg-emerald-300/60 px-2.5 py-0.5 rounded-full">
+                            GANPOR - SERVICIO PROFESIONAL
+                          </span>
+                          <h2 className="text-2xl font-black mt-1 text-zinc-950">
+                            Informe de Pulsado para el Productor
+                          </h2>
+                          <p className="text-xs text-emerald-950 font-medium mt-0.5">
+                            Establecimiento: <span className="font-bold">{currentEval.tamboNombre}</span> | Fecha: <span className="font-bold">{new Date(currentEval.fecha).toLocaleDateString("es-AR")}</span>
+                          </p>
+                        </div>
+
+                        <div className="bg-zinc-950/90 text-white p-3.5 rounded-xl border border-zinc-800 text-right">
+                          <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block">Estado del Pulsador</span>
+                          <span className="text-lg font-black text-white">{analysisResult.estadoGeneral}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                      {/* Section 1: Analyzed Image */}
+                      {imagePreview && (
+                        <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-2">
+                          <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                            <Activity className="w-4 h-4" />
+                            Imagen del Pulsógrafo Analizada
+                          </h3>
+                          <div className="flex flex-col sm:flex-row items-center gap-4 bg-zinc-900/60 p-3 rounded-lg border border-zinc-800/80">
+                            <img
+                              src={imagePreview}
+                              alt="Reporte de pulsógrafo"
+                              className="w-full sm:w-48 h-32 object-contain rounded-lg bg-black/60 border border-zinc-800"
+                            />
+                            <div className="text-xs text-zinc-400 space-y-1">
+                              <p className="font-semibold text-zinc-200">Registro gráfico capturado en la sala de ordeño</p>
+                              <p>El diagnóstico evalúa la estabilidad del vacío, frecuencia y tiempos de apertura/cierre de la pezonera.</p>
+                              <span className="inline-block mt-2 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                                Diagnóstico asociado a la muestra analizada
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Section 2: Table of Measured Values */}
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                          Tabla de Valores Medidos y Comparación ISO
+                        </h3>
+
+                        <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/80">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-zinc-900 text-zinc-300 font-bold uppercase tracking-wider border-b border-zinc-800">
+                              <tr>
+                                <th className="p-3">Parámetro</th>
+                                <th className="p-3">Valor Medido</th>
+                                <th className="p-3">Rango Estándar ISO</th>
+                                <th className="p-3">Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800/60">
+                              {(analysisResult.evaluacionISO || []).map((row, idx) => (
+                                <tr key={idx} className="hover:bg-zinc-800/20 transition-colors">
+                                  <td className="p-3 font-semibold text-zinc-200">{row.parametro}</td>
+                                  <td className="p-3 font-bold text-white">{row.valorMedido}</td>
+                                  <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
+                                  <td className="p-3">{getStatusIndicator(row.estado)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Section 3: Interpretation of Diagnosis */}
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                          <Brain className="w-4 h-4 text-emerald-400" />
+                          Interpretación del Diagnóstico
+                        </h3>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* How it affects milking */}
+                          <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-2">
+                            <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <Activity className="w-4 h-4" />
+                              Impacto en la Bajada de Leche
+                            </h4>
+                            <p className="text-xs text-zinc-300 leading-relaxed">
+                              {analysisResult.informeProductor?.interpretacion || analysisResult.informeProductor?.queSignifica}
+                            </p>
+                          </div>
+
+                          {/* Health & Comfort */}
+                          <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-2">
+                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <HeartPulse className="w-4 h-4" />
+                              Salud del Pezón y Bienestar
+                            </h4>
+                            <p className="text-xs text-zinc-300 leading-relaxed">
+                              {analysisResult.informeProductor?.queRiesgosExisten}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 4: Operational Recommendations */}
+                      <div className="bg-emerald-950/20 p-5 rounded-xl border border-emerald-500/30 space-y-3">
+                        <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                          <Wrench className="w-4 h-4" />
+                          Recomendaciones de Mantenimiento y Acciones
+                        </h3>
+                        <ul className="space-y-2 text-xs text-zinc-200">
+                          {(analysisResult.accionesCorrectivas || analysisResult.recomendaciones || [analysisResult.informeProductor?.queSeRecomiendaHacer]).map((rec, i) => (
+                            <li key={i} className="flex items-start gap-2 bg-zinc-950/60 p-2.5 rounded-lg border border-emerald-500/20">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Section 5: Professional Final Conclusion */}
+                      {analysisResult.informeProductor?.conclusionFinal && (
+                        <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-5 rounded-xl border border-zinc-800 space-y-2">
+                          <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
+                            Conclusión Final del Informe
+                          </h3>
+                          <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                            {analysisResult.informeProductor.conclusionFinal}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* REPORT VIEW: REPORTE TÉCNICO ISO */}
+                {reportViewMode === "tecnico" && (
+                  <div className="bg-zinc-900/90 p-6 rounded-2xl border border-zinc-800 backdrop-blur-xl space-y-6">
+                    <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        {getStatusIcon(analysisResult.estadoGeneral)}
+                        <div>
+                          <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">
+                            Dictamen General ISO 5707 / 6690
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl font-bold text-white">
+                              {analysisResult.estadoGeneral}
+                            </span>
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold uppercase ${getBadgeStyle(analysisResult.estadoGeneral)}`}>
+                              Criticidad: {analysisResult.nivelCriticidad}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ISO Table */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                        Tabla Técnica Completa de Parámetros ISO
+                      </h3>
+
+                      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-zinc-950 text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-800">
+                            <tr>
+                              <th className="p-3">Parámetro</th>
+                              <th className="p-3">Medido</th>
+                              <th className="p-3">Estándar ISO</th>
+                              <th className="p-3">Desviación</th>
+                              <th className="p-3">Estado</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/40">
+                            {(analysisResult.evaluacionISO || []).map((item, idx) => (
+                              <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
+                                <td className="p-3 font-semibold text-zinc-200">{item.parametro}</td>
+                                <td className="p-3 font-bold text-white">{item.valorMedido}</td>
+                                <td className="p-3 text-zinc-400">{item.valorPermitido}</td>
+                                <td className="p-3 text-zinc-300 font-mono">{item.diferencia}</td>
+                                <td className="p-3">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(item.estado)}`}>
+                                    {item.estado}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Technical Causes & Actions */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
+                        <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4" />
+                          Posibles Causas Técnicas
+                        </h4>
+                        <ul className="space-y-1.5 text-xs text-zinc-300">
+                          {(analysisResult.posiblesCausas || []).map((causa, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-red-400 mt-0.5">•</span>
+                              <span>{causa}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
+                        <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Wrench className="w-4 h-4" />
+                          Acciones Correctivas Recomendadas
+                        </h4>
+                        <ul className="space-y-1.5 text-xs text-zinc-300">
+                          {(analysisResult.accionesCorrectivas || analysisResult.recomendaciones || []).map((accion, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-emerald-400 mt-0.5">•</span>
+                              <span>{accion}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -693,7 +866,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
             >
               <option value="todos">Todos los Estados</option>
               <option value="conforme">Conforme</option>
-              <option value="advertencia">Advertencia</option>
+              <option value="advertencia">Advertencia / Atención</option>
               <option value="fuera de tolerancia">Fuera de Tolerancia</option>
               <option value="crítico">Crítico</option>
             </select>
@@ -727,9 +900,7 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                           {new Date(item.fecha).toLocaleDateString("es-AR")}
                         </td>
                         <td className="p-4">
-                          <span className={`inline-block px-2.5 py-1 rounded text-xs font-bold border ${getBadgeStyle(item.resultadoIA.estadoGeneral)}`}>
-                            {item.resultadoIA.estadoGeneral}
-                          </span>
+                          {getStatusIndicator(item.resultadoIA.estadoGeneral)}
                         </td>
                         <td className="p-4 text-zinc-300 font-semibold">
                           {item.resultadoIA.nivelCriticidad}
@@ -737,7 +908,10 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => setViewingEval(item)}
+                              onClick={() => {
+                                setViewingEval(item);
+                                setModalReportMode("productor");
+                              }}
                               title="Ver detalle"
                               className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg transition-colors"
                             >
@@ -745,16 +919,16 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
                             </button>
 
                             <button
-                              onClick={() => downloadTechnicalPdf(item)}
-                              title="Descargar PDF Técnico"
+                              onClick={() => downloadProducerPdf(item)}
+                              title="Descargar PDF Productor"
                               className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20"
                             >
                               <Download className="w-4 h-4" />
                             </button>
 
                             <button
-                              onClick={() => downloadProducerPdf(item)}
-                              title="Informe Simplificado Productor"
+                              onClick={() => downloadTechnicalPdf(item)}
+                              title="PDF Técnico ISO"
                               className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors border border-blue-500/20"
                             >
                               <FileText className="w-4 h-4" />
@@ -790,12 +964,12 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
       {/* MODAL: VIEW EVALUATION DETAILS FROM HISTORY */}
       {viewingEval && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div>
                 <h3 className="text-xl font-bold text-white">{viewingEval.tamboNombre}</h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Fecha: {new Date(viewingEval.fecha).toLocaleDateString("es-AR")} | Evaluación ISO 5707 / 6690
+                  Fecha: {new Date(viewingEval.fecha).toLocaleDateString("es-AR")} | Informe de Pulsado GANPOR
                 </p>
               </div>
               <button
@@ -806,76 +980,180 @@ _Generado por GANPOR - Motor de Reglas ISO_`;
               </button>
             </div>
 
-            {/* ISO Parameters Table */}
-            <div>
-              <h4 className="text-sm font-bold text-zinc-200 mb-3">Parámetros Evaluados</h4>
-              <div className="overflow-x-auto rounded-xl border border-zinc-800">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-950 text-zinc-400 font-bold uppercase border-b border-zinc-800">
-                    <tr>
-                      <th className="p-3">Parámetro</th>
-                      <th className="p-3">Medido</th>
-                      <th className="p-3">Estándar ISO</th>
-                      <th className="p-3">Diferencia</th>
-                      <th className="p-3">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800 bg-zinc-950/40">
-                    {(viewingEval.resultadoIA.evaluacionISO || []).map((row, i) => (
-                      <tr key={i}>
-                        <td className="p-3 font-semibold text-zinc-200">{row.parametro}</td>
-                        <td className="p-3 font-bold text-white">{row.valorMedido}</td>
-                        <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
-                        <td className="p-3 text-zinc-300">{row.diferencia}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(row.estado)}`}>
-                            {row.estado}
-                          </span>
-                        </td>
-                      </tr>
+            {/* Modal Switcher */}
+            <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-fit">
+              <button
+                onClick={() => setModalReportMode("productor")}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                  modalReportMode === "productor"
+                    ? "bg-emerald-500 text-zinc-950"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                Informe para el Productor
+              </button>
+              <button
+                onClick={() => setModalReportMode("tecnico")}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                  modalReportMode === "tecnico"
+                    ? "bg-emerald-500 text-zinc-950"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Reporte Técnico ISO
+              </button>
+            </div>
+
+            {/* Modal Content - Productor */}
+            {modalReportMode === "productor" && (
+              <div className="space-y-6">
+                {/* Image */}
+                {viewingEval.imagenUrl && (
+                  <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                    <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2">Imagen Analizada del Pulsógrafo</h4>
+                    <img
+                      src={viewingEval.imagenUrl}
+                      alt="Pulsógrafo"
+                      className="max-h-48 rounded-lg border border-zinc-800 mx-auto"
+                    />
+                  </div>
+                )}
+
+                {/* Table */}
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-200 mb-3">Tabla de Valores Medidos</h4>
+                  <div className="overflow-x-auto rounded-xl border border-zinc-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-zinc-950 text-zinc-400 font-bold uppercase border-b border-zinc-800">
+                        <tr>
+                          <th className="p-3">Parámetro</th>
+                          <th className="p-3">Medido</th>
+                          <th className="p-3">Estándar ISO</th>
+                          <th className="p-3">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800 bg-zinc-950/40">
+                        {(viewingEval.resultadoIA.evaluacionISO || []).map((row, i) => (
+                          <tr key={i}>
+                            <td className="p-3 font-semibold text-zinc-200">{row.parametro}</td>
+                            <td className="p-3 font-bold text-white">{row.valorMedido}</td>
+                            <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
+                            <td className="p-3">{getStatusIndicator(row.estado)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Interpretation */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase">Impacto en el Ordeño</h5>
+                    <p className="text-xs text-zinc-300">{viewingEval.resultadoIA.informeProductor?.interpretacion || viewingEval.resultadoIA.informeProductor?.queSignifica}</p>
+                  </div>
+
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1">
+                    <h5 className="text-xs font-bold text-red-400 uppercase">Salud y Bienestar</h5>
+                    <p className="text-xs text-zinc-300">{viewingEval.resultadoIA.informeProductor?.queRiesgosExisten}</p>
+                  </div>
+                </div>
+
+                {/* Recommendations */}
+                <div className="p-4 bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-2">
+                  <h5 className="text-xs font-bold text-emerald-400 uppercase">Recomendaciones de Mantenimiento</h5>
+                  <ul className="text-xs text-zinc-200 space-y-1">
+                    {(viewingEval.resultadoIA.accionesCorrectivas || [viewingEval.resultadoIA.informeProductor?.queSeRecomiendaHacer]).map((r, i) => (
+                      <li key={i}>• {r}</li>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </ul>
+                </div>
 
-            {/* Causes & Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                <h5 className="text-xs font-bold text-red-400 uppercase">Posibles Causas</h5>
-                <ul className="text-xs text-zinc-300 space-y-1">
-                  {(viewingEval.resultadoIA.posiblesCausas || []).map((c, i) => (
-                    <li key={i}>• {c}</li>
-                  ))}
-                </ul>
+                {/* Final Conclusion */}
+                {viewingEval.resultadoIA.informeProductor?.conclusionFinal && (
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1">
+                    <h5 className="text-xs font-bold text-zinc-300 uppercase">Conclusión Final</h5>
+                    <p className="text-xs text-zinc-300 leading-relaxed">{viewingEval.resultadoIA.informeProductor.conclusionFinal}</p>
+                  </div>
+                )}
               </div>
+            )}
 
-              <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2">
-                <h5 className="text-xs font-bold text-emerald-400 uppercase">Acciones Correctivas</h5>
-                <ul className="text-xs text-zinc-300 space-y-1">
-                  {(viewingEval.resultadoIA.accionesCorrectivas || viewingEval.resultadoIA.recomendaciones || []).map((a, i) => (
-                    <li key={i}>• {a}</li>
-                  ))}
-                </ul>
+            {/* Modal Content - Técnico */}
+            {modalReportMode === "tecnico" && (
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-200 mb-3">Parámetros Técnicos ISO</h4>
+                  <div className="overflow-x-auto rounded-xl border border-zinc-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-zinc-950 text-zinc-400 font-bold uppercase border-b border-zinc-800">
+                        <tr>
+                          <th className="p-3">Parámetro</th>
+                          <th className="p-3">Medido</th>
+                          <th className="p-3">Estándar ISO</th>
+                          <th className="p-3">Diferencia</th>
+                          <th className="p-3">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800 bg-zinc-950/40">
+                        {(viewingEval.resultadoIA.evaluacionISO || []).map((row, i) => (
+                          <tr key={i}>
+                            <td className="p-3 font-semibold text-zinc-200">{row.parametro}</td>
+                            <td className="p-3 font-bold text-white">{row.valorMedido}</td>
+                            <td className="p-3 text-zinc-400">{row.valorPermitido}</td>
+                            <td className="p-3 text-zinc-300">{row.diferencia}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getBadgeStyle(row.estado)}`}>
+                                {row.estado}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                    <h5 className="text-xs font-bold text-red-400 uppercase">Posibles Causas Técnicas</h5>
+                    <ul className="text-xs text-zinc-300 space-y-1">
+                      {(viewingEval.resultadoIA.posiblesCausas || []).map((c, i) => (
+                        <li key={i}>• {c}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase">Acciones Correctivas</h5>
+                    <ul className="text-xs text-zinc-300 space-y-1">
+                      {(viewingEval.resultadoIA.accionesCorrectivas || viewingEval.resultadoIA.recomendaciones || []).map((a, i) => (
+                        <li key={i}>• {a}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Modal Actions */}
             <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-zinc-800">
               <button
-                onClick={() => downloadTechnicalPdf(viewingEval)}
+                onClick={() => downloadProducerPdf(viewingEval)}
                 className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Descargar PDF Técnico
+                Descargar PDF Productor
               </button>
 
               <button
-                onClick={() => downloadProducerPdf(viewingEval)}
+                onClick={() => downloadTechnicalPdf(viewingEval)}
                 className="px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold flex items-center gap-2"
               >
                 <FileText className="w-4 h-4" />
-                Informe Productor
+                Descargar PDF Técnico
               </button>
 
               <button

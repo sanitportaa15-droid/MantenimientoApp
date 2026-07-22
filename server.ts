@@ -175,14 +175,14 @@ async function startServer() {
       - El tono debe ser sumamente profesional, formal, técnico y objetivo.
       - La evaluación técnica y el dictamen de conformidad NO deben depender de la marca, fabricante ni modelo del pulsador (Rodeg, DeLaval, GEA, etc.). Las normas ISO 5707:2007 e ISO 6690:2007 constituyen la única referencia normativa principal.
       - DEBES respetar estrictamente el resultado y estado determinados por el motor de reglas ISO. No contradigas el estado de conformidad de ningún parámetro ni el estado general.
-      - Si existen especificaciones particulares del fabricante, preséntalas ÚNICAMENTE como información técnica complementaria de referencia secundaria y NUNCA como criterio principal de aprobación o rechazo.
-      - Ayuda al técnico a entender las posibles causas físicas y mecánicas detrás de cualquier desviación detectada según los límites de las normas ISO 5707:2007 e ISO 6690:2007 (por ejemplo, filtros de aire sucios, diafragmas desgastados, bobinas fatigadas, conductos o perforaciones obstruidas).
-      - Proporciona recomendaciones técnicas de intervención y mantenimiento claras y estructuradas.
+      - REGLA DE ORO DE PRUDENCIA TÉCNICA: NUNCA afirmes que un componente está averiado o roto como un hecho confirmado (evita 'la membrana está rota' o 'la bomba está destruida'). Emplea SIEMPRE un lenguaje técnicamente prudente e hipotético (ej: 'los resultados son compatibles con...', 'este comportamiento puede estar asociado a...', 'las mediciones sugieren verificar...', 'se recomienda inspeccionar...').
+      - Ayuda al técnico a entender las posibles causas físicas y mecánicas detrás de cualquier desviación detectada según los límites de las normas ISO 5707:2007 e ISO 6690:2007.
+      - Proporciona un plan de inspección recomendado en orden lógico y una evaluación del impacto potencial o riesgos operativos para la ubre y la eficiencia de ordeño.
 
       Devuelve estrictamente un objeto JSON con el siguiente esquema, sin explicaciones externas:
       {
         "comparacionEspecificaciones": "Resumen comparativo claro de los valores principales medidos contra los límites estandarizados de la norma ISO para pulsadores.",
-        "diagnosticoTecnico": "Análisis y redacción narrativa profesional fundamentada exclusivamente en el cumplimiento o incumplimiento de la norma ISO.",
+        "diagnosticoTecnico": "Análisis y redacción narrativa profesional fundamentada exclusivamente en el cumplimiento o incumplimiento de la norma ISO con lenguaje prudente.",
         "posiblesCausas": [
           "Causa mecánica 1 detallada...",
           "Causa mecánica 2 detallada..."
@@ -327,9 +327,14 @@ async function startServer() {
             comparacionEspecificaciones: reportResults.comparacionEspecificaciones,
             hallazgos: ocrResults.hallazgosVisuales || [],
             diagnosticoTecnico: reportResults.diagnosticoTecnico,
-            posiblesCausas: reportResults.posiblesCausas,
-            recomendaciones: reportResults.recomendaciones,
-            evaluacionISO: rulesEngineOutput.evaluacionISO
+            posiblesCausas: reportResults.posiblesCausas || rulesEngineOutput.posiblesCausas,
+            posiblesCausasDetalladas: rulesEngineOutput.posiblesCausasDetalladas,
+            planInspeccion: rulesEngineOutput.planInspeccion,
+            impactoPotencial: rulesEngineOutput.impactoPotencial,
+            accionesCorrectivas: rulesEngineOutput.accionesCorrectivas,
+            recomendaciones: reportResults.recomendaciones || rulesEngineOutput.accionesCorrectivas,
+            evaluacionISO: rulesEngineOutput.evaluacionISO,
+            informeProductor: rulesEngineOutput.informeProductor
           };
 
           const totalDuration = Date.now() - startTime;
