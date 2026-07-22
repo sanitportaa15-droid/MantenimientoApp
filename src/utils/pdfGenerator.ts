@@ -190,6 +190,112 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
 
     currentY = (doc as any).lastAutoTable.finalY + 6;
 
+    // --- Section 3.5: Multi-Channel Technical Analysis & Comparative Breakdown ---
+    if (res.analisisCanal1 || res.analisisCanal2) {
+      if (currentY > 230) {
+        doc.addPage();
+        currentY = 16;
+      }
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("ANÁLISIS TÉCNICO EXCLUSIVO POR CANAL DE PULSADO", 12, currentY);
+      currentY += 4;
+
+      if (res.analisisCanal1) {
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 41, 59);
+        doc.text(`• ${res.analisisCanal1.nombreCanal} [Dictamen: ${res.analisisCanal1.estadoCanal}]:`, 14, currentY);
+        currentY += 3.5;
+
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(71, 85, 105);
+        const splitCh1 = doc.splitTextToSize(res.analisisCanal1.interpretacionExclusiva, 176);
+        doc.text(splitCh1, 18, currentY);
+        currentY += splitCh1.length * 3 + 3;
+      }
+
+      if (res.analisisCanal2) {
+        if (currentY > 255) {
+          doc.addPage();
+          currentY = 16;
+        }
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 41, 59);
+        doc.text(`• ${res.analisisCanal2.nombreCanal} [Dictamen: ${res.analisisCanal2.estadoCanal}]:`, 14, currentY);
+        currentY += 3.5;
+
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(71, 85, 105);
+        const splitCh2 = doc.splitTextToSize(res.analisisCanal2.interpretacionExclusiva, 176);
+        doc.text(splitCh2, 18, currentY);
+        currentY += splitCh2.length * 3 + 3;
+      }
+    }
+
+    // --- Section 3.6: Comparative Analysis Between Channels ---
+    if (res.analisisComparativo) {
+      if (currentY > 220) {
+        doc.addPage();
+        currentY = 16;
+      }
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("ANÁLISIS COMPARATIVO Y SIMETRÍA INTER-CANAL (ISO 5707)", 12, currentY);
+      currentY += 4;
+
+      const compData = res.analisisComparativo;
+      const compRows = [
+        [compData.diferenciaTa.parametro, compData.diferenciaTa.valorCanal1, compData.diferenciaTa.valorCanal2, compData.diferenciaTa.diferencia, compData.diferenciaTa.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaTb.parametro, compData.diferenciaTb.valorCanal1, compData.diferenciaTb.valorCanal2, compData.diferenciaTb.diferencia, compData.diferenciaTb.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaTc.parametro, compData.diferenciaTc.valorCanal1, compData.diferenciaTc.valorCanal2, compData.diferenciaTc.diferencia, compData.diferenciaTc.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaTd.parametro, compData.diferenciaTd.valorCanal1, compData.diferenciaTd.valorCanal2, compData.diferenciaTd.diferencia, compData.diferenciaTd.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaVacio.parametro, compData.diferenciaVacio.valorCanal1, compData.diferenciaVacio.valorCanal2, compData.diferenciaVacio.diferencia, compData.diferenciaVacio.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaFrecuencia.parametro, compData.diferenciaFrecuencia.valorCanal1, compData.diferenciaFrecuencia.valorCanal2, compData.diferenciaFrecuencia.diferencia, compData.diferenciaFrecuencia.esAceptableISO ? "Conforme" : "Desbalance"],
+        [compData.diferenciaRelacion.parametro, compData.diferenciaRelacion.valorCanal1, compData.diferenciaRelacion.valorCanal2, compData.diferenciaRelacion.diferencia, compData.diferenciaRelacion.esAceptableISO ? "Conforme" : "Desbalance"],
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Parámetro Comparado", "Canal 1", "Canal 2", "Diferencia", "Evaluación"]],
+        body: compRows,
+        theme: "grid",
+        styles: { cellPadding: 1.5, fontSize: 7 },
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontSize: 7,
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { cellWidth: 60 },
+          1: { cellWidth: 30 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 30, fontStyle: "bold" },
+          4: { cellWidth: 36, fontStyle: "bold" },
+        },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 4;
+
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("Conclusión Comparativa entre Canales:", 14, currentY);
+      currentY += 3.5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      const splitCompConc = doc.splitTextToSize(compData.conclusionComparativa, 176);
+      doc.text(splitCompConc, 18, currentY);
+      currentY += splitCompConc.length * 3 + 4;
+    }
+
     // --- Section 4: Technical Diagnostic Assistant Sections ---
     const causasDetalladas = res.posiblesCausasDetalladas || [];
     const posiblesCausas = res.posiblesCausas || [];

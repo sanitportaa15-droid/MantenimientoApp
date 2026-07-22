@@ -854,37 +854,123 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                       </div>
                     </div>
 
-                    {/* Desbalance entre Canales */}
-                    {analysisResult.datosExtraidos?.diferenciaCanales && (
-                      <div className="p-4 bg-zinc-950/90 border border-emerald-500/30 rounded-xl space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                    {/* CANAL 1 vs CANAL 2 INDIVIDUAL ANALYSIS PIPELINE */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-emerald-400" />
+                        Desglose Técnico e Interpretación por Canal
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Canal 1 Card */}
+                        <div className="p-4 bg-zinc-950/90 border border-emerald-500/30 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                            <span className="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                              {analysisResult.analisisCanal1?.nombreCanal || "Canal 1"}
+                            </span>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getBadgeStyle(analysisResult.analisisCanal1?.estadoCanal || "Conforme")}`}>
+                              {analysisResult.analisisCanal1?.estadoCanal || "Conforme"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-300 leading-relaxed">
+                            {analysisResult.analisisCanal1?.interpretacionExclusiva || "Valores extraídos dentro de norma ISO."}
+                          </p>
+                        </div>
+
+                        {/* Canal 2 Card */}
+                        <div className="p-4 bg-zinc-950/90 border border-cyan-500/30 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                            <span className="font-bold text-cyan-400 text-xs flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                              {analysisResult.analisisCanal2?.nombreCanal || "Canal 2"}
+                            </span>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getBadgeStyle(analysisResult.analisisCanal2?.estadoCanal || "Conforme")}`}>
+                              {analysisResult.analisisCanal2?.estadoCanal || (analysisResult.analisisCanal2 ? "Conforme" : "N/A (Monocanal)")}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-300 leading-relaxed">
+                            {analysisResult.analisisCanal2?.interpretacionExclusiva || (analysisResult.analisisCanal2 ? "Valores extraídos dentro de norma ISO." : "Registrada curva de pulsado monocanal. Para análisis comparativo dual se requiere gráfica de dos canales.")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INTER-CHANNEL COMPARATIVE ANALYSIS (PUNTOS 7 Y 8) */}
+                    {analysisResult.analisisComparativo && (
+                      <div className="p-5 bg-zinc-950/90 border border-emerald-500/30 rounded-xl space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+                          <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
                             <Activity className="w-4 h-4 text-emerald-400" />
-                            Análisis de Desbalance entre Canal 1 y Canal 2 (ISO 5707)
+                            Análisis Comparativo Inter-Canal (Sincronización y Simetría Neumática)
                           </h4>
                           <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                            analysisResult.datosExtraidos.diferenciaCanales.esAceptableISO
+                            analysisResult.analisisComparativo.esAceptableISO
                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                               : "bg-red-500/10 text-red-400 border-red-500/30"
                           }`}>
-                            {analysisResult.datosExtraidos.diferenciaCanales.esAceptableISO ? "🟢 Conforme ISO (≤ 5.0%)" : "🔴 Desbalance fuera de norma"}
+                            {analysisResult.analisisComparativo.esAceptableISO ? "🟢 Funcionamiento Uniforme ISO" : "🔴 Asimetría entre Canales"}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-                          <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800">
-                            <span className="text-zinc-400 text-[11px] block">Diferencia de Relación de Pulsado:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.datosExtraidos.diferenciaCanales.diferenciaRelacion.toFixed(1)}%</span>
-                            <span className="text-zinc-500 text-[10px] block mt-0.5">(Tolerancia ISO: Máximo 5.0%)</span>
+
+                        {/* Comparative Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Relación de Pulsado:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaRelacion.diferencia}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaRelacion.observacion}</span>
                           </div>
-                          <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800">
-                            <span className="text-zinc-400 text-[11px] block">Diferencia de Frecuencia:</span>
-                            <span className="font-bold text-white font-mono text-sm">{analysisResult.datosExtraidos.diferenciaCanales.diferenciaFrecuencia.toFixed(1)} ppm</span>
-                            <span className="text-zinc-500 text-[10px] block mt-0.5">(Tolerancia ISO: Máximo 1.0 ppm)</span>
+
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Frecuencia:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaFrecuencia.observacion}</span>
+                          </div>
+
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Fase d (Masaje):</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaTd.diferencia}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaTd.observacion}</span>
+                          </div>
+
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Δ Nivel de Vacío:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.diferenciaVacio.diferencia}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.diferenciaVacio.observacion}</span>
+                          </div>
+
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Sincronización:</span>
+                            <span className="font-bold text-emerald-400 font-mono text-sm">{analysisResult.analisisComparativo.sincronizacion.tipo}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.sincronizacion.observacion}</span>
+                          </div>
+
+                          <div className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 space-y-1">
+                            <span className="text-zinc-400 text-[11px] font-semibold block">Reparto de Balance:</span>
+                            <span className="font-bold text-white font-mono text-sm">{analysisResult.analisisComparativo.balance.relacionBalance}</span>
+                            <span className="text-zinc-500 text-[10px] block">{analysisResult.analisisComparativo.balance.observacion}</span>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-300 leading-relaxed pt-1">
-                          <span className="font-semibold text-emerald-400">Interpretación: </span>
-                          {analysisResult.datosExtraidos.diferenciaCanales.explicacion}
+
+                        {/* Comparative Synthesis */}
+                        <div className="bg-zinc-900/90 p-3.5 rounded-lg border border-zinc-800 text-xs space-y-1">
+                          <span className="font-bold text-emerald-400 text-xs block">Conclusión Comparativa entre Canales:</span>
+                          <p className="text-zinc-300 leading-relaxed">
+                            {analysisResult.analisisComparativo.conclusionComparativa}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* GLOBAL CONCLUSION (PUNTO 9: FUNDAMENTADA SIN PROMEDIAR) */}
+                    {analysisResult.conclusionGlobal && (
+                      <div className="p-5 bg-gradient-to-r from-emerald-950/40 via-zinc-900/90 to-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-2">
+                        <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          Conclusión Global Fundamentada del Sistema
+                        </h4>
+                        <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-line font-medium">
+                          {analysisResult.conclusionGlobal}
                         </p>
                       </div>
                     )}

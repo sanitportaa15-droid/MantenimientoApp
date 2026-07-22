@@ -29,11 +29,55 @@ export interface DatosCanalPulsador {
   unidadFases?: "%" | "ms";
 }
 
+export interface DetalleDiferenciaParametro {
+  parametro: string;
+  valorCanal1: string;
+  valorCanal2: string;
+  diferencia: string;
+  toleranciaISO: string;
+  esAceptableISO: boolean;
+  observacion: string;
+}
+
+export interface AnalisisComparativoCanales {
+  diferenciaTa: DetalleDiferenciaParametro;
+  diferenciaTb: DetalleDiferenciaParametro;
+  diferenciaTc: DetalleDiferenciaParametro;
+  diferenciaTd: DetalleDiferenciaParametro;
+  diferenciaVacio: DetalleDiferenciaParametro;
+  diferenciaFrecuencia: DetalleDiferenciaParametro;
+  diferenciaRelacion: DetalleDiferenciaParametro;
+  sincronizacion: {
+    tipo: string;
+    esAceptable: boolean;
+    observacion: string;
+  };
+  balance: {
+    relacionBalance: string;
+    esAceptable: boolean;
+    observacion: string;
+  };
+  uniformidadFuncionamiento: {
+    nivel: "Excelente" | "Aceptable" | "Asimétrico / Deficiente" | "Crítica";
+    evaluacion: string;
+  };
+  conclusionComparativa: string;
+  esAceptableISO: boolean;
+}
+
+export interface AnalisisCanalIndividual {
+  nombreCanal: string;
+  evaluaciones: ParametroISOEvaluacion[];
+  estadoCanal: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
+  interpretacionExclusiva: string;
+}
+
 export interface DiferenciaCanalesInfo {
   diferenciaRelacion: string; // e.g. "2.0%"
   diferenciaFrecuencia: string; // e.g. "0.5 ppm"
   esAceptableISO: boolean;
   explicacion: string;
+  comparacionDetallada?: AnalisisComparativoCanales;
 }
 
 export interface ParametroISOEvaluacion {
@@ -96,6 +140,10 @@ export interface ResultadoIA {
   accionesCorrectivas?: string[];
   recomendaciones: string[];
   evaluacionISO?: ParametroISOEvaluacion[];
+  analisisCanal1?: AnalisisCanalIndividual;
+  analisisCanal2?: AnalisisCanalIndividual;
+  analisisComparativo?: AnalisisComparativoCanales;
+  conclusionGlobal?: string;
   informeProductor?: InformeProductor;
 }
 

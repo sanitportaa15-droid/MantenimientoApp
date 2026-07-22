@@ -349,6 +349,10 @@ async function startServer() {
             accionesCorrectivas: rulesEngineOutput.accionesCorrectivas,
             recomendaciones: reportResults.recomendaciones || rulesEngineOutput.accionesCorrectivas,
             evaluacionISO: rulesEngineOutput.evaluacionISO,
+            analisisCanal1: rulesEngineOutput.analisisCanal1,
+            analisisCanal2: rulesEngineOutput.analisisCanal2,
+            analisisComparativo: rulesEngineOutput.analisisComparativo,
+            conclusionGlobal: rulesEngineOutput.conclusionGlobal,
             informeProductor: rulesEngineOutput.informeProductor
           };
 
@@ -540,6 +544,10 @@ async function startServer() {
             accionesCorrectivas: rulesEngineOutput.accionesCorrectivas,
             recomendaciones: reportResults.recomendaciones || rulesEngineOutput.accionesCorrectivas,
             evaluacionISO: rulesEngineOutput.evaluacionISO,
+            analisisCanal1: rulesEngineOutput.analisisCanal1,
+            analisisCanal2: rulesEngineOutput.analisisCanal2,
+            analisisComparativo: rulesEngineOutput.analisisComparativo,
+            conclusionGlobal: rulesEngineOutput.conclusionGlobal,
             informeProductor: rulesEngineOutput.informeProductor
           };
 
@@ -585,7 +593,12 @@ async function startServer() {
               "Realizar inspección mecánica del pulsador y reemplazar membranas fatigadas.",
               "Comprobar la estabilidad del nivel de vacío principal."
             ],
-            evaluacionISO: rulesEngineOutput.evaluacionISO
+            evaluacionISO: rulesEngineOutput.evaluacionISO,
+            analisisCanal1: rulesEngineOutput.analisisCanal1,
+            analisisCanal2: rulesEngineOutput.analisisCanal2,
+            analisisComparativo: rulesEngineOutput.analisisComparativo,
+            conclusionGlobal: rulesEngineOutput.conclusionGlobal,
+            informeProductor: rulesEngineOutput.informeProductor
           });
         }
       }
@@ -619,7 +632,12 @@ async function startServer() {
         diagnosticoTecnico: "Informe procesado mediante Motor de Reglas ISO.",
         posiblesCausas: [],
         recomendaciones: ["Verificar calibración periódicamente."],
-        evaluacionISO: rulesEngineOutput.evaluacionISO
+        evaluacionISO: rulesEngineOutput.evaluacionISO,
+        analisisCanal1: rulesEngineOutput.analisisCanal1,
+        analisisCanal2: rulesEngineOutput.analisisCanal2,
+        analisisComparativo: rulesEngineOutput.analisisComparativo,
+        conclusionGlobal: rulesEngineOutput.conclusionGlobal,
+        informeProductor: rulesEngineOutput.informeProductor
       });
 
     } catch (error: any) {
