@@ -581,6 +581,11 @@ export const db = {
           return data.valor;
         }
 
+        const localVal = localStorage.getItem(`config_fallback_${activeEmpId}_${clave}`);
+        if (localVal !== null && localVal !== undefined) {
+          return localVal;
+        }
+
         return defaultValue;
       } catch (err) {
         console.warn(`Error al obtener clave ${clave} de la base de datos:`, err);
@@ -611,9 +616,19 @@ export const db = {
           });
           if (error) throw error;
         }
+
+        if (!valor) {
+          localStorage.removeItem(`config_fallback_${activeEmpId}_${clave}`);
+        } else {
+          localStorage.setItem(`config_fallback_${activeEmpId}_${clave}`, valor);
+        }
       } catch (err) {
         console.warn(`Error al guardar clave ${clave} en la base de datos, usando LocalStorage fallback:`, err);
-        localStorage.setItem(`config_fallback_${activeEmpId}_${clave}`, valor);
+        if (!valor) {
+          localStorage.removeItem(`config_fallback_${activeEmpId}_${clave}`);
+        } else {
+          localStorage.setItem(`config_fallback_${activeEmpId}_${clave}`, valor);
+        }
       }
     },
     async seed() {
