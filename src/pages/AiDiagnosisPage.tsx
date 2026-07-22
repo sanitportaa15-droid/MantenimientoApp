@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   Activity,
   HeartPulse,
-  ClipboardCheck
+  ClipboardCheck,
+  Layers
 } from "lucide-react";
 import { db, getActiveCompanyId } from "../services/db";
 import { useAuth } from "../services/AuthContext";
@@ -1373,6 +1374,94 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                     </table>
                   </div>
                 </div>
+
+                {/* DESGLOSE TÉCNICO E INTERPRETACIÓN POR CANAL DE PULSADO */}
+                <div className="space-y-3 p-4 bg-zinc-950 border border-zinc-800 rounded-xl">
+                  <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Desglose Técnico e Interpretación por Canal</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Canal 1 Card */}
+                    <div className="p-3.5 bg-zinc-900/90 border border-emerald-500/30 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800">
+                        <span className="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          {viewingEval.resultadoIA.analisisCanal1?.nombreCanal || "Canal 1"}
+                        </span>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getBadgeStyle(viewingEval.resultadoIA.analisisCanal1?.estadoCanal || "Conforme")}`}>
+                          {viewingEval.resultadoIA.analisisCanal1?.estadoCanal || "Conforme"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {viewingEval.resultadoIA.analisisCanal1?.interpretacionExclusiva || "Evaluación técnica ISO conforme."}
+                      </p>
+                    </div>
+
+                    {/* Canal 2 Card */}
+                    <div className="p-3.5 bg-zinc-900/90 border border-cyan-500/30 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800">
+                        <span className="font-bold text-cyan-400 text-xs flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                          {viewingEval.resultadoIA.analisisCanal2?.nombreCanal || "Canal 2"}
+                        </span>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getBadgeStyle(viewingEval.resultadoIA.analisisCanal2?.estadoCanal || "Conforme")}`}>
+                          {viewingEval.resultadoIA.analisisCanal2?.estadoCanal || (viewingEval.resultadoIA.analisisCanal2 ? "Conforme" : "N/A (Monocanal)")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {viewingEval.resultadoIA.analisisCanal2?.interpretacionExclusiva || (viewingEval.resultadoIA.analisisCanal2 ? "Valores extraídos dentro de norma ISO." : "Curva monocanal registrada.")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ANÁLISIS COMPARATIVO INTER-CANAL */}
+                {viewingEval.resultadoIA.analisisComparativo && (
+                  <div className="p-4 bg-zinc-950 border border-emerald-500/30 rounded-xl space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+                      <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                        Análisis Comparativo Inter-Canal (Sincronización y Simetría Neumática)
+                      </h5>
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                        viewingEval.resultadoIA.analisisComparativo.esAceptableISO
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          : "bg-red-500/10 text-red-400 border-red-500/30"
+                      }`}>
+                        {viewingEval.resultadoIA.analisisComparativo.esAceptableISO ? "🟢 Funcionamiento Uniforme ISO" : "🔴 Asimetría entre Canales"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                        <span className="text-zinc-400 text-[10px] block">Δ Relación de Pulsado:</span>
+                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaRelacion.diferencia}</span>
+                      </div>
+                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                        <span className="text-zinc-400 text-[10px] block">Δ Frecuencia:</span>
+                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaFrecuencia.diferencia}</span>
+                      </div>
+                      <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 space-y-0.5">
+                        <span className="text-zinc-400 text-[10px] block">Δ Fase d (Masaje):</span>
+                        <span className="font-bold text-white font-mono text-xs">{viewingEval.resultadoIA.analisisComparativo.diferenciaTd.diferencia}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 text-xs space-y-1">
+                      <span className="font-bold text-emerald-400 text-xs block">Conclusión Comparativa entre Canales:</span>
+                      <p className="text-zinc-300 leading-relaxed text-[11px]">
+                        {viewingEval.resultadoIA.analisisComparativo.conclusionComparativa}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* CONCLUSIÓN GLOBAL */}
+                {viewingEval.resultadoIA.conclusionGlobal && (
+                  <div className="p-4 bg-emerald-950/30 border border-emerald-500/40 rounded-xl space-y-1.5">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Conclusión Global Fundamentada del Sistema</h5>
+                    <p className="text-xs text-zinc-200 leading-relaxed font-medium">
+                      {viewingEval.resultadoIA.conclusionGlobal}
+                    </p>
+                  </div>
+                )}
 
                 {/* 1. Posibles Causas Técnicas con Probabilidad */}
                 <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">

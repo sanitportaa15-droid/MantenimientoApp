@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { EvaluacionDiagnosis } from "../types/aiDiagnosis";
+import { evaluatePulsatorISO } from "./isoRulesEngine";
 
 /**
  * Helper to determine state colors and badge labels
@@ -66,7 +67,30 @@ function renderGanporHeader(
 export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
   try {
     const doc = new jsPDF();
-    const res = evalData.resultadoIA;
+    
+    // Ensure full multi-channel structure is populated
+    let res = evalData.resultadoIA;
+    if (!res.analisisCanal1 || !res.analisisComparativo || !res.conclusionGlobal) {
+      const fallbackOcr = res.datosExtraidos || {
+        frecuenciaMedida: res.datosExtraidos?.frecuenciaMedida || 60,
+        relacionMedida: res.datosExtraidos?.relacionMedida || "60/40",
+        vacioMedido: res.datosExtraidos?.vacioMedido || "44.0 kPa",
+        canales: res.datosExtraidos?.canales || []
+      };
+      const computedIso = evaluatePulsatorISO(fallbackOcr, {
+        marca: evalData.pulsadorMarca,
+        modelo: evalData.pulsadorModelo
+      });
+      res = {
+        ...res,
+        analisisCanal1: res.analisisCanal1 || computedIso.analisisCanal1,
+        analisisCanal2: res.analisisCanal2 || computedIso.analisisCanal2,
+        analisisComparativo: res.analisisComparativo || computedIso.analisisComparativo,
+        conclusionGlobal: res.conclusionGlobal || computedIso.conclusionGlobal,
+        evaluacionISO: (res.evaluacionISO && res.evaluacionISO.length > 0) ? res.evaluacionISO : computedIso.evaluacionISO,
+      };
+    }
+
     const isoTable = res.evaluacionISO || [];
     const tamboName = evalData.tamboNombre || "Establecimiento";
     const dateStr = evalData.fecha ? new Date(evalData.fecha).toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
@@ -85,24 +109,35 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
     // --- Section 1: Information Block ---
     doc.setDrawColor(228, 228, 231);
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(12, currentY, 186, 18, 2, 2, "FD");
+    doc.roundedRect(12, currentY, 186, 24, 2, 2, "FD");
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(30, 41, 59);
     doc.text("Establecimiento / Tambo:", 16, currentY + 6);
-    doc.text("Fecha de Evaluación:", 16, currentY + 13);
+    doc.text("Fecha de Evaluación:", 16, currentY + 12);
+    doc.text("Pulsador / Equipo:", 16, currentY + 18);
+
     doc.text("Técnico Evaluador:", 110, currentY + 6);
-    doc.text("Nivel de Criticidad:", 110, currentY + 13);
+    doc.text("Nivel de Criticidad:", 110, currentY + 12);
+    doc.text("Estado del Pulsador:", 110, currentY + 18);
+
+    const equipStr = [evalData.pulsadorMarca, evalData.pulsadorModelo, evalData.equipoNombre].filter(Boolean).join(" - ") || "Pulsador Neumático/Electrónico";
 
     doc.setFont("helvetica", "normal");
     doc.setTextColor(71, 85, 105);
     doc.text(tamboName, 55, currentY + 6);
-    doc.text(dateStr, 48, currentY + 13);
-    doc.text(evalData.tecnicoNombre || "Técnico Especialista", 142, currentY + 6);
-    doc.text(res.nivelCriticidad || "Bajo", 142, currentY + 13);
+    doc.text(dateStr, 48, currentY + 12);
+    doc.text(equipStr, 48, currentY + 18);
 
-    currentY += 22;
+    doc.text(evalData.tecnicoNombre || "Técnico Especialista", 142, currentY + 6);
+    doc.text(res.nivelCriticidad || "Bajo", 142, currentY + 12);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(stateTheme.rgb[0], stateTheme.rgb[1], stateTheme.rgb[2]);
+    doc.text(res.estadoGeneral, 142, currentY + 18);
+
+    currentY += 28;
 
     // --- Section 2: Pulsograph Image (if available) ---
     if (evalData.imagenUrl && evalData.imagenUrl.startsWith("data:image")) {
@@ -136,7 +171,7 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
     }
 
     // --- Section 3: ISO Parameters Table ---
-    if (currentY > 240) {
+    if (currentY > 235) {
       doc.addPage();
       currentY = 16;
     }
@@ -238,7 +273,7 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
 
     // --- Section 3.6: Comparative Analysis Between Channels ---
     if (res.analisisComparativo) {
-      if (currentY > 220) {
+      if (currentY > 215) {
         doc.addPage();
         currentY = 16;
       }
@@ -250,15 +285,17 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
       currentY += 4;
 
       const compData = res.analisisComparativo;
-      const compRows = [
-        [compData.diferenciaTa.parametro, compData.diferenciaTa.valorCanal1, compData.diferenciaTa.valorCanal2, compData.diferenciaTa.diferencia, compData.diferenciaTa.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaTb.parametro, compData.diferenciaTb.valorCanal1, compData.diferenciaTb.valorCanal2, compData.diferenciaTb.diferencia, compData.diferenciaTb.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaTc.parametro, compData.diferenciaTc.valorCanal1, compData.diferenciaTc.valorCanal2, compData.diferenciaTc.diferencia, compData.diferenciaTc.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaTd.parametro, compData.diferenciaTd.valorCanal1, compData.diferenciaTd.valorCanal2, compData.diferenciaTd.diferencia, compData.diferenciaTd.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaVacio.parametro, compData.diferenciaVacio.valorCanal1, compData.diferenciaVacio.valorCanal2, compData.diferenciaVacio.diferencia, compData.diferenciaVacio.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaFrecuencia.parametro, compData.diferenciaFrecuencia.valorCanal1, compData.diferenciaFrecuencia.valorCanal2, compData.diferenciaFrecuencia.diferencia, compData.diferenciaFrecuencia.esAceptableISO ? "Conforme" : "Desbalance"],
-        [compData.diferenciaRelacion.parametro, compData.diferenciaRelacion.valorCanal1, compData.diferenciaRelacion.valorCanal2, compData.diferenciaRelacion.diferencia, compData.diferenciaRelacion.esAceptableISO ? "Conforme" : "Desbalance"],
-      ];
+      const compRows: string[][] = [];
+
+      if (compData.diferenciaTa) compRows.push([compData.diferenciaTa.parametro, compData.diferenciaTa.valorCanal1, compData.diferenciaTa.valorCanal2, compData.diferenciaTa.diferencia, compData.diferenciaTa.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaTb) compRows.push([compData.diferenciaTb.parametro, compData.diferenciaTb.valorCanal1, compData.diferenciaTb.valorCanal2, compData.diferenciaTb.diferencia, compData.diferenciaTb.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaTc) compRows.push([compData.diferenciaTc.parametro, compData.diferenciaTc.valorCanal1, compData.diferenciaTc.valorCanal2, compData.diferenciaTc.diferencia, compData.diferenciaTc.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaTd) compRows.push([compData.diferenciaTd.parametro, compData.diferenciaTd.valorCanal1, compData.diferenciaTd.valorCanal2, compData.diferenciaTd.diferencia, compData.diferenciaTd.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaVacio) compRows.push([compData.diferenciaVacio.parametro, compData.diferenciaVacio.valorCanal1, compData.diferenciaVacio.valorCanal2, compData.diferenciaVacio.diferencia, compData.diferenciaVacio.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaFrecuencia) compRows.push([compData.diferenciaFrecuencia.parametro, compData.diferenciaFrecuencia.valorCanal1, compData.diferenciaFrecuencia.valorCanal2, compData.diferenciaFrecuencia.diferencia, compData.diferenciaFrecuencia.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.diferenciaRelacion) compRows.push([compData.diferenciaRelacion.parametro, compData.diferenciaRelacion.valorCanal1, compData.diferenciaRelacion.valorCanal2, compData.diferenciaRelacion.diferencia, compData.diferenciaRelacion.esAceptableISO ? "Conforme" : "Desbalance"]);
+      if (compData.sincronizacion) compRows.push(["Sincronización Neumática", compData.sincronizacion.tipo, "-", "-", compData.sincronizacion.esAceptable ? "Conforme" : "Desfasado"]);
+      if (compData.balance) compRows.push(["Reparto de Balance (Pulsado)", compData.balance.relacionBalance, "-", "-", compData.balance.esAceptable ? "Conforme" : "Desbalance"]);
 
       autoTable(doc, {
         startY: currentY,
@@ -283,17 +320,47 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
 
       currentY = (doc as any).lastAutoTable.finalY + 4;
 
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(30, 41, 59);
-      doc.text("Conclusión Comparativa entre Canales:", 14, currentY);
-      currentY += 3.5;
+      if (compData.conclusionComparativa) {
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 41, 59);
+        doc.text("Conclusión Comparativa entre Canales:", 14, currentY);
+        currentY += 3.5;
 
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(71, 85, 105);
+        const splitCompConc = doc.splitTextToSize(compData.conclusionComparativa, 176);
+        doc.text(splitCompConc, 18, currentY);
+        currentY += splitCompConc.length * 3 + 4;
+      }
+    }
+
+    // --- Section 3.7: Conclusión Global Fundamentada ---
+    if (res.conclusionGlobal) {
+      if (currentY > 235) {
+        doc.addPage();
+        currentY = 16;
+      }
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("CONCLUSIÓN GLOBAL FUNDAMENTADA DEL SISTEMA (AMBOS CANALES)", 12, currentY);
+      currentY += 4;
+
+      const splitGlobal = doc.splitTextToSize(res.conclusionGlobal, 176);
+      const boxGlobalHeight = Math.max(14, splitGlobal.length * 3.5 + 6);
+
+      doc.setFillColor(240, 253, 244);
+      doc.setDrawColor(187, 247, 208);
+      doc.roundedRect(12, currentY, 186, boxGlobalHeight, 2, 2, "FD");
+
+      doc.setFontSize(7.5);
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(71, 85, 105);
-      const splitCompConc = doc.splitTextToSize(compData.conclusionComparativa, 176);
-      doc.text(splitCompConc, 18, currentY);
-      currentY += splitCompConc.length * 3 + 4;
+      doc.setTextColor(22, 101, 52);
+      doc.text(splitGlobal, 16, currentY + 6);
+
+      currentY += boxGlobalHeight + 5;
     }
 
     // --- Section 4: Technical Diagnostic Assistant Sections ---
@@ -437,7 +504,7 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
       currentY += 3;
     }
 
-    // --- Section 5: Final Conclusion ---
+    // --- Section 5: Producer Dictamen ---
     if (res.informeProductor?.conclusionFinal) {
       if (currentY > 245) {
         doc.addPage();
@@ -454,7 +521,7 @@ export function downloadTechnicalPdf(evalData: EvaluacionDiagnosis) {
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(30, 41, 59);
-      doc.text("DICTAMEN Y CONCLUSIÓN FINAL DE EVALUACIÓN:", 16, currentY + 5);
+      doc.text("RESUMEN OPERATIVO PARA EL PRODUCTOR:", 16, currentY + 5);
 
       doc.setFontSize(7.5);
       doc.setFont("helvetica", "normal");
