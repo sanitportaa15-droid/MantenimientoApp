@@ -593,17 +593,17 @@ export const db = {
           result = (import.meta as any).env?.VITE_GEMINI_API_KEY || defaultValue;
         }
 
-        // Respaldos para modelos por proveedor
+        // Respaldos para modelos por proveedor (utilizar estrictamente defaultValue proporcionado sin modelos hardcodeados)
         if (clave === "ia_gemini_model" && (!result || result.trim() === "")) {
-          result = defaultValue || "gemini-2.5-flash";
+          result = defaultValue;
         }
 
         if (clave === "ia_openai_model" && (!result || result.trim() === "")) {
-          result = defaultValue || "gpt-4o-mini";
+          result = defaultValue;
         }
 
         if (clave === "ia_modelo" && (!result || result.trim() === "")) {
-          result = defaultValue || "gemini-2.5-flash";
+          result = defaultValue;
         }
 
         return result;

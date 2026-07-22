@@ -32,6 +32,7 @@ import { PulsadorModel, EvaluacionDiagnosis, ResultadoIA, MarcaPulsador } from "
 import { Tambo } from "../types/supabase";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { AIService } from "../services/aiService";
 
 // Custom type for jsPDF with autoTable
 interface ExtendedJsPDF extends jsPDF {
@@ -242,10 +243,10 @@ export default function AiDiagnosisPage() {
 
       if (activeProvider === "gemini") {
         selectedApiKey = activeGeminiKey;
-        selectedModel = activeGeminiModel || (legacyModel && !legacyModel.includes("gpt") ? legacyModel : "gemini-2.5-flash");
+        selectedModel = activeGeminiModel || (legacyModel && !legacyModel.includes("gpt") ? legacyModel : "");
       } else if (activeProvider === "openai") {
         selectedApiKey = activeOpenaiKey;
-        selectedModel = activeOpenaiModel || (legacyModel && legacyModel.includes("gpt") ? legacyModel : "gpt-4o-mini");
+        selectedModel = activeOpenaiModel || (legacyModel && legacyModel.includes("gpt") ? legacyModel : "");
       }
 
       if (activeProvider !== "ninguno") {
@@ -364,47 +365,19 @@ export default function AiDiagnosisPage() {
         return;
       }
 
-      setAnalysisStep(activeProvider === "openai" ? "Esperando respuesta de OpenAI..." : "Esperando respuesta de Gemini...");
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 seconds frontend safeguard timeout
+      setAnalysisStep(activeProvider === "openai" ? "Procesando con OpenAI..." : activeProvider === "gemini" ? "Procesando con Google Gemini..." : "Procesando con Motor ISO...");
 
-      const response = await fetch("/api/gemini/diagnose", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: imagePreview,
-          pulsadorSpecs: specs,
-          additionalNotes,
-          provider: activeProvider,
-          apiKey: selectedApiKey,
-          model: selectedModel,
-          tamboId: selectedTamboId,
-          empresaId: getActiveCompanyId()
-        }),
-        signal: controller.signal
+      const data: ResultadoIA = await AIService.runDiagnosis({
+        image: imagePreview,
+        pulsadorSpecs: specs,
+        additionalNotes,
+        provider: (activeProvider as "gemini" | "openai" | "ninguno") || "gemini",
+        apiKey: selectedApiKey,
+        model: selectedModel,
+        tamboId: selectedTamboId,
+        empresaId: getActiveCompanyId()
       });
 
-      clearTimeout(timeoutId);
-
-      setAnalysisStep("Procesando diagnóstico...");
-
-      if (!response.ok) {
-        let errMsg = "Error al realizar el diagnóstico.";
-        try {
-          const errorData = await response.json();
-          if (response.status === 504 || errorData.error === "timeout") {
-            throw new Error("timeout");
-          }
-          errMsg = errorData.error || errMsg;
-        } catch (jsonErr: any) {
-          if (jsonErr.message === "timeout") {
-            throw jsonErr;
-          }
-        }
-        throw new Error(errMsg);
-      }
-
-      const data: ResultadoIA = await response.json();
       console.log("Análisis completado exitosamente de forma estructurada:", data);
       
       setAnalysisStep("Diagnóstico completado.");

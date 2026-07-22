@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../services/db";
+import { AIService } from "../services/aiService";
 import { 
   Brain, 
   Key, 
@@ -23,8 +24,8 @@ export default function IaForm() {
   const [provider, setProvider] = useState<"ninguno" | "gemini" | "openai">("gemini");
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-  const [geminiModel, setGeminiModel] = useState("gemini-2.5-flash");
-  const [openaiModel, setOpenaiModel] = useState("gpt-4o-mini");
+  const [geminiModel, setGeminiModel] = useState("");
+  const [openaiModel, setOpenaiModel] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   
@@ -45,8 +46,8 @@ export default function IaForm() {
     }
   };
 
-  // Fetch available models from backend
-  const fetchModels = async (prov: string, key: string, targetModel = "") => {
+  // Fetch available models using central AIService
+  const fetchModels = async (prov: "ninguno" | "gemini" | "openai", key: string, targetModel = "") => {
     if (prov === "ninguno") {
       setAvailableModels([]);
       setModelsError(null);
@@ -60,34 +61,33 @@ export default function IaForm() {
     setIsLoadingModels(true);
     setModelsError(null);
     try {
-      const response = await fetch("/api/ai/models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: prov, apiKey: key })
-      });
-      const data = await response.json();
-      if (response.ok && Array.isArray(data.models)) {
-        setAvailableModels(data.models);
-        if (data.models.length > 0) {
-          const currentModel = prov === "gemini" ? geminiModel : openaiModel;
-          const activeTarget = targetModel || currentModel;
-          const exists = data.models.some((m: any) => m.id === activeTarget);
-          if (exists) {
-            if (prov === "gemini") setGeminiModel(activeTarget);
-            else if (prov === "openai") setOpenaiModel(activeTarget);
-          } else {
-            const firstModel = data.models[0].id;
-            const firstModelName = data.models[0].displayName || firstModel;
-            if (prov === "gemini") setGeminiModel(firstModel);
-            else if (prov === "openai") setOpenaiModel(firstModel);
+      const result = await AIService.getModels(prov, key);
 
-            if (activeTarget && activeTarget !== "ninguno" && activeTarget !== "") {
-              alert(`El modelo anteriormente configurado o seleccionado (${activeTarget}) ya no está disponible. Se ha seleccionado automáticamente '${firstModelName}' (${firstModel}). Recuerde presionar "Guardar Configuración" para conservar este cambio.`);
-            }
+      if (result.success && result.models.length > 0) {
+        setAvailableModels(result.models);
+        const currentModel = prov === "gemini" ? geminiModel : openaiModel;
+        const activeTarget = targetModel || currentModel;
+        const matchedModel = result.models.find((m: any) => 
+          m.id === activeTarget || 
+          m.id === `models/${activeTarget}` || 
+          m.id.replace("models/", "") === activeTarget.replace("models/", "")
+        );
+
+        if (matchedModel) {
+          if (prov === "gemini") setGeminiModel(matchedModel.id);
+          else if (prov === "openai") setOpenaiModel(matchedModel.id);
+        } else {
+          const firstModel = result.models[0].id;
+          const firstModelName = result.models[0].displayName || firstModel;
+          if (prov === "gemini") setGeminiModel(firstModel);
+          else if (prov === "openai") setOpenaiModel(firstModel);
+
+          if (activeTarget && activeTarget !== "ninguno" && activeTarget !== "") {
+            alert(`El modelo anteriormente configurado o seleccionado (${activeTarget}) ya no está disponible en la API oficial de ${prov === "gemini" ? "Google Gemini" : "OpenAI"}. Se ha seleccionado automáticamente '${firstModelName}' (${firstModel}). Recuerde presionar "Guardar Configuración" para conservar este cambio.`);
           }
         }
       } else {
-        setModelsError(data.error || "Fallo al obtener la lista de modelos de IA de la API.");
+        setModelsError(result.error || "Fallo al obtener la lista de modelos de IA de la API.");
       }
     } catch (err: any) {
       console.error("Error fetching models list:", err);
@@ -120,8 +120,8 @@ export default function IaForm() {
         setGeminiKey(gk);
         setOpenaiKey(ok);
 
-        const loadedGeminiModel = gm || (legacyM && !legacyM.includes("gpt") ? legacyM : "gemini-2.5-flash");
-        const loadedOpenaiModel = om || (legacyM && legacyM.includes("gpt") ? legacyM : "gpt-4o-mini");
+        const loadedGeminiModel = gm || (legacyM && !legacyM.includes("gpt") ? legacyM : "");
+        const loadedOpenaiModel = om || (legacyM && legacyM.includes("gpt") ? legacyM : "");
 
         setGeminiModel(loadedGeminiModel);
         setOpenaiModel(loadedOpenaiModel);
@@ -181,63 +181,11 @@ export default function IaForm() {
       const activeKey = provider === "gemini" ? geminiKey : openaiKey;
       const activeM = provider === "gemini" ? geminiModel : openaiModel;
       
-      if (provider === "ninguno") {
-        setTestResult({
-          success: true,
-          message: "🟢 Motor de reglas estático seleccionado. No requiere conexión externa con APIs de IA."
-        });
-        return;
-      }
+      const res = await AIService.testConnection(provider, activeKey, activeM);
+      setTestResult(res);
 
-      if (!activeKey) {
-        setTestResult({
-          success: false,
-          message: `API Key de ${provider === "gemini" ? "Google Gemini" : "OpenAI"} inválida o vacía. Por favor ingrese su clave.`
-        });
-        return;
-      }
-
-      if (!activeM) {
-        setTestResult({
-          success: false,
-          message: `Modelo de ${provider === "gemini" ? "Google Gemini" : "OpenAI"} no seleccionado. Actualice la lista de modelos y seleccione una opción.`
-        });
-        return;
-      }
-
-      const response = await fetch("/api/ai/test-connection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider,
-          apiKey: activeKey,
-          model: activeM
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setTestResult({
-          success: true,
-          message: data.message || "🟢 Conexión exitosa.",
-          modelsCount: data.modelsCount,
-          lastVerification: data.lastVerification
-        });
-        
-        if (data.models) {
-          setAvailableModels(data.models);
-          if (data.models.length > 0) {
-            const exists = data.models.some((m: any) => m.id === activeM);
-            if (!exists) {
-              setActiveModel(data.models[0].id);
-            }
-          }
-        }
-      } else {
-        setTestResult({
-          success: false,
-          message: data.error || "Fallo en la prueba de conexión."
-        });
+      if (res.success && res.models && res.models.length > 0) {
+        setAvailableModels(res.models);
       }
     } catch (err: any) {
       console.error("Error testing connection:", err);
