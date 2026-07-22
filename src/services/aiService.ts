@@ -21,7 +21,7 @@ export interface AIDiagnosisParams {
   image: string;
   pulsadorSpecs: any;
   additionalNotes?: string;
-  provider?: "gemini" | "openai" | "ninguno";
+  provider?: "gemini" | "openai" | "iso" | "ninguno";
   apiKey?: string;
   model?: string;
   tamboId?: string;
@@ -77,8 +77,8 @@ export const AIService = {
   /**
     * Retrieves available models dynamically for the selected provider
     */
-  async getModels(provider: "gemini" | "openai" | "ninguno", apiKey?: string): Promise<{ success: boolean; models: AIModelInfo[]; error?: string }> {
-    if (provider === "ninguno") {
+  async getModels(provider: "gemini" | "openai" | "iso" | "ninguno", apiKey?: string): Promise<{ success: boolean; models: AIModelInfo[]; error?: string }> {
+    if (provider === "iso" || provider === "ninguno") {
       return { success: true, models: [] };
     }
     if (!apiKey) {
@@ -105,11 +105,11 @@ export const AIService = {
   /**
     * Tests connection with the configured provider and model
     */
-  async testConnection(provider: "gemini" | "openai" | "ninguno", apiKey: string, model: string): Promise<AITestConnectionResult> {
-    if (provider === "ninguno") {
+  async testConnection(provider: "gemini" | "openai" | "iso" | "ninguno", apiKey: string, model: string): Promise<AITestConnectionResult> {
+    if (provider === "iso" || provider === "ninguno") {
       return {
         success: true,
-        message: "🟢 Motor de reglas estático seleccionado. No requiere conexión externa con APIs de IA."
+        message: "🟢 Motor de reglas estático ISO seleccionado. No requiere conexión externa con APIs de IA."
       };
     }
 
@@ -166,16 +166,25 @@ export const AIService = {
     const { image, pulsadorSpecs, additionalNotes, tamboId, empresaId } = params;
 
     // Load active settings if not explicitly provided
-    const provider = params.provider || (await db.configuracion.getByKey("ia_provider", "gemini")) as any;
+    let provider = params.provider;
+    if (!provider) {
+      let p = await db.configuracion.getByKey("proveedor_activo", "");
+      if (!p) p = await db.configuracion.getByKey("ia_provider", "");
+      if (!p) p = await db.configuracion.getByKey("ia_proveedor", "");
+      if (p === "iso" || p === "ninguno") provider = "iso";
+      else if (p === "openai") provider = "openai";
+      else provider = "gemini";
+    }
+
     const geminiKey = await db.configuracion.getByKey("ia_gemini_api_key", "");
     const openaiKey = await db.configuracion.getByKey("ia_openai_api_key", "");
     const geminiModel = await db.configuracion.getByKey("ia_gemini_model", "");
     const openaiModel = await db.configuracion.getByKey("ia_openai_model", "");
 
-    // 1. If provider is "ninguno", use Motor ISO directly
-    if (provider === "ninguno") {
-      console.log("[AIService] Configuración 'ninguno'. Ejecutando Motor ISO directo.");
-      return this.runIsoFallback(pulsadorSpecs, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO (sin IA).");
+    // 1. If provider is "iso" or "ninguno", use Motor ISO directly without calling external APIs
+    if (provider === "iso" || provider === "ninguno") {
+      console.log("[AIService] Proveedor activo es Motor ISO. Ejecutando análisis determinista local.");
+      return this.runIsoFallback(pulsadorSpecs, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO 5707 / ISO 6690 (sin IA).");
     }
 
     // Determine primary and secondary credentials

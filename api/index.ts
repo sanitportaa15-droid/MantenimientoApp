@@ -35,7 +35,7 @@ app.post(["/api/ai/diagnose", "/api/gemini/diagnose"], async (req, res) => {
   try {
     const { image, pulsadorSpecs, provider = "gemini", apiKey, model } = req.body;
 
-    if (provider === "ninguno") {
+    if (provider === "ninguno" || provider === "iso") {
       const defaultOcr = {
         frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
         relacionMedida: "60/40",
@@ -140,7 +140,7 @@ app.all("/api/ai/models", async (req, res) => {
     const provider = req.body?.provider || req.query?.provider;
     const apiKey = req.body?.apiKey || req.query?.apiKey;
 
-    if (!provider || provider === "ninguno") return res.status(200).json({ success: true, models: [] });
+    if (!provider || provider === "ninguno" || provider === "iso") return res.status(200).json({ success: true, models: [] });
     if (!apiKey) return res.status(200).json({ success: false, error: "API Key ausente." });
 
     if (provider === "gemini") {
@@ -183,7 +183,7 @@ app.all("/api/ai/test-connection", async (req, res) => {
     const apiKey = req.body?.apiKey || req.query?.apiKey;
     const model = req.body?.model || req.query?.model;
 
-    if (!provider || provider === "ninguno") {
+    if (!provider || provider === "ninguno" || provider === "iso") {
       return res.status(200).json({ success: true, message: "🟢 Motor ISO seleccionado." });
     }
     if (!apiKey) return res.status(200).json({ success: false, error: "API Key no ingresada." });

@@ -55,7 +55,7 @@ async function startServer() {
       console.log(`[AI Diagnosis Server] - ¿Imagen recibida correctamente?: ${isImageReceived ? "SÍ" : "NO"}`);
       console.log(`[AI Diagnosis Server] - Tamaño de la imagen: ${imageLength} caracteres`);
 
-      if (provider === "ninguno") {
+      if (provider === "ninguno" || provider === "iso") {
         console.log("[AI Diagnosis Server] Ejecutando diagnóstico exclusivamente con Motor ISO (sin IA)...");
         const defaultOcr = {
           frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
@@ -665,7 +665,7 @@ async function startServer() {
           details: "Parámetro 'provider' ausente en la solicitud."
         });
       }
-      if (provider === "ninguno") {
+      if (provider === "ninguno" || provider === "iso") {
         return res.status(200).json({ success: true, models: [] });
       }
       if (!apiKey) {
@@ -819,10 +819,10 @@ async function startServer() {
           details: "Parámetro 'provider' ausente."
         });
       }
-      if (provider === "ninguno") {
+      if (provider === "ninguno" || provider === "iso") {
         return res.status(200).json({
           success: true,
-          message: "🟢 Motor de reglas estático seleccionado. No requiere conexión externa con APIs de IA."
+          message: "🟢 Motor de reglas estático ISO seleccionado. No requiere conexión externa con APIs de IA."
         });
       }
 

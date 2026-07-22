@@ -226,11 +226,14 @@ export default function AiDiagnosisPage() {
         marca: marcas.find(m => m.id === pulsador.marcaId)?.nombre || "Otra"
       };
 
-      let activeProvider = await db.configuracion.getByKey("ia_provider", "gemini");
-      if (!activeProvider || activeProvider === "ninguno") {
-        const legacyP = await db.configuracion.getByKey("ia_proveedor", "");
-        if (legacyP && legacyP !== "ninguno") activeProvider = legacyP as any;
-      }
+      let p = await db.configuracion.getByKey("proveedor_activo", "");
+      if (!p) p = await db.configuracion.getByKey("ia_provider", "");
+      if (!p) p = await db.configuracion.getByKey("ia_proveedor", "");
+
+      let activeProvider: "openai" | "gemini" | "iso" = "gemini";
+      if (p === "openai") activeProvider = "openai";
+      else if (p === "iso" || p === "ninguno") activeProvider = "iso";
+      else activeProvider = "gemini";
 
       const activeGeminiKey = await db.configuracion.getByKey("ia_gemini_api_key", "");
       const activeOpenaiKey = await db.configuracion.getByKey("ia_openai_api_key", "");
@@ -249,7 +252,7 @@ export default function AiDiagnosisPage() {
         selectedModel = activeOpenaiModel || (legacyModel && legacyModel.includes("gpt") ? legacyModel : "");
       }
 
-      if (activeProvider !== "ninguno") {
+      if (activeProvider !== "iso") {
         const providerName = activeProvider === "gemini" ? "Google Gemini" : "OpenAI";
         if (!selectedApiKey) {
           throw new Error(`No hay una API Key configurada para el proveedor activo (${providerName}). Por favor, ingrese a la sección de Configuración Técnica, proporcione una API Key para ${providerName} y guarde los cambios.`);
@@ -259,7 +262,7 @@ export default function AiDiagnosisPage() {
         }
       }
 
-      if (activeProvider === "ninguno") {
+      if (activeProvider === "iso") {
         setAnalysisStep("Procesando diagnóstico...");
         await new Promise(resolve => setTimeout(resolve, 800));
         
@@ -371,7 +374,7 @@ export default function AiDiagnosisPage() {
         image: imagePreview,
         pulsadorSpecs: specs,
         additionalNotes,
-        provider: (activeProvider as "gemini" | "openai" | "ninguno") || "gemini",
+        provider: activeProvider,
         apiKey: selectedApiKey,
         model: selectedModel,
         tamboId: selectedTamboId,

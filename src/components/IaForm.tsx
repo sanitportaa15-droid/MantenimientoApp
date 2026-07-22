@@ -21,7 +21,7 @@ import {
 import { cn } from "../utils/ui";
 
 export default function IaForm() {
-  const [provider, setProvider] = useState<"ninguno" | "gemini" | "openai">("gemini");
+  const [provider, setProvider] = useState<"openai" | "gemini" | "iso">("gemini");
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [geminiModel, setGeminiModel] = useState("");
@@ -37,7 +37,7 @@ export default function IaForm() {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
-  const activeModel = provider === "gemini" ? geminiModel : openaiModel;
+  const activeModel = provider === "gemini" ? geminiModel : provider === "openai" ? openaiModel : "";
   const setActiveModel = (modelId: string) => {
     if (provider === "gemini") {
       setGeminiModel(modelId);
@@ -47,8 +47,8 @@ export default function IaForm() {
   };
 
   // Fetch available models using central AIService
-  const fetchModels = async (prov: "ninguno" | "gemini" | "openai", key: string, targetModel = "") => {
-    if (prov === "ninguno") {
+  const fetchModels = async (prov: "openai" | "gemini" | "iso", key: string, targetModel = "") => {
+    if (prov === "iso") {
       setAvailableModels([]);
       setModelsError(null);
       return;
@@ -61,7 +61,8 @@ export default function IaForm() {
     setIsLoadingModels(true);
     setModelsError(null);
     try {
-      const result = await AIService.getModels(prov, key);
+      const apiProv = prov === "gemini" ? "gemini" : "openai";
+      const result = await AIService.getModels(apiProv, key);
 
       if (result.success && result.models.length > 0) {
         setAvailableModels(result.models);
@@ -82,7 +83,7 @@ export default function IaForm() {
           if (prov === "gemini") setGeminiModel(firstModel);
           else if (prov === "openai") setOpenaiModel(firstModel);
 
-          if (activeTarget && activeTarget !== "ninguno" && activeTarget !== "") {
+          if (activeTarget && activeTarget !== "iso" && activeTarget !== "ninguno" && activeTarget !== "") {
             alert(`El modelo anteriormente configurado o seleccionado (${activeTarget}) ya no está disponible en la API oficial de ${prov === "gemini" ? "Google Gemini" : "OpenAI"}. Se ha seleccionado automáticamente '${firstModelName}' (${firstModel}). Recuerde presionar "Guardar Configuración" para conservar este cambio.`);
           }
         }
@@ -101,20 +102,26 @@ export default function IaForm() {
   useEffect(() => {
     async function loadIaSettings() {
       try {
-        const [p, gk, ok, gm, om, legacyM] = await Promise.all([
-          db.configuracion.getByKey("ia_provider", "gemini"),
+        let p = await db.configuracion.getByKey("proveedor_activo", "");
+        if (!p) {
+          p = await db.configuracion.getByKey("ia_provider", "");
+        }
+        if (!p) {
+          p = await db.configuracion.getByKey("ia_proveedor", "");
+        }
+
+        let resolvedProvider: "openai" | "gemini" | "iso" = "gemini";
+        if (p === "openai") resolvedProvider = "openai";
+        else if (p === "iso" || p === "ninguno") resolvedProvider = "iso";
+        else resolvedProvider = "gemini";
+
+        const [gk, ok, gm, om, legacyM] = await Promise.all([
           db.configuracion.getByKey("ia_gemini_api_key", ""),
           db.configuracion.getByKey("ia_openai_api_key", ""),
           db.configuracion.getByKey("ia_gemini_model", ""),
           db.configuracion.getByKey("ia_openai_model", ""),
           db.configuracion.getByKey("ia_modelo", "")
         ]);
-        
-        let resolvedProvider = p as "ninguno" | "gemini" | "openai";
-        if (resolvedProvider === ("ninguno" as any)) {
-          const oldProvider = await db.configuracion.getByKey("ia_proveedor", "");
-          if (oldProvider && oldProvider !== "ninguno") resolvedProvider = oldProvider as any;
-        }
 
         setProvider(resolvedProvider);
         setGeminiKey(gk);
@@ -126,10 +133,10 @@ export default function IaForm() {
         setGeminiModel(loadedGeminiModel);
         setOpenaiModel(loadedOpenaiModel);
 
-        const activeKey = resolvedProvider === "gemini" ? gk : ok;
+        const activeKey = resolvedProvider === "gemini" ? gk : resolvedProvider === "openai" ? ok : "";
         const activeM = resolvedProvider === "gemini" ? loadedGeminiModel : loadedOpenaiModel;
 
-        if (resolvedProvider !== "ninguno" && activeKey) {
+        if (resolvedProvider !== "iso" && activeKey) {
           await fetchModels(resolvedProvider, activeKey, activeM);
         }
       } catch (err) {
@@ -139,13 +146,14 @@ export default function IaForm() {
     loadIaSettings();
   }, []);
 
-  const handleProviderChange = (newProvider: "ninguno" | "gemini" | "openai") => {
+  const handleProviderChange = (newProvider: "openai" | "gemini" | "iso") => {
     setProvider(newProvider);
     setTestResult(null);
     setAvailableModels([]);
-    const activeKey = newProvider === "gemini" ? geminiKey : openaiKey;
-    const activeM = newProvider === "gemini" ? geminiModel : openaiModel;
-    if (newProvider !== "ninguno" && activeKey) {
+    setModelsError(null);
+    const activeKey = newProvider === "gemini" ? geminiKey : newProvider === "openai" ? openaiKey : "";
+    const activeM = newProvider === "gemini" ? geminiModel : newProvider === "openai" ? openaiModel : "";
+    if (newProvider !== "iso" && activeKey) {
       fetchModels(newProvider, activeKey, activeM);
     }
   };
@@ -155,10 +163,13 @@ export default function IaForm() {
     setIsSaving(true);
     setTestResult(null);
     try {
-      const selectedActiveModel = provider === "gemini" ? geminiModel : openaiModel;
+      const selectedActiveModel = provider === "gemini" ? geminiModel : provider === "openai" ? openaiModel : "";
+      const legacyProv = provider === "iso" ? "ninguno" : provider;
+
       await Promise.all([
-        db.configuracion.setByKey("ia_provider", provider, "Proveedor de Inteligencia Artificial para el Diagnóstico Técnico"),
-        db.configuracion.setByKey("ia_proveedor", provider, "Proveedor de Inteligencia Artificial (Legacy)"),
+        db.configuracion.setByKey("proveedor_activo", provider, "Proveedor activo de IA/Diagnóstico (openai, gemini, iso)"),
+        db.configuracion.setByKey("ia_provider", legacyProv, "Proveedor de Inteligencia Artificial"),
+        db.configuracion.setByKey("ia_proveedor", legacyProv, "Proveedor de Inteligencia Artificial (Legacy)"),
         db.configuracion.setByKey("ia_gemini_api_key", geminiKey, "API Key de Google Gemini"),
         db.configuracion.setByKey("ia_openai_api_key", openaiKey, "API Key de OpenAI"),
         db.configuracion.setByKey("ia_gemini_model", geminiModel, "Modelo Seleccionado para Google Gemini"),
@@ -175,6 +186,7 @@ export default function IaForm() {
   };
 
   const handleTestConnection = async () => {
+    if (provider === "iso") return;
     setIsTesting(true);
     setTestResult(null);
     try {
@@ -206,7 +218,7 @@ export default function IaForm() {
             <Brain className="w-6 h-6 text-emerald-400" />
             Inteligencia Artificial
           </h3>
-          <p className="text-zinc-500 mt-1">Configure el proveedor de IA y las credenciales de diagnóstico técnico para su empresa.</p>
+          <p className="text-zinc-500 mt-1">Configure el proveedor activo y las credenciales de diagnóstico técnico para su empresa.</p>
         </div>
         <button
           type="submit"
@@ -219,14 +231,14 @@ export default function IaForm() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Selector de Proveedor */}
+        {/* Selector de Proveedor Activo */}
         <div className="space-y-4">
-          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Proveedor de Diagnóstico</label>
+          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Proveedor Activo (proveedor_activo)</label>
           <div className="grid grid-cols-1 gap-3">
             {[
-              { id: "ninguno", title: "Ninguno (Motor de Reglas)", desc: "Utiliza un motor de análisis estático basado en reglas del fabricante y tolerancia sin llamar a APIs externas." },
-              { id: "gemini", title: "Google Gemini", desc: "Utiliza el modelo multimodal de Google AI para analizar de forma interactiva y veloz las imágenes del pulsógrafo." },
-              { id: "openai", title: "OpenAI", desc: "Utiliza los modelos GPT de OpenAI para interpretar los gráficos de pulsado y contrastar las especificaciones técnicas." }
+              { id: "openai", title: "OpenAI", desc: "Utiliza los modelos GPT de OpenAI para interpretar los gráficos de pulsado y contrastar las especificaciones técnicas." },
+              { id: "gemini", title: "Google Gemini", desc: "Utiliza los modelos multimodales de Google AI para analizar las imágenes del pulsógrafo." },
+              { id: "iso", title: "Motor ISO (Sin IA)", desc: "Utiliza un motor de análisis estático basado en reglas ISO 5707 e ISO 6690 sin consumir APIs externas." }
             ].map((opt) => (
               <button
                 key={opt.id}
@@ -256,32 +268,32 @@ export default function IaForm() {
           </div>
         </div>
 
-        {/* Credenciales y Prueba de Conexión */}
+        {/* Credenciales y Configuración de Proveedor */}
         <div className="lg:col-span-2 space-y-6">
-          {provider === "ninguno" ? (
+          {provider === "iso" ? (
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-4 min-h-[250px] animate-in fade-in duration-300">
               <div className="w-12 h-12 bg-zinc-800/80 rounded-2xl flex items-center justify-center text-zinc-400">
-                <Zap className="w-6 h-6" />
+                <Zap className="w-6 h-6 text-emerald-400" />
               </div>
               <div className="max-w-md space-y-2">
-                <h4 className="font-bold text-white text-base">Motor de Reglas Activo</h4>
+                <h4 className="font-bold text-white text-base">Motor de Reglas ISO Activo</h4>
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Ha seleccionado el análisis sin IA. El sistema interpretará los gráficos utilizando un motor experto estático integrado en el cliente, evaluando automáticamente desviaciones contra los límites de tolerancia de fábrica.
+                  Ha seleccionado el análisis determinista. El sistema interpretará los parámetros y gráficos de pulsado utilizando reglas ISO 5707 / ISO 6690 sin realizar llamadas a servicios ni APIs externas.
                 </p>
                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-xs flex items-center gap-2 mt-4 text-left justify-center">
                   <Check className="w-4 h-4 shrink-0" />
-                  <span>No requiere saldo ni suscripciones de APIs externas.</span>
+                  <span>Sin consumo de cuotas ni dependencia de conexión externa.</span>
                 </div>
               </div>
             </div>
           ) : (
             <div className="space-y-6 animate-in fade-in duration-300">
-              {/* API Key */}
+              {/* API Key del Proveedor Activo */}
               <div className="space-y-4 bg-zinc-900/40 border border-white/5 rounded-2xl p-6">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                     <Key className="w-4 h-4 text-zinc-400" />
-                    API Key para {provider === "gemini" ? "Google Gemini" : "OpenAI"}
+                    API Key de {provider === "gemini" ? "Google Gemini" : "OpenAI"}
                   </label>
                   <span className={cn(
                     "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
@@ -353,16 +365,16 @@ export default function IaForm() {
                   </button>
                 </div>
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  Las credenciales se guardan de manera segura y están limitadas exclusivamente a la empresa (tenant) actual. Nunca se exponen al navegador de forma insegura.
+                  Las API Keys se almacenan de forma independiente para cada proveedor en la empresa activa. Si borra la clave y guarda, se eliminará permanentemente.
                 </p>
               </div>
 
-              {/* Selector de Modelo de IA */}
+              {/* Selector de Modelo del Proveedor Activo */}
               <div className="space-y-4 bg-zinc-900/40 border border-white/5 rounded-2xl p-6">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                     <Brain className="w-4 h-4 text-zinc-400" />
-                    Modelo de IA
+                    Modelo de {provider === "gemini" ? "Google Gemini" : "OpenAI"}
                   </label>
                   <button
                     type="button"
@@ -378,7 +390,7 @@ export default function IaForm() {
                 {isLoadingModels ? (
                   <div className="flex items-center gap-2 py-3 text-sm text-zinc-500">
                     <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                    Consultando API para obtener modelos disponibles...
+                    Consultando API para obtener modelos disponibles de {provider === "gemini" ? "Google Gemini" : "OpenAI"}...
                   </div>
                 ) : modelsError ? (
                   <div className="p-3 bg-red-500/5 border border-red-500/20 text-red-400 rounded-xl text-xs">
@@ -393,7 +405,7 @@ export default function IaForm() {
                   </div>
                 ) : availableModels.length === 0 ? (
                   <div className="text-sm text-zinc-500 py-2 italic">
-                    Configure una API Key válida y presione "Actualizar modelos" para listar las opciones.
+                    Ingrese la API Key de {provider === "gemini" ? "Gemini" : "OpenAI"} y presione "Actualizar modelos" para listar las opciones.
                   </div>
                 ) : (
                   <div className="relative">
@@ -419,7 +431,7 @@ export default function IaForm() {
                   </div>
                 )}
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  Solo se listan los modelos oficiales activos compatibles con la API del proveedor seleccionado.
+                  Mostrando únicamente los modelos oficiales correspondientes a {provider === "gemini" ? "Google Gemini" : "OpenAI"}.
                 </p>
               </div>
 
