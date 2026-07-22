@@ -9,19 +9,16 @@ import {
   Save, 
   RefreshCw, 
   Check, 
-  X, 
-  AlertTriangle, 
+  Zap, 
   CheckCircle2, 
   XCircle, 
   Trash2, 
-  Sparkles,
-  Zap,
   Play
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
 export default function IaForm() {
-  const [provider, setProvider] = useState<"openai" | "gemini" | "iso">("gemini");
+  const [provider, setProvider] = useState<"openai" | "gemini" | "iso">("iso");
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [geminiModel, setGeminiModel] = useState("");
@@ -110,10 +107,10 @@ export default function IaForm() {
           p = await db.configuracion.getByKey("ia_proveedor", "");
         }
 
-        let resolvedProvider: "openai" | "gemini" | "iso" = "gemini";
+        let resolvedProvider: "openai" | "gemini" | "iso" = "iso";
         if (p === "openai") resolvedProvider = "openai";
-        else if (p === "iso" || p === "ninguno") resolvedProvider = "iso";
-        else resolvedProvider = "gemini";
+        else if (p === "gemini") resolvedProvider = "gemini";
+        else resolvedProvider = "iso";
 
         const [gk, ok, gm, om, legacyM] = await Promise.all([
           db.configuracion.getByKey("ia_gemini_api_key", ""),

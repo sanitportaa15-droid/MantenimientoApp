@@ -1,6 +1,6 @@
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
-import { evaluatePulsatorISO } from "../src/utils/isoRulesEngine";
+import { evaluatePulsatorISO } from "../src/utils/isoRulesEngine.js";
 
 const app = express();
 
@@ -16,7 +16,7 @@ app.use((req, res, next) => {
 
 // Helper error parser
 function parseAiError(error: any): string {
-  const msg = (error.message || String(error)).toLowerCase();
+  const msg = (error?.message || String(error)).toLowerCase();
   if (msg.includes("api key") || msg.includes("key not valid") || msg.includes("invalid api key") || msg.includes("auth") || msg.includes("unauthorized")) {
     return "API Key inválida o no configurada.";
   }
@@ -29,11 +29,11 @@ function parseAiError(error: any): string {
   if (msg.includes("fetch") || msg.includes("network") || msg.includes("timeout")) {
     return "Sin conexión con el servidor del proveedor de IA.";
   }
-  return error.message || "Error procesando solicitud de IA.";
+  return error?.message || "Error procesando solicitud de IA.";
 }
 
-// 1. Diagnosis Endpoint (matches /api/ai/diagnose, /ai/diagnose, /diagnose)
-app.all(["/api/ai/diagnose", "/ai/diagnose", "/api/gemini/diagnose", "/gemini/diagnose", "*diagnose*"], async (req, res) => {
+// Handler 1: Diagnosis Endpoint
+const handleDiagnose = async (req: express.Request, res: express.Response) => {
   try {
     const { image, pulsadorSpecs, provider = "gemini", apiKey, model } = req.body || {};
 
@@ -103,11 +103,11 @@ app.all(["/api/ai/diagnose", "/ai/diagnose", "/api/gemini/diagnose", "/gemini/di
         });
       } catch (geminiErr: any) {
         console.error("Gemini serverless err:", geminiErr);
-        // Fallback to ISO engine cleanly
+        // Fallback cleanly to ISO
       }
     }
 
-    // Default Fallback
+    // Default Fallback to ISO
     const defaultOcr = {
       frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
       relacionMedida: "60/40", vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
@@ -132,12 +132,12 @@ app.all(["/api/ai/diagnose", "/ai/diagnose", "/api/gemini/diagnose", "/gemini/di
       evaluacionISO: isoOut.evaluacionISO
     });
   } catch (err: any) {
-    return res.status(200).json({ success: false, error: parseAiError(err) });
+    return res.status(200).json({ success: false, error: parseAiError(err), details: err?.stack });
   }
-});
+};
 
-// 2. Models Endpoint (matches /api/ai/models, /ai/models, *models*)
-app.all(["/api/ai/models", "/ai/models", "*models*"], async (req, res) => {
+// Handler 2: Models Endpoint
+const handleModels = async (req: express.Request, res: express.Response) => {
   try {
     const provider = req.body?.provider || req.query?.provider;
     const apiKey = req.body?.apiKey || req.query?.apiKey;
@@ -179,12 +179,12 @@ app.all(["/api/ai/models", "/ai/models", "*models*"], async (req, res) => {
 
     return res.status(200).json({ success: false, error: "Proveedor no soportado." });
   } catch (err: any) {
-    return res.status(200).json({ success: false, error: parseAiError(err) });
+    return res.status(200).json({ success: false, error: parseAiError(err), details: err?.stack });
   }
-});
+};
 
-// 3. Test Connection Endpoint (matches /api/ai/test-connection, /ai/test-connection, *test-connection*)
-app.all(["/api/ai/test-connection", "/ai/test-connection", "*test-connection*"], async (req, res) => {
+// Handler 3: Test Connection Endpoint
+const handleTestConnection = async (req: express.Request, res: express.Response) => {
   try {
     const provider = req.body?.provider || req.query?.provider;
     const apiKey = req.body?.apiKey || req.query?.apiKey;
@@ -238,24 +238,43 @@ app.all(["/api/ai/test-connection", "/ai/test-connection", "*test-connection*"],
 
     return res.status(200).json({ success: false, error: "Proveedor no soportado." });
   } catch (err: any) {
-    return res.status(200).json({ success: false, error: parseAiError(err) });
+    return res.status(200).json({ success: false, error: parseAiError(err), details: err?.stack });
+  }
+};
+
+// Dispatcher middleware based on request URL pattern
+app.use(async (req, res, next) => {
+  const url = (req.url || "").toLowerCase();
+  try {
+    if (url.includes("models")) {
+      return await handleModels(req, res);
+    }
+    if (url.includes("test-connection")) {
+      return await handleTestConnection(req, res);
+    }
+    if (url.includes("diagnose")) {
+      return await handleDiagnose(req, res);
+    }
+    return res.status(200).json({
+      success: false,
+      error: `Ruta de API no reconocida: ${req.method} ${req.url}`
+    });
+  } catch (err: any) {
+    return res.status(200).json({
+      success: false,
+      error: parseAiError(err),
+      details: err?.stack
+    });
   }
 });
 
-// Fallback 404 handler that always returns JSON
-app.use((req, res) => {
-  res.status(200).json({
-    success: false,
-    error: `Ruta de API no encontrada: ${req.method} ${req.url}`
-  });
-});
-
-// Global error handler that always returns JSON
+// Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error("Unhandled error in API handler:", err);
+  console.error("Unhandled error in serverless API handler:", err);
   res.status(200).json({
     success: false,
-    error: err?.message || String(err) || "Error interno del servidor."
+    error: err?.message || String(err) || "Error interno del servidor.",
+    details: err?.stack
   });
 });
 

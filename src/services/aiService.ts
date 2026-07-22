@@ -33,7 +33,7 @@ export interface AIDiagnosisParams {
   * 1. Validates HTTP response status
   * 2. Validates Content-Type header is application/json
   * 3. Validates non-empty body
-  * 4. Parses JSON safely, avoiding "Unexpected end of JSON input" errors
+  * 4. Parses JSON safely
   */
 async function safeFetchJson(url: string, options: RequestInit): Promise<any> {
   let response: Response;
@@ -159,8 +159,7 @@ export const AIService = {
   },
 
   /**
-    * Runs the AI diagnosis flow with automatic Fallback:
-    * Primary Provider -> Secondary Provider -> Motor ISO
+    * Runs the AI diagnosis flow exclusively for the selected provider
     */
   async runDiagnosis(params: AIDiagnosisParams): Promise<ResultadoIA> {
     const { image, pulsadorSpecs, additionalNotes, tamboId, empresaId } = params;
@@ -173,7 +172,8 @@ export const AIService = {
       if (!p) p = await db.configuracion.getByKey("ia_proveedor", "");
       if (p === "iso" || p === "ninguno") provider = "iso";
       else if (p === "openai") provider = "openai";
-      else provider = "gemini";
+      else if (p === "gemini") provider = "gemini";
+      else provider = "iso";
     }
 
     const geminiKey = await db.configuracion.getByKey("ia_gemini_api_key", "");
@@ -187,18 +187,14 @@ export const AIService = {
       return this.runIsoFallback(pulsadorSpecs, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO 5707 / ISO 6690 (sin IA).");
     }
 
-    // Determine primary and secondary credentials
+    // Determine credentials strictly for the selected provider
     const primaryKey = params.apiKey || (provider === "gemini" ? geminiKey : openaiKey);
     const primaryModel = params.model || (provider === "gemini" ? geminiModel : openaiModel);
 
-    const secondaryProvider = provider === "gemini" ? "openai" : "gemini";
-    const secondaryKey = secondaryProvider === "gemini" ? geminiKey : openaiKey;
-    const secondaryModel = secondaryProvider === "gemini" ? geminiModel : openaiModel;
-
-    // Attempt Primary Provider
+    // Attempt Selected Provider
     if (primaryKey && primaryModel) {
       try {
-        console.log(`[AIService] Intentando diagnóstico con proveedor primario: ${provider} (${primaryModel})`);
+        console.log(`[AIService] Intentando diagnóstico con proveedor: ${provider} (${primaryModel})`);
         const data = await safeFetchJson("/api/ai/diagnose", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -218,46 +214,18 @@ export const AIService = {
           return data;
         }
       } catch (primaryErr: any) {
-        console.warn(`[AIService] Falló el proveedor primario (${provider}):`, primaryErr.message);
+        console.warn(`[AIService] Falló el proveedor seleccionado (${provider}):`, primaryErr.message);
       }
     } else {
-      console.warn(`[AIService] Proveedor primario (${provider}) carece de API Key o Modelo en Configuración Técnica.`);
+      console.warn(`[AIService] Proveedor seleccionado (${provider}) carece de API Key o Modelo en Configuración.`);
     }
 
-    // Attempt Secondary Provider (Fallback 1)
-    if (secondaryKey && secondaryModel) {
-      try {
-        console.log(`[AIService] Intentando Fallback a proveedor secundario: ${secondaryProvider} (${secondaryModel})`);
-        const data = await safeFetchJson("/api/ai/diagnose", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image,
-            pulsadorSpecs,
-            additionalNotes,
-            provider: secondaryProvider,
-            apiKey: secondaryKey,
-            model: secondaryModel,
-            tamboId,
-            empresaId
-          })
-        });
-
-        if (data && data.estadoGeneral) {
-          data.diagnosticoTecnico = `[Aviso de Fallback: El proveedor principal (${provider}) no estuvo disponible. Se utilizó ${secondaryProvider.toUpperCase()}].\n\n` + data.diagnosticoTecnico;
-          return data;
-        }
-      } catch (secondaryErr: any) {
-        console.warn(`[AIService] Falló el proveedor secundario (${secondaryProvider}):`, secondaryErr.message);
-      }
-    }
-
-    // Ultimate Fallback: Motor ISO Determinista (Fallback 2)
-    console.log("[AIService] Todos los proveedores de IA fallaron o no están configurados. Ejecutando Motor ISO de respaldo.");
+    // Fallback directly to Motor ISO Determinista
+    console.log("[AIService] Falló la llamada de IA o no está configurada. Ejecutando Motor ISO.");
     return this.runIsoFallback(
       pulsadorSpecs,
       additionalNotes,
-      `[Aviso de Fallback: Las APIs de IA (${provider}) no respondieron. El informe se generó utilizando el Motor de Reglas ISO 5707 / ISO 6690].`
+      `[Aviso de Fallback: No fue posible comunicar con ${provider.toUpperCase()}. El informe se generó utilizando el Motor de Reglas ISO 5707 / ISO 6690].`
     );
   },
 
