@@ -281,6 +281,10 @@ export const aiDiagnosisStorage = {
     localStorage.setItem(STORAGE_KEYS.EVALUACIONES, JSON.stringify(list));
   },
 
+  saveEvaluacion(evaluacion: EvaluacionDiagnosis): void {
+    this.addEvaluacion(evaluacion);
+  },
+
   updateEvaluacion(id: string, updatedData: Partial<EvaluacionDiagnosis>): EvaluacionDiagnosis {
     const list = this.getEvaluaciones();
     const index = list.findIndex(e => e.id === id);

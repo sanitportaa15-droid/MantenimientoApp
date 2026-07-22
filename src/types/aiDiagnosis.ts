@@ -26,6 +26,13 @@ export interface ParametroISOEvaluacion {
   observacion: string;
 }
 
+export interface InformeProductor {
+  estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
+  queSignifica: string;
+  queRiesgosExisten: string;
+  queSeRecomiendaHacer: string;
+}
+
 export interface ResultadoIA {
   estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
   nivelCriticidad: "Bajo" | "Medio" | "Alto";
@@ -47,8 +54,10 @@ export interface ResultadoIA {
   hallazgos: string[];
   diagnosticoTecnico: string;
   posiblesCausas: string[];
+  accionesCorrectivas?: string[];
   recomendaciones: string[];
   evaluacionISO?: ParametroISOEvaluacion[];
+  informeProductor?: InformeProductor;
 }
 
 export interface EvaluacionDiagnosis {
@@ -58,13 +67,13 @@ export interface EvaluacionDiagnosis {
   tecnicoEmail: string;
   tamboId: string;
   tamboNombre: string;
-  equipoNombre: string;
-  tipoDiagnostico: string; // e.g. "Pulsógrafo"
-  pulsadorId: string;
-  pulsadorMarca: string;
-  pulsadorModelo: string;
+  equipoNombre?: string;
+  tipoDiagnostico?: string;
+  pulsadorId?: string;
+  pulsadorMarca?: string;
+  pulsadorModelo?: string;
   imagenUrl: string; // Base64 data URL
   estado: "Pendiente" | "Aprobado" | "Rechazado";
   resultadoIA: ResultadoIA;
-  informeSimplificado?: string; // Simplified text for producer when approved
+  informeSimplificado?: string; // Simplified text for producer
 }

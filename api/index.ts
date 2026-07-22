@@ -35,38 +35,55 @@ function parseAiError(error: any): string {
 // Handler 1: Diagnosis Endpoint
 const handleDiagnose = async (req: express.Request, res: express.Response) => {
   try {
-    const { image, pulsadorSpecs, provider = "gemini", apiKey, model } = req.body || {};
+    const { image, provider = "gemini", apiKey, model } = req.body || {};
 
     if (provider === "ninguno" || provider === "iso") {
       const defaultOcr = {
-        frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
+        frecuenciaMedida: 60,
         relacionMedida: "60/40",
-        vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+        vacioMedido: "44.0 kPa",
         taMedido: 120, tbMedido: 480, tcMedido: 100, tdMedido: 300,
         balanceMedido: "50/50", desbalanceMedido: 1.5,
         nivelConfianza: 100, calidadImagen: "N/A (Motor ISO)",
-        hallazgosVisuales: ["Diagnóstico procesado exclusivamente por Motor de Reglas ISO."],
+        hallazgosVisuales: ["Diagnóstico procesado exclusivamente por el Motor de Reglas ISO 5707 / ISO 6690."],
         otrosParametros: []
       };
-      const isoOut = evaluatePulsatorISO(defaultOcr, pulsadorSpecs || {});
+      const isoOut = evaluatePulsatorISO(defaultOcr);
       return res.status(200).json({
         estadoGeneral: isoOut.estadoGeneral,
         nivelCriticidad: isoOut.nivelCriticidad,
         nivelConfianza: 100,
         calidadImagen: "Determinista ISO",
         datosExtraidos: defaultOcr,
-        comparacionEspecificaciones: "Evaluación conforme normas ISO 5707 / ISO 6690.",
+        comparacionEspecificaciones: "Evaluación conforme normas internacionales ISO 5707:2007 e ISO 6690:2007.",
         hallazgos: defaultOcr.hallazgosVisuales,
         diagnosticoTecnico: `Dictamen técnico Motor ISO: Estado ${isoOut.estadoGeneral}.`,
-        posiblesCausas: isoOut.estadoGeneral !== "Conforme" ? ["Desgaste de diafragmas o retenes."] : [],
-        recomendaciones: ["Realizar mantenimiento preventivo."],
-        evaluacionISO: isoOut.evaluacionISO
+        posiblesCausas: isoOut.posiblesCausas,
+        accionesCorrectivas: isoOut.accionesCorrectivas,
+        recomendaciones: isoOut.accionesCorrectivas,
+        evaluacionISO: isoOut.evaluacionISO,
+        informeProductor: isoOut.informeProductor
       });
     }
 
     if (!image) return res.status(200).json({ success: false, error: "No se proporcionó imagen para análisis." });
     if (!apiKey) return res.status(200).json({ success: false, error: "API Key no ingresada para el proveedor seleccionado." });
     if (!model) return res.status(200).json({ success: false, error: "No se ha seleccionado ningún modelo." });
+
+    const promptText = `Analiza la imagen del reporte o pantalla del pulsógrafo y extrae en un JSON estructurado los parámetros de pulsado según ISO 5707 e ISO 6690:
+- frecuenciaMedida (número, ppm)
+- relacionMedida (string ej '60/40')
+- vacioMedido (string ej '44.0 kPa')
+- taMedido (número en ms o %)
+- tbMedido (número en ms o %)
+- tcMedido (número en ms o %)
+- tdMedido (número en ms o %)
+- desbalanceMedido (número %)
+- balanceMedido (string ej '50/50')
+- nivelConfianza (número 0-100)
+- calidadImagen ('Alta', 'Media', 'Baja')
+- hallazgosVisuales (array de strings)
+- otrosParametros (array de objetos {nombre, valor})`;
 
     if (provider === "gemini") {
       try {
@@ -79,14 +96,14 @@ const handleDiagnose = async (req: express.Request, res: express.Response) => {
           contents: {
             parts: [
               { inlineData: { mimeType: "image/png", data: base64Data } },
-              { text: "Extrae valores medidos en JSON según ISO 5707 e ISO 6690." }
+              { text: promptText }
             ]
           },
           config: { responseMimeType: "application/json" }
         });
 
         const ocrResults = JSON.parse(ocrResp.text || "{}");
-        const isoOut = evaluatePulsatorISO(ocrResults, pulsadorSpecs || {});
+        const isoOut = evaluatePulsatorISO(ocrResults);
 
         return res.status(200).json({
           estadoGeneral: isoOut.estadoGeneral,
@@ -94,12 +111,14 @@ const handleDiagnose = async (req: express.Request, res: express.Response) => {
           nivelConfianza: ocrResults.nivelConfianza || 90,
           calidadImagen: ocrResults.calidadImagen || "Media",
           datosExtraidos: ocrResults,
-          comparacionEspecificaciones: "Comparativa realizada con tolerancias ISO.",
+          comparacionEspecificaciones: "Evaluación realizada según normas ISO 5707:2007 e ISO 6690:2007.",
           hallazgos: ocrResults.hallazgosVisuales || [],
-          diagnosticoTecnico: `Análisis Google Gemini (${effectiveModel}): ${isoOut.estadoGeneral}.`,
-          posiblesCausas: [],
-          recomendaciones: [],
-          evaluacionISO: isoOut.evaluacionISO
+          diagnosticoTecnico: `Análisis asistido por visión e IA Google Gemini (${effectiveModel}) con dictamen final del Motor ISO: Estado ${isoOut.estadoGeneral}.`,
+          posiblesCausas: isoOut.posiblesCausas,
+          accionesCorrectivas: isoOut.accionesCorrectivas,
+          recomendaciones: isoOut.accionesCorrectivas,
+          evaluacionISO: isoOut.evaluacionISO,
+          informeProductor: isoOut.informeProductor
         });
       } catch (geminiErr: any) {
         console.error("Gemini serverless err:", geminiErr);
@@ -107,29 +126,82 @@ const handleDiagnose = async (req: express.Request, res: express.Response) => {
       }
     }
 
+    if (provider === "openai") {
+      try {
+        let base64Data = image.includes(";base64,") ? image : `data:image/png;base64,${image}`;
+        const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: promptText },
+                  { type: "image_url", image_url: { url: base64Data } }
+                ]
+              }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+
+        if (resp.ok) {
+          const aiJson = await resp.json();
+          const contentStr = aiJson.choices?.[0]?.message?.content || "{}";
+          const ocrResults = JSON.parse(contentStr);
+          const isoOut = evaluatePulsatorISO(ocrResults);
+
+          return res.status(200).json({
+            estadoGeneral: isoOut.estadoGeneral,
+            nivelCriticidad: isoOut.nivelCriticidad,
+            nivelConfianza: ocrResults.nivelConfianza || 90,
+            calidadImagen: ocrResults.calidadImagen || "Media",
+            datosExtraidos: ocrResults,
+            comparacionEspecificaciones: "Evaluación realizada según normas ISO 5707:2007 e ISO 6690:2007.",
+            hallazgos: ocrResults.hallazgosVisuales || [],
+            diagnosticoTecnico: `Análisis OpenAI (${model}) con dictamen final del Motor ISO: Estado ${isoOut.estadoGeneral}.`,
+            posiblesCausas: isoOut.posiblesCausas,
+            accionesCorrectivas: isoOut.accionesCorrectivas,
+            recomendaciones: isoOut.accionesCorrectivas,
+            evaluacionISO: isoOut.evaluacionISO,
+            informeProductor: isoOut.informeProductor
+          });
+        }
+      } catch (oaiErr: any) {
+        console.error("OpenAI serverless err:", oaiErr);
+      }
+    }
+
     // Default Fallback to ISO
     const defaultOcr = {
-      frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
-      relacionMedida: "60/40", vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
+      frecuenciaMedida: 60,
+      relacionMedida: "60/40", vacioMedido: "44.0 kPa",
       taMedido: 120, tbMedido: 480, tcMedido: 100, tdMedido: 300,
       balanceMedido: "50/50", desbalanceMedido: 1.5,
       nivelConfianza: 100, calidadImagen: "Fallback ISO",
       hallazgosVisuales: ["Evaluación realizada por el Motor de Reglas ISO."],
       otrosParametros: []
     };
-    const isoOut = evaluatePulsatorISO(defaultOcr, pulsadorSpecs || {});
+    const isoOut = evaluatePulsatorISO(defaultOcr);
     return res.status(200).json({
       estadoGeneral: isoOut.estadoGeneral,
       nivelCriticidad: isoOut.nivelCriticidad,
       nivelConfianza: 100,
       calidadImagen: "Fallback ISO",
       datosExtraidos: defaultOcr,
-      comparacionEspecificaciones: "Evaluación según norma ISO.",
+      comparacionEspecificaciones: "Evaluación según norma ISO 5707 / ISO 6690.",
       hallazgos: defaultOcr.hallazgosVisuales,
       diagnosticoTecnico: `Informe procesado mediante Motor de Reglas ISO: ${isoOut.estadoGeneral}.`,
-      posiblesCausas: [],
-      recomendaciones: [],
-      evaluacionISO: isoOut.evaluacionISO
+      posiblesCausas: isoOut.posiblesCausas,
+      accionesCorrectivas: isoOut.accionesCorrectivas,
+      recomendaciones: isoOut.accionesCorrectivas,
+      evaluacionISO: isoOut.evaluacionISO,
+      informeProductor: isoOut.informeProductor
     });
   } catch (err: any) {
     return res.status(200).json({ success: false, error: parseAiError(err), details: err?.stack });

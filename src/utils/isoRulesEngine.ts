@@ -7,10 +7,20 @@ export interface ParametroISOEvaluacion {
   observacion: string;
 }
 
+export interface InformeProductor {
+  estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
+  queSignifica: string;
+  queRiesgosExisten: string;
+  queSeRecomiendaHacer: string;
+}
+
 export interface ResultadoEvaluacionISO {
   evaluacionISO: ParametroISOEvaluacion[];
   estadoGeneral: "Conforme" | "Advertencia" | "Fuera de tolerancia" | "Crítico";
   nivelCriticidad: "Bajo" | "Medio" | "Alto";
+  posiblesCausas: string[];
+  accionesCorrectivas: string[];
+  informeProductor: InformeProductor;
 }
 
 // Helpers to parse specifications and measured data
@@ -436,9 +446,123 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
     nivelCriticidad = "Bajo";
   }
 
+  // Generate Posibles Causas and Acciones Correctivas based on non-conforming ISO parameters
+  const posiblesCausasSet = new Set<string>();
+  const accionesCorrectivasSet = new Set<string>();
+
+  for (const item of evaluations) {
+    if (item.estado !== "Conforme") {
+      const pName = item.parametro.toLowerCase();
+      if (pName.includes("frecuencia")) {
+        posiblesCausasSet.add("Regulador de pulsación descalibrado o falla electrónica en la tarjeta de control.");
+        posiblesCausasSet.add("Filtro de aire del pulsador sucio u obstruido.");
+        accionesCorrectivasSet.add("Calibrar o ajustar la frecuencia de pulsación a 60 ppm según norma ISO 5707.");
+        accionesCorrectivasSet.add("Limpiar y desobstruir el filtro de aire o cambiar el elemento filtrante.");
+      }
+      if (pName.includes("relación")) {
+        posiblesCausasSet.add("Desgaste de membranas o diafragmas internos del pulsador.");
+        posiblesCausasSet.add("Pérdida de vacío o ingreso no deseado de aire en las cámaras de pulsado.");
+        accionesCorrectivasSet.add("Reemplazar el kit de membranas/diafragmas de goma por repuestos originales.");
+        accionesCorrectivasSet.add("Inspeccionar conexiones y sellos para eliminar fugas de vacío.");
+      }
+      if (pName.includes("fase a") || pName.includes("ta")) {
+        posiblesCausasSet.add("Obstrucción parcial en las canillas o conductos de entrada de aire.");
+        posiblesCausasSet.add("Desgaste del distribuidor o restrictor de paso de aire.");
+        accionesCorrectivasSet.add("Limpiar conductos y boquillas de entrada de aire.");
+        accionesCorrectivasSet.add("Verificar y sustituir válvulas de conmutación del distribuidor.");
+      }
+      if (pName.includes("fase b") || pName.includes("tb")) {
+        posiblesCausasSet.add("Mangueras de pulsado deterioradas, agrietadas o estranguladas.");
+        posiblesCausasSet.add("Pérdida de vacío en la línea principal de transporte.");
+        accionesCorrectivasSet.add("Reemplazar mangueras de pulsado por nuevas de silicona o hule sintético.");
+        accionesCorrectivasSet.add("Restablecer el nivel de vacío regulado según ISO 6690.");
+      }
+      if (pName.includes("fase c") || pName.includes("tc")) {
+        posiblesCausasSet.add("Filtro de aire saturado o suciedad acumulada en el puerto de ventilación.");
+        posiblesCausasSet.add("Resortes de retorno o diafragmas rígidos por desgaste de material.");
+        accionesCorrectivasSet.add("Limpiar o reemplazar el filtro de aire del pulsador.");
+        accionesCorrectivasSet.add("Sustituir resortes y empaques internos del mecanismo.");
+      }
+      if (pName.includes("fase d") || pName.includes("td")) {
+        posiblesCausasSet.add("Desgaste de diafragmas o sellos de hule.");
+        posiblesCausasSet.add("Ingreso de aire inadecuado en la fase de descanso / masaje.");
+        accionesCorrectivasSet.add("Sustituir diafragmas y calibrar la fase de masaje a un mínimo de 150 ms (ISO 5707).");
+        accionesCorrectivasSet.add("Verificar la soltura y tensión mecánica de las cámaras.");
+      }
+      if (pName.includes("desbalance") || pName.includes("balance")) {
+        posiblesCausasSet.add("Desgaste asimétrico en los canales A y B del distribuidor.");
+        posiblesCausasSet.add("Manguera de pulsado de un canal parcialmente obstruida o doblada.");
+        accionesCorrectivasSet.add("Sustituir el bloque distribuidor de pulsación alternada.");
+        accionesCorrectivasSet.add("Alinear y liberar las mangueras de pulsado a las pezoneras.");
+      }
+      if (pName.includes("vacío")) {
+        posiblesCausasSet.add("Regulador mal calibrado o válvula de regulación inestable.");
+        posiblesCausasSet.add("Conexiones defectuosas o fugas de vacío en los acoples rápidos.");
+        accionesCorrectivasSet.add("Calibrar la válvula reguladora de vacío al rango normativo (40 - 50 kPa).");
+        accionesCorrectivasSet.add("Sellar acoples y verificar hermeticidad general del sistema.");
+      }
+    }
+  }
+
+  let posiblesCausas = Array.from(posiblesCausasSet);
+  let accionesCorrectivas = Array.from(accionesCorrectivasSet);
+
+  if (posiblesCausas.length === 0) {
+    if (worstStatus === "Conforme") {
+      posiblesCausas = ["El equipo no presenta anomalías mecánicas o neumáticas visibles. Opera dentro de la norma ISO."];
+      accionesCorrectivas = [
+        "Continuar con el programa de mantenimiento preventivo rutinario.",
+        "Limpieza periódica de filtros de aire del pulsador cada 100 horas de uso."
+      ];
+    } else {
+      posiblesCausas = [
+        "Desgaste general de membranas o diafragmas.",
+        "Ingreso de aire o suciedad en conductos de pulsado.",
+        "Filtro sucio o regulador de vacío mal calibrado."
+      ];
+      accionesCorrectivas = [
+        "Realizar service integral y cambio de kit de reparación.",
+        "Verificar calibración con pulsógrafo patrón según norma ISO 6690."
+      ];
+    }
+  }
+
+  // Generate Non-technical Producer Report (Informe para Productor)
+  let queSignifica = "";
+  let queRiesgosExisten = "";
+  let queSeRecomiendaHacer = "";
+
+  if (worstStatus === "Conforme") {
+    queSignifica = "El pulsador está funcionando de manera óptima y cumple totalmente con las normas internacionales ISO 5707 y 6690. Las fases de ordeño y masaje son equilibradas.";
+    queRiesgosExisten = "No existen riesgos para la salud de las ubres ni para la velocidad de ordeño en este momento.";
+    queSeRecomiendaHacer = "Continuar con las rutinas habituales de ordeño y realizar la limpieza periódica de los filtros de aire.";
+  } else if (worstStatus === "Advertencia") {
+    queSignifica = "El pulsador funciona, pero presenta pequeñas desviaciones respecto a la norma ISO. El ritmo o la fuerza del pulso muestran ligeras variaciones.";
+    queRiesgosExisten = "Riesgo de ordeño ligeramente más lento o leve molestia en la punta del pezón si no se corrige a tiempo.";
+    queSeRecomiendaHacer = "Programar una revisión técnica preventiva en los próximos días para limpiar filtros o cambiar membranas desgastadas.";
+  } else if (worstStatus === "Fuera de tolerancia") {
+    queSignifica = "El pulsador no cumple con las tolerancias exigidas por la norma ISO. Las fases de masaje o de ordeño están descompensadas.";
+    queRiesgosExisten = "Riesgo alto de sobreordeño, congestión en el pezón, aumento de recuento de células somáticas e irritación del esfínter.";
+    queSeRecomiendaHacer = "Realizar mantenimiento técnico a la brevedad. Reemplazar el kit de membranas y calibrar el pulsador.";
+  } else {
+    queSignifica = "El pulsador presenta una falla crítica severa. El patrón de pulso está interrumpido o descalibrado peligrosamente.";
+    queRiesgosExisten = "Riesgo severo de mastitis, daño permanente en el tejido mamario (hiperqueratosis) y pérdida importante de leche.";
+    queSeRecomiendaHacer = "Desactivar o reemplazar este pulsador de inmediato antes del próximo ordeño hasta realizar la reparación técnica.";
+  }
+
+  const informeProductor: InformeProductor = {
+    estadoGeneral: worstStatus,
+    queSignifica,
+    queRiesgosExisten,
+    queSeRecomiendaHacer
+  };
+
   return {
     evaluacionISO: evaluations,
     estadoGeneral: worstStatus,
-    nivelCriticidad
+    nivelCriticidad,
+    posiblesCausas,
+    accionesCorrectivas,
+    informeProductor
   };
 }

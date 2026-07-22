@@ -19,7 +19,7 @@ export interface AITestConnectionResult {
 
 export interface AIDiagnosisParams {
   image: string;
-  pulsadorSpecs: any;
+  pulsadorSpecs?: any;
   additionalNotes?: string;
   provider?: "gemini" | "openai" | "iso" | "ninguno";
   apiKey?: string;
@@ -184,7 +184,7 @@ export const AIService = {
     // 1. If provider is "iso" or "ninguno", use Motor ISO directly without calling external APIs
     if (provider === "iso" || provider === "ninguno") {
       console.log("[AIService] Proveedor activo es Motor ISO. Ejecutando análisis determinista local.");
-      return this.runIsoFallback(pulsadorSpecs, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO 5707 / ISO 6690 (sin IA).");
+      return this.runIsoFallback(undefined, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO 5707 / ISO 6690 (sin IA).");
     }
 
     // Determine credentials strictly for the selected provider
@@ -223,7 +223,7 @@ export const AIService = {
     // Fallback directly to Motor ISO Determinista
     console.log("[AIService] Falló la llamada de IA o no está configurada. Ejecutando Motor ISO.");
     return this.runIsoFallback(
-      pulsadorSpecs,
+      undefined,
       additionalNotes,
       `[Aviso de Fallback: No fue posible comunicar con ${provider.toUpperCase()}. El informe se generó utilizando el Motor de Reglas ISO 5707 / ISO 6690].`
     );
@@ -232,12 +232,11 @@ export const AIService = {
   /**
     * Executes local deterministic ISO rule evaluation as ultimate fallback
     */
-  runIsoFallback(pulsadorSpecs: any, additionalNotes?: string, warningNote?: string): ResultadoIA {
-    const specs = pulsadorSpecs || {};
+  runIsoFallback(pulsadorSpecs?: any, additionalNotes?: string, warningNote?: string): ResultadoIA {
     const defaultOcr = {
-      frecuenciaMedida: specs.frecuenciaNominal || 60,
+      frecuenciaMedida: 60,
       relacionMedida: "60/40",
-      vacioMedido: specs.vacioRecomendado || "44.0 kPa",
+      vacioMedido: "44.0 kPa",
       taMedido: 120,
       tbMedido: 480,
       tcMedido: 100,
@@ -246,11 +245,11 @@ export const AIService = {
       desbalanceMedido: 1.5,
       nivelConfianza: 100,
       calidadImagen: "N/A (Motor ISO)",
-      hallazgosVisuales: ["Evaluación determinista basada en valores estándar y tolerancias del fabricante."],
+      hallazgosVisuales: ["Evaluación determinista realizada exclusivamente bajo las normas ISO 5707:2007 e ISO 6690:2007."],
       otrosParametros: []
     };
 
-    const isoOutput = evaluatePulsatorISO(defaultOcr, specs);
+    const isoOutput = evaluatePulsatorISO(defaultOcr);
 
     return {
       estadoGeneral: isoOutput.estadoGeneral,
@@ -258,18 +257,14 @@ export const AIService = {
       nivelConfianza: 100,
       calidadImagen: "Alta",
       datosExtraidos: defaultOcr,
-      comparacionEspecificaciones: `Análisis de conformidad ISO 5707:2007 e ISO 6690:2007 para pulsador ${specs.marca || ""} ${specs.modelo || ""}.`,
+      comparacionEspecificaciones: "Evaluación técnica estricta bajo los estándares normativos ISO 5707 e ISO 6690.",
       hallazgos: defaultOcr.hallazgosVisuales,
-      diagnosticoTecnico: `${warningNote ? warningNote + "\n\n" : ""}Dictamen técnico según Motor ISO: Estado ${isoOutput.estadoGeneral}. Las especificaciones de frecuencia y fases fueron contrastadas con los rangos normativos.`,
-      posiblesCausas: isoOutput.estadoGeneral !== "Conforme" ? [
-        "Desgaste mecánico de membranas o retenes del pulsador.",
-        "Obstrucción parcial en las entradas de aire o canillas de vacío."
-      ] : [],
-      recomendaciones: [
-        "Realizar inspección física del pulsador y reemplazar diafragmas si presentan desgaste.",
-        "Verificar la presión de vacío en la línea principal según ISO 6690."
-      ],
-      evaluacionISO: isoOutput.evaluacionISO
+      diagnosticoTecnico: `${warningNote ? warningNote + "\n\n" : ""}Dictamen técnico según Motor ISO: Estado ${isoOutput.estadoGeneral}. Las especificaciones de frecuencia, fases de pulso y vacío fueron contrastadas exclusivamente con los límites normativos internacionales.`,
+      posiblesCausas: isoOutput.posiblesCausas,
+      accionesCorrectivas: isoOutput.accionesCorrectivas,
+      recomendaciones: isoOutput.accionesCorrectivas,
+      evaluacionISO: isoOutput.evaluacionISO,
+      informeProductor: isoOutput.informeProductor
     };
   }
 };
