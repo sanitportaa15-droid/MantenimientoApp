@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "../utils/ui";
 
-export default function IaForm() {
+export default function IaForm({ onClose }: { onClose?: () => void } = {}) {
   const [provider, setProvider] = useState<"openai" | "gemini" | "iso">("iso");
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
@@ -217,14 +217,26 @@ export default function IaForm() {
           </h3>
           <p className="text-zinc-500 mt-1">Configure el proveedor activo y las credenciales de diagnóstico técnico para su empresa.</p>
         </div>
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 text-sm"
-        >
-          {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-          Guardar Configuración
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-black px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 text-sm"
+          >
+            {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            Guardar Configuración
+          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-2xl transition-all"
+              title="Cerrar modal"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

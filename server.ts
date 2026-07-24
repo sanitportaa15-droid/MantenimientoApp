@@ -140,24 +140,26 @@ async function startServer() {
       Tu función principal en este paso es analizar minuciosamente la imagen de un gráfico o reporte impreso/pantalla de pulsógrafo y extraer objetivamente todos los valores medidos de forma literal según las normas ISO 5707:2007 e ISO 6690:2007.
 
       REGLAS DE ORO OBLIGATORIAS DE EXTRACCIÓN OCR STRICTA:
-      1. SÓLO EXTRAE VALORES REALMENTE PRESENTES EN LA IMAGEN:
-         - Queda ESTRICTAMENTE PROHIBIDO inventar, estimar, suponer o colocar valores por defecto (ej: no supongas 60/40, 44 kPa, 12%, 48%, 10%, 30%).
-         - Si un dato no aparece o no es legible en la imagen, asígnalo como null.
+      1. DETECCIÓN MULTICANAL EXHAUSTIVA Y OBLIGATORIA:
+         - Revisa la imagen detalladamente. La inmensa mayoría de informes de pulsógrafos gráficos (como los de Rodeg, DeLaval, Flaco, Ambic, Milkline, InterPuls, etc.) contienen DOS canales de pulsación o dos curvas (Canal 1 / Canal 2, Canal A / Canal B, Ch1 / Ch2, o dos columnas/filas numéricas de fases).
+         - Si observas 2 curvas de pulsado o dos filas/columnas de mediciones, DEBES establecer "cantidadCanalesDetected": 2 y agregar OBLIGATORIAMENTE DOS OBJETOS en el array "canales" (uno para "Canal 1" y otro para "Canal 2").
+         - NUNCA clasifiques como monocanal una imagen con 2 gráficos o 2 grupos de mediciones.
+         - NUNCA elimines el Canal 2, NUNCA promedies los datos de ambos canales en uno solo.
 
-      2. DETERMINACIÓN AUTOMÁTICA DE CANALES Y ESTRUCTURA:
-         - Determina si la imagen corresponde a un pulsógrafo de 1 Canal (monocanal) o 2 Canales (doble canal).
-         - Si la imagen solo muestra 1 gráfico u 1 conjunto de mediciones, establece "cantidadCanalesDetected": 1.
-         - Si la imagen muestra 2 gráficos o tablas independientes (Canal 1 / Canal 2, Canal A / Canal B), establece "cantidadCanalesDetected": 2.
+      2. SÓLO EXTRAE VALORES LITERALES PRESENTES EN LA IMAGEN:
+         - Queda ESTRICTAMENTE PROHIBIDO inventar, estimar, suponer o colocar valores por defecto o ideales (ej: NO supongas 60/40, 44 kPa, 12%, 48%, 10%, 30%).
+         - Extrae las cifras numéricas exactas que aparezcan en pantalla o papel (ej: Ta: 19.0%, Tb: 45.5%, Tc: 10.0%, Td: 25.5%, Relación: 64.5:35.5, Vacío: 46.2 kPa para Canal 1; Ta: 14.7%, Tb: 47.8%, Tc: 11.0%, Td: 26.3%, Relación: 62.5:37.3, Frecuencia: 60 ppm para Canal 2).
+         - Si un dato no aparece o no es legible en la imagen, asígnalo como null.
 
       3. EXTRACCIÓN DE PARÁMETROS COMPLETOS POR CANAL:
          Para CADA CANAL visible (Canal 1 y/o Canal 2), extrae:
          - Frecuencia (frecuenciaMedida): número en ppm
          - Relación (relacionMedida): string exacto (ej: "64.5 : 35.5" o "60/40")
          - Vacío (vacioMedido): string con unidad (ej: "46.2 kPa" o "44.0 kPa")
-         - Fase a (taMedido): número en % o ms (ej: 19.0)
-         - Fase b (tbMedido): número en % o ms (ej: 45.5)
-         - Fase c (tcMedido): número en % o ms (ej: 10.0)
-         - Fase d (tdMedido): número en % o ms (ej: 25.5)
+         - Fase a (taMedido): número en % o ms
+         - Fase b (tbMedido): número en % o ms
+         - Fase c (tcMedido): número en % o ms
+         - Fase d (tdMedido): número en % o ms
          - Fase a+b (taTbMedido): número en % o ms (si aparece expresado en la imagen)
          - Fase c+d (tcTdMedido): número en % o ms (si aparece expresado en la imagen)
          - unidadFases: "%" o "ms"
@@ -500,6 +502,7 @@ async function startServer() {
             config: {
               systemInstruction: ocrSystemInstruction,
               responseMimeType: "application/json",
+              temperature: 0,
               responseSchema: {
                 type: Type.OBJECT,
                 properties: {
@@ -597,6 +600,7 @@ async function startServer() {
             config: {
               systemInstruction: reportSystemInstruction,
               responseMimeType: "application/json",
+              temperature: 0,
               responseSchema: {
                 type: Type.OBJECT,
                 properties: {

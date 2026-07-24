@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component } from "react";
 import { 
   Brain, 
   Sparkles, 
@@ -38,6 +38,71 @@ import { AIService } from "../services/aiService";
 import { downloadTechnicalPdf, downloadProducerPdf } from "../utils/pdfGenerator";
 import { evaluatePulsatorISO } from "../utils/isoRulesEngine";
 import IaForm from "../components/IaForm";
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: React.ErrorInfo | null;
+}
+
+class DiagnosisErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[DiagnosisErrorBoundary] Error capturado en renderizado:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-red-950/90 border border-red-500 rounded-2xl text-red-100 max-w-4xl mx-auto my-8 space-y-4 shadow-2xl">
+          <div className="flex items-center gap-3 border-b border-red-800 pb-3">
+            <AlertTriangle className="w-8 h-8 text-red-400 shrink-0" />
+            <div>
+              <h2 className="text-lg font-bold text-white">Excepción en la Renderización de React (Informe)</h2>
+              <p className="text-xs text-red-300">Se ha capturado un error en tiempo de ejecución. Detalle completo a continuación:</p>
+            </div>
+          </div>
+          <div className="bg-black/80 p-4 rounded-xl border border-red-900/80 text-xs font-mono overflow-x-auto space-y-2">
+            <p className="text-red-400 font-bold">Mensaje de Error:</p>
+            <p className="text-white bg-red-900/30 p-2 rounded">{this.state.error?.message || String(this.state.error)}</p>
+            <p className="text-red-400 font-bold mt-2">Stack Trace Completo:</p>
+            <pre className="text-zinc-300 text-[11px] whitespace-pre-wrap leading-tight">{this.state.error?.stack}</pre>
+            {this.state.errorInfo?.componentStack && (
+              <>
+                <p className="text-red-400 font-bold mt-2">Component Stack Trace:</p>
+                <pre className="text-zinc-400 text-[11px] whitespace-pre-wrap leading-tight">{this.state.errorInfo.componentStack}</pre>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors"
+          >
+            Reintentar Renderizado
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function AiDiagnosisPage() {
   const { profile, user: authUser } = useAuth();
@@ -565,6 +630,7 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
             )}
 
             {analysisResult && currentEval && (
+              <DiagnosisErrorBoundary>
               <div className="space-y-6 animate-fadeIn">
                 {/* View Switcher Controls (Productor vs Técnico) */}
                 <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-900/80 p-4 rounded-2xl border border-zinc-800 backdrop-blur-xl">
@@ -1275,9 +1341,21 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                         </div>
                       </div>
                     </div>
+
+                    {/* Stage 6: Full Output Object for UI & PDF */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-3">
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-purple-400" />
+                        6. Objeto JSON Utilizado por los Informes y Generador PDF
+                      </h4>
+                      <pre className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 font-mono text-[10px] text-zinc-300 overflow-x-auto max-h-80 leading-relaxed">
+                        {JSON.stringify(analysisResult, null, 2)}
+                      </pre>
+                    </div>
                   </div>
                 )}
               </div>
+              </DiagnosisErrorBoundary>
             )}
           </div>
         </div>
