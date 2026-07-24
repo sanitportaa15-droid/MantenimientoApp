@@ -145,6 +145,30 @@ export interface ResultadoIA {
   analisisComparativo?: AnalisisComparativoCanales;
   conclusionGlobal?: string;
   informeProductor?: InformeProductor;
+  trazabilidad?: {
+    archivo?: {
+      nombre: string;
+      tamano: number;
+      tipo: string;
+      hash: string;
+    };
+    proveedorInfo?: {
+      proveedor: string;
+      modelo?: string;
+    };
+    rawOcrText?: string;
+    ocrObject?: any;
+    isoRulesInput?: any;
+    isoRulesOutput?: any;
+    timestamp?: string;
+    pasos?: Array<{
+      paso: number;
+      nombre: string;
+      descripcion: string;
+      detalles: any;
+      timestamp: string;
+    }>;
+  };
 }
 
 export interface EvaluacionDiagnosis {

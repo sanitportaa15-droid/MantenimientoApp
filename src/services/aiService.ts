@@ -234,48 +234,5 @@ export const AIService = {
       console.error(`[AIService] Error durante el diagnóstico de la imagen [Hash: ${imageHash}]:`, err.message);
       throw err;
     }
-  },
-
-  /**
-    * Executes local deterministic ISO rule evaluation as ultimate fallback
-    */
-  runIsoFallback(pulsadorSpecs?: any, additionalNotes?: string, warningNote?: string): ResultadoIA {
-    const defaultOcr = {
-      frecuenciaMedida: 60,
-      relacionMedida: "60/40",
-      vacioMedido: "44.0 kPa",
-      taMedido: 120,
-      tbMedido: 480,
-      tcMedido: 100,
-      tdMedido: 300,
-      balanceMedido: "50/50",
-      desbalanceMedido: 1.5,
-      nivelConfianza: 100,
-      calidadImagen: "N/A (Motor ISO)",
-      hallazgosVisuales: ["Evaluación determinista realizada exclusivamente bajo las normas ISO 5707:2007 e ISO 6690:2007."],
-      otrosParametros: []
-    };
-
-    const isoOutput = evaluatePulsatorISO(defaultOcr);
-
-    return {
-      estadoGeneral: isoOutput.estadoGeneral,
-      nivelCriticidad: isoOutput.nivelCriticidad,
-      nivelConfianza: 100,
-      calidadImagen: "Alta",
-      datosExtraidos: defaultOcr,
-      comparacionEspecificaciones: "Evaluación técnica estricta bajo los estándares normativos ISO 5707 e ISO 6690.",
-      hallazgos: defaultOcr.hallazgosVisuales,
-      diagnosticoTecnico: `${warningNote ? warningNote + "\n\n" : ""}Dictamen técnico según Motor ISO: Estado ${isoOutput.estadoGeneral}. Las especificaciones de frecuencia, fases de pulso y vacío fueron contrastadas exclusivamente con los límites normativos internacionales.`,
-      posiblesCausas: isoOutput.posiblesCausas,
-      accionesCorrectivas: isoOutput.accionesCorrectivas,
-      recomendaciones: isoOutput.accionesCorrectivas,
-      evaluacionISO: isoOutput.evaluacionISO,
-      analisisCanal1: isoOutput.analisisCanal1,
-      analisisCanal2: isoOutput.analisisCanal2,
-      analisisComparativo: isoOutput.analisisComparativo,
-      conclusionGlobal: isoOutput.conclusionGlobal,
-      informeProductor: isoOutput.informeProductor
-    };
   }
 };

@@ -137,26 +137,30 @@ async function startServer() {
       // --- SYSTEM INSTRUCTIONS FOR DECOUPLED ARCHITECTURE ---
       const ocrSystemInstruction = `
       Actúa como un Ingeniero Mecatrónico experto en sistemas de ordeño mecánico, visión artificial y análisis neumático de pulsógrafos.
-      Tu función principal en este paso es analizar minuciosamente la estructura de la imagen de un gráfico o reporte de pulsógrafo y extraer objetivamente todos los valores medidos según las normas ISO 5707:2007 e ISO 6690:2007.
+      Tu función principal en este paso es analizar minuciosamente la imagen de un gráfico o reporte impreso/pantalla de pulsógrafo y extraer objetivamente todos los valores medidos de forma literal según las normas ISO 5707:2007 e ISO 6690:2007.
 
-      DETERMINACIÓN AUTOMÁTICA DE CANALES Y ESTRUCTURA (REGLA DE ORO OBLIGATORIA):
-      1. ANALIZA LA ESTRUCTURA DE LA IMAGEN PRIMERO:
-         - Los pulsógrafos de ordeño mecánico (ej. DeLaval, Rodeg, Flaco, InterPuls, Milkline, Westfalia, etc.) habitualmente registran DOS CANALES DE PULSADO INDEPENDIENTES (Canal 1 / Canal 2, Canal A / Canal B, Ch 1 / Ch 2, Lado A / Lado B).
-         - NUNCA asumas que la imagen es de un solo canal ("monocanal"). Examina cuidadosamente la imagen buscando ondas dobles o bloques de datos numéricos independientes para Canal 1 y Canal 2.
-         - Establece "cantidadCanalesDetected": 2 cuando observes dos gráficos o tablas separadas (Canal 1 y Canal 2). Establece "cantidadCanalesDetected": 1 solo si la imagen corresponde indiscutiblemente a una medición de canal único.
-         - "tipoPulsografo": "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)" o "Pulsógrafo de Canal Único".
+      REGLAS DE ORO OBLIGATORIAS DE EXTRACCIÓN OCR STRICTA:
+      1. SÓLO EXTRAE VALORES REALMENTE PRESENTES EN LA IMAGEN:
+         - Queda ESTRICTAMENTE PROHIBIDO inventar, estimar, suponer o colocar valores por defecto (ej: no supongas 60/40, 44 kPa, 12%, 48%, 10%, 30%).
+         - Si un dato no aparece o no es legible en la imagen, asígnalo como null.
 
-      2. EXTRACCIÓN DE DATOS COMPLETA POR CANAL:
-         - Si la imagen contiene dos canales, DEBES extraer COMPLETAMENTE los parámetros de CADA CANAL por separado dentro de la lista "canales".
-         - Para el Canal 1: Vacío (vacioMedido), Frecuencia (frecuenciaMedida), Relación de pulsación (relacionMedida), Ta (taMedido), Tb (tbMedido), Tc (tcMedido), Td (tdMedido).
-         - Para el Canal 2: Vacío (vacioMedido), Frecuencia (frecuenciaMedida), Relación de pulsación (relacionMedida), Ta (taMedido), Tb (tbMedido), Tc (tcMedido), Td (tdMedido).
-         - MANTÉN SEPARADOS ambos conjuntos de datos durante todo el proceso. NUNCA los fusiones ni los reemplaces por un promedio.
-         - Conserva EXACTAMENTE los números y decimales reales leídos (ej: Ta=19.0%, Tb=45.5%, Tc=10.0%, Td=25.5%, Relación="64.5 : 35.5", Vacío="46.2 kPa").
-         - NUNCA redondees ni inventes datos. NO realices ningún juicio de conformidad en este paso.
+      2. DETERMINACIÓN AUTOMÁTICA DE CANALES Y ESTRUCTURA:
+         - Determina si la imagen corresponde a un pulsógrafo de 1 Canal (monocanal) o 2 Canales (doble canal).
+         - Si la imagen solo muestra 1 gráfico u 1 conjunto de mediciones, establece "cantidadCanalesDetected": 1.
+         - Si la imagen muestra 2 gráficos o tablas independientes (Canal 1 / Canal 2, Canal A / Canal B), establece "cantidadCanalesDetected": 2.
 
-      3. VALIDACIÓN DE INTEGRIDAD DE CANALES:
-         - Revisa que tanto Canal 1 como Canal 2 tengan datos completos.
-         - Si observas dos canales pero uno es parcialmente ilegible, informa la situación en "validacionCanales.observacion" en lugar de asumir que la imagen es monocanal.
+      3. EXTRACCIÓN DE PARÁMETROS COMPLETOS POR CANAL:
+         Para CADA CANAL visible (Canal 1 y/o Canal 2), extrae:
+         - Frecuencia (frecuenciaMedida): número en ppm
+         - Relación (relacionMedida): string exacto (ej: "64.5 : 35.5" o "60/40")
+         - Vacío (vacioMedido): string con unidad (ej: "46.2 kPa" o "44.0 kPa")
+         - Fase a (taMedido): número en % o ms (ej: 19.0)
+         - Fase b (tbMedido): número en % o ms (ej: 45.5)
+         - Fase c (tcMedido): número en % o ms (ej: 10.0)
+         - Fase d (tdMedido): número en % o ms (ej: 25.5)
+         - Fase a+b (taTbMedido): número en % o ms (si aparece expresado en la imagen)
+         - Fase c+d (tcTdMedido): número en % o ms (si aparece expresado en la imagen)
+         - unidadFases: "%" o "ms"
 
       Devuelve strictly un objeto JSON con el siguiente esquema:
       {
@@ -167,42 +171,35 @@ async function startServer() {
         "validacionCanales": {
           "canal1Completo": boolean,
           "canal2Completo": boolean,
-          "observacion": "Texto explicativo del estado de lectura de los canales"
+          "observacion": "Texto explicativo del estado de lectura"
         },
         "frecuenciaMedida": número (o null),
-        "relacionMedida": "string ej '64.5 : 35.5'" (o null),
-        "vacioMedido": "string ej '46.2 kPa'" (o null),
+        "relacionMedida": string (o null),
+        "vacioMedido": string (o null),
         "taMedido": número (o null),
         "tbMedido": número (o null),
         "tcMedido": número (o null),
         "tdMedido": número (o null),
-        "balanceMedido": "string ej '50/50'" (o null),
-        "desbalanceMedido": número en % (o null),
+        "taTbMedido": número (o null),
+        "tcTdMedido": número (o null),
+        "balanceMedido": string (o null),
+        "desbalanceMedido": número (o null),
         "canales": [
           {
             "nombreCanal": "Canal 1",
-            "frecuenciaMedida": número,
-            "relacionMedida": "string ej '64.5 : 35.5'",
-            "vacioMedido": "string ej '46.2 kPa'",
-            "taMedido": número en %,
-            "tbMedido": número en %,
-            "tcMedido": número en %,
-            "tdMedido": número en %,
-            "unidadFases": "%" | "ms"
-          },
-          {
-            "nombreCanal": "Canal 2",
-            "frecuenciaMedida": número,
-            "relacionMedida": "string ej '62.5 : 37.5'",
-            "vacioMedido": "string ej '46.0 kPa'",
-            "taMedido": número en %,
-            "tbMedido": número en %,
-            "tcMedido": número en %,
-            "tdMedido": número en %,
+            "frecuenciaMedida": número (o null),
+            "relacionMedida": string (o null),
+            "vacioMedido": string (o null),
+            "taMedido": número (o null),
+            "tbMedido": número (o null),
+            "tcMedido": número (o null),
+            "tdMedido": número (o null),
+            "taTbMedido": número (o null),
+            "tcTdMedido": número (o null),
             "unidadFases": "%" | "ms"
           }
         ],
-        "hallazgosVisuales": ["lista de hallazgos en la curva o reporte"],
+        "hallazgosVisuales": ["lista de observaciones visuales de la curva"],
         "otrosParametros": [
           { "nombre": "nombre", "valor": "valor" }
         ]
@@ -526,6 +523,8 @@ async function startServer() {
                   tbMedido: { type: Type.NUMBER },
                   tcMedido: { type: Type.NUMBER },
                   tdMedido: { type: Type.NUMBER },
+                  taTbMedido: { type: Type.NUMBER },
+                  tcTdMedido: { type: Type.NUMBER },
                   balanceMedido: { type: Type.STRING },
                   desbalanceMedido: { type: Type.NUMBER },
                   canales: {
@@ -541,6 +540,8 @@ async function startServer() {
                         tbMedido: { type: Type.NUMBER },
                         tcMedido: { type: Type.NUMBER },
                         tdMedido: { type: Type.NUMBER },
+                        taTbMedido: { type: Type.NUMBER },
+                        tcTdMedido: { type: Type.NUMBER },
                         unidadFases: { type: Type.STRING }
                       },
                       required: ["nombreCanal"]
@@ -566,9 +567,13 @@ async function startServer() {
 
           const ocrText = ocrResponse.text;
           if (!ocrText) throw new Error("Sin respuesta OCR de Google Gemini.");
-          console.log(`[SERVER AUDIT] Respuesta del OCR para Hash [${imageHash}]:\n${ocrText}`);
+
+          console.log("==========================================");
+          console.log(`[OCR EXTRACTION RESULT - OBLIGATORY AUDIT] Image Hash: [${imageHash}]`);
+          console.log(ocrText);
+          console.log("==========================================");
+
           const ocrResults = JSON.parse(ocrText.trim());
-          console.log(`[SERVER AUDIT] Datos extraídos parseados:`, JSON.stringify(ocrResults, null, 2));
 
           // Gemini Step 2: Deterministic ISO Rules Engine
           console.log(`[SERVER AUDIT] Gemini Paso 2: Ejecutando motor de reglas ISO...`);
@@ -616,15 +621,17 @@ async function startServer() {
             calidadImagen: ocrResults.calidadImagen || "Media",
             datosExtraidos: {
               ...ocrResults,
-              frecuenciaMedida: ocrResults.frecuenciaMedida || ocrResults.canales?.[0]?.frecuenciaMedida || pulsadorSpecs?.frecuenciaNominal || 60,
-              relacionMedida: ocrResults.relacionMedida || ocrResults.canales?.[0]?.relacionMedida || "60/40",
-              vacioMedido: ocrResults.vacioMedido || ocrResults.canales?.[0]?.vacioMedido || pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-              taMedido: ocrResults.taMedido ?? ocrResults.canales?.[0]?.taMedido,
-              tbMedido: ocrResults.tbMedido ?? ocrResults.canales?.[0]?.tbMedido,
-              tcMedido: ocrResults.tcMedido ?? ocrResults.canales?.[0]?.tcMedido,
-              tdMedido: ocrResults.tdMedido ?? ocrResults.canales?.[0]?.tdMedido,
-              balanceMedido: ocrResults.balanceMedido,
-              desbalanceMedido: ocrResults.desbalanceMedido,
+              frecuenciaMedida: ocrResults.frecuenciaMedida ?? ocrResults.canales?.[0]?.frecuenciaMedida ?? null,
+              relacionMedida: ocrResults.relacionMedida ?? ocrResults.canales?.[0]?.relacionMedida ?? null,
+              vacioMedido: ocrResults.vacioMedido ?? ocrResults.canales?.[0]?.vacioMedido ?? null,
+              taMedido: ocrResults.taMedido ?? ocrResults.canales?.[0]?.taMedido ?? null,
+              tbMedido: ocrResults.tbMedido ?? ocrResults.canales?.[0]?.tbMedido ?? null,
+              tcMedido: ocrResults.tcMedido ?? ocrResults.canales?.[0]?.tcMedido ?? null,
+              tdMedido: ocrResults.tdMedido ?? ocrResults.canales?.[0]?.tdMedido ?? null,
+              taTbMedido: ocrResults.taTbMedido ?? ocrResults.canales?.[0]?.taTbMedido ?? null,
+              tcTdMedido: ocrResults.tcTdMedido ?? ocrResults.canales?.[0]?.tcTdMedido ?? null,
+              balanceMedido: ocrResults.balanceMedido ?? null,
+              desbalanceMedido: ocrResults.desbalanceMedido ?? null,
               canales: ocrResults.canales || [],
               diferenciaCanales: rulesEngineOutput.diferenciaCanales,
               otrosParametros: ocrResults.otrosParametros || []
@@ -643,7 +650,24 @@ async function startServer() {
             analisisCanal2: rulesEngineOutput.analisisCanal2,
             analisisComparativo: rulesEngineOutput.analisisComparativo,
             conclusionGlobal: rulesEngineOutput.conclusionGlobal,
-            informeProductor: rulesEngineOutput.informeProductor
+            informeProductor: rulesEngineOutput.informeProductor,
+            trazabilidad: {
+              archivo: {
+                nombre: fileName || "imagen_pulsografo.png",
+                tamano: fileSize || 0,
+                tipo: mimeType || "image/png",
+                hash: imageHash || "desconocido"
+              },
+              proveedorInfo: {
+                proveedor: provider || "gemini",
+                modelo: effectiveModel
+              },
+              rawOcrText: ocrText,
+              ocrObject: ocrResults,
+              isoRulesInput: { ocrResults, pulsadorSpecs },
+              isoRulesOutput: rulesEngineOutput,
+              timestamp: new Date().toISOString()
+            }
           };
 
           const totalDuration = Date.now() - startTime;
@@ -659,81 +683,16 @@ async function startServer() {
         }
       }
 
-      // Default Motor ISO fallback if unknown provider
-      const defaultOcr = {
-        frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
-        relacionMedida: "60/40",
-        vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-        taMedido: 120,
-        tbMedido: 480,
-        tcMedido: 100,
-        tdMedido: 300,
-        balanceMedido: "50/50",
-        desbalanceMedido: 1.5,
-        nivelConfianza: 100,
-        calidadImagen: "Media (ISO)",
-        hallazgosVisuales: ["Evaluación realizada por el Motor de Reglas ISO."],
-        otrosParametros: []
-      };
-      const rulesEngineOutput = evaluatePulsatorISO(defaultOcr, pulsadorSpecs || {});
-
-      return res.status(200).json({
-        estadoGeneral: rulesEngineOutput.estadoGeneral,
-        nivelCriticidad: rulesEngineOutput.nivelCriticidad,
-        nivelConfianza: 100,
-        calidadImagen: "Motor ISO",
-        datosExtraidos: defaultOcr,
-        comparacionEspecificaciones: "Evaluación bajo norma ISO.",
-        hallazgos: defaultOcr.hallazgosVisuales,
-        diagnosticoTecnico: "Informe procesado mediante Motor de Reglas ISO.",
-        posiblesCausas: [],
-        recomendaciones: ["Verificar calibración periódicamente."],
-        evaluacionISO: rulesEngineOutput.evaluacionISO,
-        analisisCanal1: rulesEngineOutput.analisisCanal1,
-        analisisCanal2: rulesEngineOutput.analisisCanal2,
-        analisisComparativo: rulesEngineOutput.analisisComparativo,
-        conclusionGlobal: rulesEngineOutput.conclusionGlobal,
-        informeProductor: rulesEngineOutput.informeProductor
+      return res.status(400).json({
+        success: false,
+        error: `Proveedor no reconocido o no compatible ('${provider}'). El diagnóstico de pulsógrafo requiere procesamiento OCR con un modelo de IA como Google Gemini.`
       });
 
     } catch (error: any) {
       console.error("[AI Diagnosis Server] Excepción no controlada durante el diagnóstico:", error);
-      const specs = req.body?.pulsadorSpecs || {};
-      
-      const defaultOcr = {
-        frecuenciaMedida: specs?.frecuenciaNominal || 60,
-        relacionMedida: "60/40",
-        vacioMedido: specs?.vacioRecomendado || "44.0 kPa",
-        taMedido: 120,
-        tbMedido: 480,
-        tcMedido: 100,
-        tdMedido: 300,
-        balanceMedido: "50/50",
-        desbalanceMedido: 1.5,
-        nivelConfianza: 100,
-        calidadImagen: "Media (Respaldo)",
-        hallazgosVisuales: ["Informe emitido por el Motor de Reglas ISO de emergencia."],
-        otrosParametros: []
-      };
-      const rulesEngineOutput = evaluatePulsatorISO(defaultOcr, specs);
-
-      return res.status(200).json({
-        estadoGeneral: rulesEngineOutput.estadoGeneral,
-        nivelCriticidad: rulesEngineOutput.nivelCriticidad,
-        nivelConfianza: 100,
-        calidadImagen: "Motor ISO Emergencia",
-        datosExtraidos: defaultOcr,
-        comparacionEspecificaciones: "Respaldo automático ISO 5707 / ISO 6690.",
-        hallazgos: defaultOcr.hallazgosVisuales,
-        diagnosticoTecnico: `Análisis de emergencia generado por Motor de Reglas ISO: ${rulesEngineOutput.estadoGeneral}.`,
-        posiblesCausas: [],
-        recomendaciones: ["Revisar calibración en la próxima inspección."],
-        evaluacionISO: rulesEngineOutput.evaluacionISO,
-        analisisCanal1: rulesEngineOutput.analisisCanal1,
-        analisisCanal2: rulesEngineOutput.analisisCanal2,
-        analisisComparativo: rulesEngineOutput.analisisComparativo,
-        conclusionGlobal: rulesEngineOutput.conclusionGlobal,
-        informeProductor: rulesEngineOutput.informeProductor
+      return res.status(500).json({
+        success: false,
+        error: `Error general en el servidor al realizar el diagnóstico: ${error.message || String(error)}`
       });
     }
   });

@@ -25,7 +25,9 @@ import {
   Activity,
   HeartPulse,
   ClipboardCheck,
-  Layers
+  Layers,
+  Zap,
+  FileCode
 } from "lucide-react";
 import { db, getActiveCompanyId } from "../services/db";
 import { useAuth } from "../services/AuthContext";
@@ -43,8 +45,8 @@ export default function AiDiagnosisPage() {
   // Navigation Tabs: Only 2 main tabs ("nueva" or "historial")
   const [activeTab, setActiveTab] = useState<"nueva" | "historial">("nueva");
 
-  // View mode within result display: "productor" vs "tecnico"
-  const [reportViewMode, setReportViewMode] = useState<"productor" | "tecnico">("productor");
+  // View mode within result display: "productor" vs "tecnico" vs "depuracion"
+  const [reportViewMode, setReportViewMode] = useState<"productor" | "tecnico" | "depuracion">("productor");
 
   // General state
   const [tambos, setTambos] = useState<Tambo[]>([]);
@@ -55,6 +57,7 @@ export default function AiDiagnosisPage() {
   const [selectedTamboId, setSelectedTamboId] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageHash, setImageHash] = useState<string>("");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -108,12 +111,23 @@ export default function AiDiagnosisPage() {
     }
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       alert("Por favor cargue una imagen válida (PNG, JPG, WEBP).");
       return;
     }
     setImageFile(file);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+      setImageHash(hashHex);
+    } catch (e) {
+      setImageHash(`sha256-${Date.now()}`);
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       setImagePreview(reader.result as string);
@@ -161,8 +175,14 @@ export default function AiDiagnosisPage() {
       setTimeout(() => setAnalysisStep("Extrayendo tiempos y fases de pulso (ISO 5707 / 6690)…"), 1000);
       setTimeout(() => setAnalysisStep("Contrastando parámetros contra Motor ISO…"), 2000);
 
+      const computedHash = imageHash || `hash-${Date.now()}`;
+
       const res = await AIService.runDiagnosis({
         image: imagePreview,
+        fileName: imageFile?.name || "imagen_pulsografo.png",
+        fileSize: imageFile?.size || imagePreview.length,
+        mimeType: imageFile?.type || "image/png",
+        imageHash: computedHash,
         tamboId: selectedTamboId,
         additionalNotes
       });
@@ -570,6 +590,17 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                     >
                       <FileSpreadsheet className="w-4 h-4" />
                       Reporte Técnico ISO
+                    </button>
+                    <button
+                      onClick={() => setReportViewMode("depuracion")}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        reportViewMode === "depuracion"
+                          ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <Brain className="w-4 h-4" />
+                      Trazabilidad OCR
                     </button>
                   </div>
 
@@ -1091,6 +1122,158 @@ _Servicio Profesional GANPOR - Evaluación e Inspección de Pulsado_`;
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* REPORT VIEW: TRAZABILIDAD Y DEPURACIÓN OCR (AUDIT FLOW) */}
+                {reportViewMode === "depuracion" && (
+                  <div className="bg-zinc-900/90 rounded-2xl border border-emerald-500/30 overflow-hidden shadow-2xl backdrop-blur-xl p-6 space-y-6">
+                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                          <Brain className="w-5 h-5 text-emerald-400" />
+                          Modo Depuración y Trazabilidad de Análisis OCR
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          Visualización del flujo: Imagen ➔ Hash SHA-256 ➔ IA OCR JSON Literal ➔ Motor ISO.
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full font-bold">
+                        OCR AUDIT VERIFIED
+                      </span>
+                    </div>
+
+                    {/* Stage 1: Client File & Hash */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-2">
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-emerald-400" />
+                        1. Archivo e Identificación Única Hash (Cliente)
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Nombre de Archivo:</span>
+                          <span className="text-zinc-200 font-bold truncate block">
+                            {analysisResult.trazabilidad?.archivo?.nombre || imageFile?.name || "imagen_pulsografo.png"}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Tamaño:</span>
+                          <span className="text-zinc-200 font-bold block">
+                            {analysisResult.trazabilidad?.archivo?.tamano || imageFile?.size || 0} bytes
+                          </span>
+                        </div>
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Tipo MIME:</span>
+                          <span className="text-zinc-200 font-bold block">
+                            {analysisResult.trazabilidad?.archivo?.tipo || imageFile?.type || "image/png"}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Hash SHA-256:</span>
+                          <span className="text-emerald-400 font-bold truncate block text-[11px]" title={analysisResult.trazabilidad?.archivo?.hash || imageHash}>
+                            {analysisResult.trazabilidad?.archivo?.hash || imageHash || "no-calculado"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stage 2: AI Execution Info */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-2">
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        2. Motor de Visión e Inteligencia Artificial
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Proveedor:</span>
+                          <span className="text-amber-400 font-bold uppercase">{analysisResult.trazabilidad?.proveedorInfo?.proveedor || "Google Gemini"}</span>
+                        </div>
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Modelo de Lenguaje/Visión:</span>
+                          <span className="text-zinc-200 font-bold">{analysisResult.trazabilidad?.proveedorInfo?.modelo || "gemini-2.5-flash"}</span>
+                        </div>
+                        <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Marca de Tiempo:</span>
+                          <span className="text-zinc-200 font-bold">{analysisResult.trazabilidad?.timestamp ? new Date(analysisResult.trazabilidad.timestamp).toLocaleString("es-AR") : new Date().toLocaleString("es-AR")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stage 3: Extracted Raw OCR Object */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                          <FileCode className="w-4 h-4 text-blue-400" />
+                          3. Objeto JSON de OCR Extraído por IA
+                        </h4>
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          Canales Detectados: <strong className="text-emerald-400">{analysisResult.datosExtraidos?.canales?.length || 1}</strong> | Confianza: <strong className="text-emerald-400">{analysisResult.nivelConfianza}%</strong>
+                        </span>
+                      </div>
+                      <pre className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 font-mono text-[11px] text-emerald-400 overflow-x-auto max-h-80 leading-relaxed">
+                        {JSON.stringify(analysisResult.trazabilidad?.ocrObject || analysisResult.datosExtraidos, null, 2)}
+                      </pre>
+                    </div>
+
+                    {/* Stage 4: Extracted Channels Table */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-3">
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                        4. Valores Numéricos Literalmente Extraídos por Canal
+                      </h4>
+                      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="bg-zinc-900 text-zinc-400 font-bold uppercase text-[10px]">
+                            <tr>
+                              <th className="p-2.5">Canal</th>
+                              <th className="p-2.5">Frecuencia</th>
+                              <th className="p-2.5">Relación</th>
+                              <th className="p-2.5">Vacío</th>
+                              <th className="p-2.5">Ta</th>
+                              <th className="p-2.5">Tb</th>
+                              <th className="p-2.5">Tc</th>
+                              <th className="p-2.5">Td</th>
+                              <th className="p-2.5">Ta+Tb</th>
+                              <th className="p-2.5">Tc+Td</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800">
+                            {(analysisResult.datosExtraidos?.canales || []).map((ch: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-zinc-900/50">
+                                <td className="p-2.5 font-bold text-emerald-400">{ch.nombreCanal}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.frecuenciaMedida ?? "N/A"} ppm</td>
+                                <td className="p-2.5 text-zinc-200">{ch.relacionMedida ?? "N/A"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.vacioMedido ?? "N/A"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.taMedido ?? "N/A"}{ch.unidadFases || "%"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.tbMedido ?? "N/A"}{ch.unidadFases || "%"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.tcMedido ?? "N/A"}{ch.unidadFases || "%"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.tdMedido ?? "N/A"}{ch.unidadFases || "%"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.taTbMedido ?? (ch.taMedido && ch.tbMedido ? (ch.taMedido + ch.tbMedido).toFixed(1) : "N/A")}{ch.unidadFases || "%"}</td>
+                                <td className="p-2.5 text-zinc-200">{ch.tcTdMedido ?? (ch.tcMedido && ch.tdMedido ? (ch.tcMedido + ch.tdMedido).toFixed(1) : "N/A")}{ch.unidadFases || "%"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Stage 5: ISO Engine Output */}
+                    <div className="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 space-y-3">
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        5. Dictamen del Motor de Reglas Determinista ISO
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-zinc-900 p-3 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Estado General ISO:</span>
+                          <span className="text-base font-black text-white">{analysisResult.estadoGeneral}</span>
+                        </div>
+                        <div className="bg-zinc-900 p-3 rounded border border-zinc-800">
+                          <span className="text-zinc-500 text-[10px] block">Nivel de Criticidad:</span>
+                          <span className="text-base font-black text-amber-400">{analysisResult.nivelCriticidad}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

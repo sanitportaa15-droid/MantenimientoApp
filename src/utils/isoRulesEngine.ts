@@ -493,22 +493,6 @@ export function evaluatePulsatorISO(datos: any, specs?: any): ResultadoEvaluacio
     }];
   }
 
-  // If only 1 channel was provided in channelsInput but dual channel was detected or default dual mode applies
-  if (channelsInput.length === 1 && datos.cantidadCanalesDetected !== 1) {
-    // If top level or defaults exist, create Canal 2 from top-level or duplicate Canal 1 values for symmetry baseline
-    channelsInput.push({
-      nombreCanal: "Canal 2",
-      frecuenciaMedida: datos.canales?.[0]?.frecuenciaMedida || datos.frecuenciaMedida,
-      relacionMedida: datos.canales?.[0]?.relacionMedida || datos.relacionMedida,
-      vacioMedido: datos.canales?.[0]?.vacioMedido || datos.vacioMedido,
-      taMedido: datos.canales?.[0]?.taMedido ?? datos.taMedido,
-      tbMedido: datos.canales?.[0]?.tbMedido ?? datos.tbMedido,
-      tcMedido: datos.canales?.[0]?.tcMedido ?? datos.tcMedido,
-      tdMedido: datos.canales?.[0]?.tdMedido ?? datos.tdMedido,
-      unidadFases: datos.canales?.[0]?.unidadFases || datos.unidadFases || "%"
-    });
-  }
-
   // Ensure Canal 1 exists
   const ch1Data = channelsInput[0] || { nombreCanal: "Canal 1" };
   const resCh1 = evaluateChannel(ch1Data, datos, specs);
