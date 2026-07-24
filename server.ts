@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { evaluatePulsatorISO } from "./src/utils/isoRulesEngine";
+import crypto from "crypto";
 
 const PORT = 3000;
 
@@ -41,19 +42,51 @@ async function startServer() {
     console.log("[AI Diagnosis Server] >>> INICIO DEL DIAGNÓSTICO <<<");
 
     try {
-      const { image, pulsadorSpecs, additionalNotes, provider = "gemini", apiKey, model, tamboId, empresaId } = req.body;
+      const { image, fileName, fileSize, mimeType: inputMimeType, imageHash: inputHash, pulsadorSpecs, additionalNotes, provider = "gemini", apiKey, model, tamboId, empresaId } = req.body;
 
-      const imageLength = image ? image.length : 0;
-      const isImageReceived = !!image && imageLength > 100;
+      if (!image) {
+        console.warn("[AI Diagnosis Server] Error: No se proporcionó ninguna imagen.");
+        return res.status(400).json({ success: false, error: "No se proporcionó ninguna imagen para el análisis." });
+      }
 
-      // Log inputs before sending
-      console.log(`[AI Diagnosis Server] - Inicio del análisis: ${new Date().toISOString()}`);
-      console.log(`[AI Diagnosis Server] - Proveedor utilizado: ${provider}`);
-      console.log(`[AI Diagnosis Server] - Modelo solicitado: ${model || "Ninguno"}`);
-      console.log(`[AI Diagnosis Server] - Empresa (tenant): ${empresaId || "No provisto"}`);
-      console.log(`[AI Diagnosis Server] - API Key encontrada: ${apiKey ? "SÍ" : "NO"}`);
-      console.log(`[AI Diagnosis Server] - ¿Imagen recibida correctamente?: ${isImageReceived ? "SÍ" : "NO"}`);
-      console.log(`[AI Diagnosis Server] - Tamaño de la imagen: ${imageLength} caracteres`);
+      // Separate base64 data from mime-type header if present
+      let base64Data = image;
+      let mimeType = inputMimeType || "image/png";
+
+      if (image.includes(";base64,")) {
+        const parts = image.split(";base64,");
+        const match = parts[0].match(/data:(.*)/);
+        if (match) {
+          mimeType = match[1];
+        }
+        base64Data = parts[1];
+      }
+
+      const calculatedHash = crypto.createHash("sha256").update(base64Data).digest("hex").substring(0, 12);
+      const imageHash = inputHash || calculatedHash;
+      const effectiveFileName = fileName || "imagen_pulsografo.png";
+      const effectiveFileSize = fileSize || base64Data.length;
+
+      const effectiveApiKey = apiKey || (provider === "openai" ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY);
+      let effectiveModel = model;
+      if (!effectiveModel || effectiveModel.trim() === "") {
+        effectiveModel = provider === "openai" ? "gpt-4o" : "gemini-2.5-flash";
+      }
+      if (effectiveModel.includes("/")) {
+        effectiveModel = effectiveModel.split("/").pop() || effectiveModel;
+      }
+
+      // Log full audit information
+      console.log("==================================================");
+      console.log("[SERVER AUDIT] Confirmación de recepción en la API:");
+      console.log(`- Nombre del archivo: ${effectiveFileName}`);
+      console.log(`- Tamaño del archivo: ${effectiveFileSize} bytes`);
+      console.log(`- Tipo MIME: ${mimeType}`);
+      console.log(`- Hash de la imagen (SHA-256): ${imageHash}`);
+      console.log(`- Proveedor de IA: ${provider}`);
+      console.log(`- Modelo de IA: ${effectiveModel}`);
+      console.log(`- API Key presente: ${effectiveApiKey ? "SÍ (configurada)" : "NO"}`);
+      console.log("==================================================");
 
       if (provider === "ninguno" || provider === "iso") {
         console.log("[AI Diagnosis Server] Ejecutando diagnóstico exclusivamente con Motor ISO (sin IA)...");
@@ -96,32 +129,9 @@ async function startServer() {
         });
       }
 
-      if (!image) {
-        console.warn("[AI Diagnosis Server] Error: No se proporcionó ninguna imagen.");
-        return res.status(400).json({ success: false, error: "No se proporcionó ninguna imagen para el análisis." });
-      }
-
-      if (!apiKey) {
-        console.warn("[AI Diagnosis Server] Error: API Key no configurada.");
-        return res.status(400).json({ success: false, error: "API Key no configurada. Por favor, configure y guarde la API Key en la sección de Configuración Técnica." });
-      }
-
-      if (!model) {
-        console.warn("[AI Diagnosis Server] Error: Modelo no seleccionado.");
-        return res.status(400).json({ success: false, error: "Modelo de IA no configurado. Por favor, configure y guarde el modelo en la sección de Configuración Técnica." });
-      }
-
-      // Separate base64 data from mime-type header if present
-      let base64Data = image;
-      let mimeType = "image/png";
-
-      if (image.includes(";base64,")) {
-        const parts = image.split(";base64,");
-        const match = parts[0].match(/data:(.*)/);
-        if (match) {
-          mimeType = match[1];
-        }
-        base64Data = parts[1];
+      if (!effectiveApiKey) {
+        console.warn(`[AI Diagnosis Server] Error: API Key no disponible para proveedor ${provider}.`);
+        return res.status(400).json({ success: false, error: `API Key de ${provider.toUpperCase()} no configurada. Por favor agregue la clave en Configuración.` });
       }
 
       // --- SYSTEM INSTRUCTIONS FOR DECOUPLED ARCHITECTURE ---
@@ -455,14 +465,15 @@ async function startServer() {
         }
       }
 
-      if (provider === "gemini") {
+      if (provider === "gemini" || !provider) {
         console.log(`================== DIAGNÓSTICO IA (GEMINI) ==================`);
-        console.log(`[AI Diagnosis Server] Proveedor Seleccionado: ${provider}`);
-        console.log(`[AI Diagnosis Server] Modelo Leído desde Base de Datos: ${model}`);
+        console.log(`[SERVER AUDIT] Proveedor Seleccionado: Google Gemini`);
+        console.log(`[SERVER AUDIT] Modelo Seleccionado: ${effectiveModel}`);
+        console.log(`[SERVER AUDIT] Confirmación de envío al modelo de IA (${effectiveModel}) para imagen Hash [${imageHash}]...`);
         
         try {
           const geminiAi = new GoogleGenAI({
-            apiKey: apiKey,
+            apiKey: effectiveApiKey,
             httpOptions: { headers: { "User-Agent": "aistudio-build" } }
           });
 
@@ -555,11 +566,14 @@ async function startServer() {
 
           const ocrText = ocrResponse.text;
           if (!ocrText) throw new Error("Sin respuesta OCR de Google Gemini.");
+          console.log(`[SERVER AUDIT] Respuesta del OCR para Hash [${imageHash}]:\n${ocrText}`);
           const ocrResults = JSON.parse(ocrText.trim());
+          console.log(`[SERVER AUDIT] Datos extraídos parseados:`, JSON.stringify(ocrResults, null, 2));
 
           // Gemini Step 2: Deterministic ISO Rules Engine
-          console.log("[AI Diagnosis Server] Gemini Paso 2: Ejecutando motor de reglas ISO...");
+          console.log(`[SERVER AUDIT] Gemini Paso 2: Ejecutando motor de reglas ISO...`);
           const rulesEngineOutput = evaluatePulsatorISO(ocrResults, pulsadorSpecs || {});
+          console.log(`[SERVER AUDIT] Dictamen del Motor ISO: ${rulesEngineOutput.estadoGeneral} (Criticidad: ${rulesEngineOutput.nivelCriticidad})`);
 
           // Gemini Step 3: Technical Report Narrative Generator
           console.log(`[AI Diagnosis Server] Gemini Paso 3: Generando informe narrativo (Modelo: ${effectiveModel})...`);
@@ -637,78 +651,10 @@ async function startServer() {
           return res.json(finalMergedResult);
 
         } catch (geminiErr: any) {
-          console.error(`[AI Diagnosis Server] Error en la llamada a Google Gemini (Modelo: ${model}):`, geminiErr.message);
-          console.log("[AI Diagnosis Server] Ejecutando Motor ISO de respaldo por fallo en Gemini...");
-
-          const defaultOcr = {
-            frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
-            relacionMedida: "60/40",
-            vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-            taMedido: 120,
-            tbMedido: 480,
-            tcMedido: 100,
-            tdMedido: 300,
-            balanceMedido: "50/50",
-            desbalanceMedido: 1.5,
-            cantidadCanalesDetected: 2,
-            tipoPulsografo: "Pulsógrafo de Doble Canal (Canal 1 y Canal 2)",
-            validacionCanales: {
-              canal1Completo: true,
-              canal2Completo: true,
-              observacion: "Modo Fallback ISO: Mediciones simétricas de dos canales generadas para verificación determinista."
-            },
-            canales: [
-              {
-                nombreCanal: "Canal 1",
-                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
-                relacionMedida: "60/40",
-                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-                taMedido: 120,
-                tbMedido: 480,
-                tcMedido: 100,
-                tdMedido: 300
-              },
-              {
-                nombreCanal: "Canal 2",
-                frecuenciaMedida: pulsadorSpecs?.frecuenciaNominal || 60,
-                relacionMedida: "60/40",
-                vacioMedido: pulsadorSpecs?.vacioRecomendado || "44.0 kPa",
-                taMedido: 120,
-                tbMedido: 480,
-                tcMedido: 100,
-                tdMedido: 300
-              }
-            ],
-            nivelConfianza: 100,
-            calidadImagen: "Media (Fallback ISO)",
-            hallazgosVisuales: ["Evaluación determinista ejecutada por falla temporal en la API de Google Gemini."],
-            otrosParametros: []
-          };
-          const rulesEngineOutput = evaluatePulsatorISO(defaultOcr, pulsadorSpecs || {});
-
-          return res.status(200).json({
-            estadoGeneral: rulesEngineOutput.estadoGeneral,
-            nivelCriticidad: rulesEngineOutput.nivelCriticidad,
-            nivelConfianza: 100,
-            calidadImagen: "Fallback Motor ISO",
-            datosExtraidos: defaultOcr,
-            comparacionEspecificaciones: `Análisis de conformidad ISO 5707 e ISO 6690 para ${pulsadorSpecs?.marca || ""} ${pulsadorSpecs?.modelo || ""}.`,
-            hallazgos: defaultOcr.hallazgosVisuales,
-            diagnosticoTecnico: `[Aviso de Fallback: No fue posible comunicar con Google Gemini (${geminiErr.message})]. Informe dictaminado automáticamente mediante el Motor de Reglas ISO 5707 / ISO 6690. Estado: ${rulesEngineOutput.estadoGeneral}.`,
-            posiblesCausas: rulesEngineOutput.estadoGeneral !== "Conforme" ? [
-              "Falta de estanqueidad o desgaste en válvulas de pulsación.",
-              "Obstrucciones de polvo o grasa en el filtro del pulsador."
-            ] : [],
-            recomendaciones: [
-              "Realizar inspección mecánica del pulsador y reemplazar membranas fatigadas.",
-              "Comprobar la estabilidad del nivel de vacío principal."
-            ],
-            evaluacionISO: rulesEngineOutput.evaluacionISO,
-            analisisCanal1: rulesEngineOutput.analisisCanal1,
-            analisisCanal2: rulesEngineOutput.analisisCanal2,
-            analisisComparativo: rulesEngineOutput.analisisComparativo,
-            conclusionGlobal: rulesEngineOutput.conclusionGlobal,
-            informeProductor: rulesEngineOutput.informeProductor
+          console.error(`[SERVER AUDIT] Error procesando imagen Hash [${imageHash}] con Google Gemini (${effectiveModel}):`, geminiErr.message);
+          return res.status(500).json({
+            success: false,
+            error: `Error al procesar la imagen [Hash: ${imageHash}] con Google Gemini (${effectiveModel}): ${geminiErr.message}`
           });
         }
       }

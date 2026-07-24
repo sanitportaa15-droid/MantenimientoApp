@@ -19,6 +19,10 @@ export interface AITestConnectionResult {
 
 export interface AIDiagnosisParams {
   image: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  imageHash?: string;
   pulsadorSpecs?: any;
   additionalNotes?: string;
   provider?: "gemini" | "openai" | "iso" | "ninguno";
@@ -162,7 +166,7 @@ export const AIService = {
     * Runs the AI diagnosis flow exclusively for the selected provider
     */
   async runDiagnosis(params: AIDiagnosisParams): Promise<ResultadoIA> {
-    const { image, pulsadorSpecs, additionalNotes, tamboId, empresaId } = params;
+    const { image, fileName, fileSize, mimeType, imageHash, pulsadorSpecs, additionalNotes, tamboId, empresaId } = params;
 
     // Load active settings if not explicitly provided
     let provider = params.provider;
@@ -170,10 +174,10 @@ export const AIService = {
       let p = await db.configuracion.getByKey("proveedor_activo", "");
       if (!p) p = await db.configuracion.getByKey("ia_provider", "");
       if (!p) p = await db.configuracion.getByKey("ia_proveedor", "");
-      if (p === "iso" || p === "ninguno") provider = "iso";
-      else if (p === "openai") provider = "openai";
+      if (p === "openai") provider = "openai";
       else if (p === "gemini") provider = "gemini";
-      else provider = "iso";
+      else if (p === "iso" || p === "ninguno") provider = "iso";
+      else provider = "gemini"; // Default to Gemini (using server key if client key is omitted)
     }
 
     const geminiKey = await db.configuracion.getByKey("ia_gemini_api_key", "");
@@ -181,52 +185,55 @@ export const AIService = {
     const geminiModel = await db.configuracion.getByKey("ia_gemini_model", "");
     const openaiModel = await db.configuracion.getByKey("ia_openai_model", "");
 
-    // 1. If provider is "iso" or "ninguno", use Motor ISO directly without calling external APIs
+    // 1. If provider is explicitly set to "iso" or "ninguno" by user, warn that image OCR won't run without AI
     if (provider === "iso" || provider === "ninguno") {
-      console.log("[AIService] Proveedor activo es Motor ISO. Ejecutando análisis determinista local.");
-      return this.runIsoFallback(undefined, additionalNotes, "Diagnóstico procesado por el Motor de Reglas ISO 5707 / ISO 6690 (sin IA).");
+      console.log("[AIService] Modo sin IA seleccionado (Motor ISO). Se enviará al servidor para procesamiento determinista.");
     }
 
-    // Determine credentials strictly for the selected provider
+    // Determine credentials for selected provider
     const primaryKey = params.apiKey || (provider === "gemini" ? geminiKey : openaiKey);
     const primaryModel = params.model || (provider === "gemini" ? geminiModel : openaiModel);
 
-    // Attempt Selected Provider
-    if (primaryKey && primaryModel) {
-      try {
-        console.log(`[AIService] Intentando diagnóstico con proveedor: ${provider} (${primaryModel})`);
-        const data = await safeFetchJson("/api/ai/diagnose", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image,
-            pulsadorSpecs,
-            additionalNotes,
-            provider,
-            apiKey: primaryKey,
-            model: primaryModel,
-            tamboId,
-            empresaId
-          })
-        });
+    console.log("==========================================");
+    console.log("[AIService] Confirmación de envío al backend /api/ai/diagnose:");
+    console.log(`- Nombre de archivo: ${fileName || "sin_nombre.png"}`);
+    console.log(`- Tamaño: ${fileSize || image.length} bytes`);
+    console.log(`- Tipo MIME: ${mimeType || "image/png"}`);
+    console.log(`- Hash de la imagen: ${imageHash || "desconocido"}`);
+    console.log(`- Proveedor solicitado: ${provider}`);
+    console.log(`- Modelo solicitado: ${primaryModel || "Predeterminado servidor"}`);
+    console.log("==========================================");
 
-        if (data && data.estadoGeneral) {
-          return data;
-        }
-      } catch (primaryErr: any) {
-        console.warn(`[AIService] Falló el proveedor seleccionado (${provider}):`, primaryErr.message);
+    try {
+      const data = await safeFetchJson("/api/ai/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          fileName,
+          fileSize,
+          mimeType,
+          imageHash,
+          pulsadorSpecs,
+          additionalNotes,
+          provider: provider || "gemini",
+          apiKey: primaryKey,
+          model: primaryModel,
+          tamboId,
+          empresaId
+        })
+      });
+
+      if (data && data.estadoGeneral) {
+        console.log(`[AIService] Diagnóstico completado para Hash [${imageHash}]. Estado: ${data.estadoGeneral}`);
+        return data;
+      } else {
+        throw new Error("Respuesta incompleta del servidor de diagnóstico.");
       }
-    } else {
-      console.warn(`[AIService] Proveedor seleccionado (${provider}) carece de API Key o Modelo en Configuración.`);
+    } catch (err: any) {
+      console.error(`[AIService] Error durante el diagnóstico de la imagen [Hash: ${imageHash}]:`, err.message);
+      throw err;
     }
-
-    // Fallback directly to Motor ISO Determinista
-    console.log("[AIService] Falló la llamada de IA o no está configurada. Ejecutando Motor ISO.");
-    return this.runIsoFallback(
-      undefined,
-      additionalNotes,
-      `[Aviso de Fallback: No fue posible comunicar con ${provider.toUpperCase()}. El informe se generó utilizando el Motor de Reglas ISO 5707 / ISO 6690].`
-    );
   },
 
   /**
